@@ -9,12 +9,12 @@ type MapZipRow = {
   county: string | null;
   active: boolean | null;
   pricingMode: "default" | "custom";
-  latitude: number;
-  longitude: number;
   bookingCount: number;
   revenue: number;
   avgBookingValue: number;
 };
+
+type MetricKey = "bookings" | "revenue" | "avg";
 
 const ZipMapClient = dynamic(() => import("./map-client"), {
   ssr: false,
@@ -22,8 +22,10 @@ const ZipMapClient = dynamic(() => import("./map-client"), {
 
 export default function ZipMapClientWrapper({
   rows,
+  metric,
 }: {
   rows: MapZipRow[];
+  metric: MetricKey;
 }) {
-  return <ZipMapClient rows={rows} />;
+  return <ZipMapClient rows={rows} metric={metric} />;
 }

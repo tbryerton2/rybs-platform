@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "trim:zcta": "node scripts/trim-zcta-geojson.mjs"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
