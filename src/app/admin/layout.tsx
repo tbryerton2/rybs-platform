@@ -1,4 +1,5 @@
 import { AdminToastProvider } from "./_components/admin/admin-toast-provider";
+import { AdminShell } from "./_components/admin/admin-shell";
 
 export default function AdminLayout({
   children,
@@ -8,7 +9,7 @@ export default function AdminLayout({
   return (
     <>
       <AdminToastProvider />
-      {children}
+      <AdminShell>{children}</AdminShell>
     </>
   );
 }

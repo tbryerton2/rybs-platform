@@ -1,0 +1,97 @@
+export type AdminNavItem = {
+  label: string;
+  href: string;
+  icon:
+    | "home"
+    | "bookings"
+    | "schedule"
+    | "customers"
+    | "financials"
+    | "analytics"
+    | "pricing"
+    | "zips"
+    | "docs"
+    | "system";
+  exact?: boolean;
+  matchers?: string[];
+};
+
+export type AdminNavGroup = {
+  label: string;
+  items: AdminNavItem[];
+};
+
+export const adminNavGroups: AdminNavGroup[] = [
+  {
+    label: "Dashboard",
+    items: [{ label: "Overview", href: "/admin", icon: "home", exact: true, matchers: ["/admin"] }],
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Bookings", href: "/admin/bookings", icon: "bookings", matchers: ["/admin/bookings"] },
+      { label: "Schedule", href: "/admin/schedule", icon: "schedule", matchers: ["/admin/schedule"] },
+    ],
+  },
+  {
+    label: "Customers",
+    items: [{ label: "Customers", href: "/admin/customers", icon: "customers", matchers: ["/admin/customers"] }],
+  },
+  {
+    label: "Financials",
+    items: [{ label: "Financials", href: "/admin/financials", icon: "financials", matchers: ["/admin/financials"] }],
+  },
+  {
+    label: "Analytics",
+    items: [
+      {
+        label: "ZIP Heatmap",
+        href: "/admin/analytics/zip-heatmap",
+        icon: "analytics",
+        matchers: ["/admin/analytics", "/admin/analytics/zip-heatmap", "/admin/analytics/zip-map"],
+      },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
+      {
+        label: "Pricing",
+        href: "/admin/settings/pricing",
+        icon: "pricing",
+        matchers: ["/admin/settings/pricing"],
+      },
+      {
+        label: "Service ZIPs",
+        href: "/admin/settings/zips",
+        icon: "zips",
+        matchers: ["/admin/settings/zips"],
+      },
+    ],
+  },
+  {
+    label: "Docs",
+    items: [{ label: "Docs", href: "/admin/docs", icon: "docs", matchers: ["/admin/docs"] }],
+  },
+  {
+    label: "System",
+    items: [{ label: "System", href: "/admin/system", icon: "system", matchers: ["/admin/system"] }],
+  },
+];
+
+export function isAdminNavItemActive(pathname: string, item: AdminNavItem) {
+  const matchers = item.matchers ?? [item.href];
+  return matchers.some((matcher) => {
+    if (item.exact) return pathname === matcher;
+    return pathname === matcher || pathname.startsWith(`${matcher}/`);
+  });
+}
+
+export function getActiveAdminNavItem(pathname: string) {
+  for (const group of adminNavGroups) {
+    const item = group.items.find((entry) => isAdminNavItemActive(pathname, entry));
+    if (item) return item;
+  }
+
+  return null;
+}
