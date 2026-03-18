@@ -6,6 +6,7 @@ import {
   PORTAL_ACCESS_TOKEN_COOKIE,
   PORTAL_REFRESH_TOKEN_COOKIE,
 } from "@/lib/portal/auth";
+import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type SessionPayload = {
@@ -93,8 +94,16 @@ export async function POST(req: Request) {
       })
       .eq("id", customerId);
 
-    if (updateError) {
+    if (updateError && !isPortalSchemaError(updateError)) {
       return badRequest(`Portal customer session could not be attached: ${updateError.message}`, 500);
+    }
+
+    if (updateError) {
+      devPortalLog("callback_customer_attach_degraded", {
+        email: userEmail,
+        customerId,
+        message: updateError.message,
+      });
     }
 
     devPortalLog("callback_session_established", {

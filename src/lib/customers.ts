@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type CustomerContactInput = {
@@ -58,6 +59,9 @@ async function findMatchingCustomer(
       .maybeSingle();
 
     if (!emailLookup.error && emailLookup.data) return emailLookup.data as CustomerRow;
+    if (emailLookup.error && !isPortalSchemaError(emailLookup.error)) {
+      throw new Error(emailLookup.error.message);
+    }
 
     const fallbackEmailLookup = await supabase
       .from("customers")
@@ -112,7 +116,10 @@ async function ensureCustomerLocation(
     .eq("zip", zip)
     .limit(1);
 
-  if (existingError) throw new Error(existingError.message);
+  if (existingError) {
+    if (isPortalSchemaError(existingError)) return;
+    throw new Error(existingError.message);
+  }
   if ((existing ?? []).length > 0) return;
 
   const { data: defaults, error: defaultsError } = await supabase
@@ -122,7 +129,10 @@ async function ensureCustomerLocation(
     .eq("is_default", true)
     .limit(1);
 
-  if (defaultsError) throw new Error(defaultsError.message);
+  if (defaultsError) {
+    if (isPortalSchemaError(defaultsError)) return;
+    throw new Error(defaultsError.message);
+  }
 
   const hasDefault = (defaults ?? []).length > 0;
   const label = hasDefault ? "Saved location" : "Primary location";
@@ -137,7 +147,10 @@ async function ensureCustomerLocation(
     is_default: !hasDefault,
   });
 
-  if (insertError) throw new Error(insertError.message);
+  if (insertError) {
+    if (isPortalSchemaError(insertError)) return;
+    throw new Error(insertError.message);
+  }
 }
 
 export async function findOrCreateCustomerRecord(
@@ -158,7 +171,22 @@ export async function findOrCreateCustomerRecord(
   let customer = await findMatchingCustomer(supabase, input);
 
   if (!customer) {
-    const { data, error } = await supabase
+    let inserted = await supabase
+      .from("customers")
+      .insert({
+        name: fullName,
+        email,
+        phone,
+        primary_street: street,
+        primary_city: city,
+        primary_zip: zip,
+        portal_status: "invited",
+      })
+      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email")
+      .single();
+
+    if (inserted.error && isPortalSchemaError(inserted.error)) {
+      inserted = await supabase
         .from("customers")
         .insert({
           name: fullName,
@@ -167,13 +195,13 @@ export async function findOrCreateCustomerRecord(
           primary_street: street,
           primary_city: city,
           primary_zip: zip,
-          portal_status: "invited",
         })
-        .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email")
+        .select("id, name, email, phone, primary_street, primary_city, primary_zip")
         .single();
+    }
 
-    if (error) throw new Error(error.message);
-    customer = data as CustomerRow;
+    if (inserted.error) throw new Error(inserted.error.message);
+    customer = inserted.data as CustomerRow;
   } else {
     const updates: Record<string, string> = {};
 
@@ -207,7 +235,10 @@ export async function attachCustomerToBooking(
     .update({ customer_id: customerId })
     .eq("id", bookingId);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isPortalSchemaError(error)) return customerId;
+    throw new Error(error.message);
+  }
   return customerId;
 }
 
@@ -235,7 +266,7 @@ export async function ensureCustomerForEmail(
   if (emailFallback.error) throw new Error(emailFallback.error.message);
   if ((emailFallback.data ?? []).length > 0) return emailFallback.data?.[0]?.id as string;
 
-  if (existingError && !existingError.message.toLowerCase().includes("normalized_email")) {
+  if (existingError && !isPortalSchemaError(existingError)) {
     throw new Error(existingError.message);
   }
 

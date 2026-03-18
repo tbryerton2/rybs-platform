@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   getActionTypeLabel,
+  getActionTypeShortDescription,
   getCustomerVisibleStatusLabel,
   getCustomerVisibleStatusTone,
 } from "@/lib/rental-action-requests";
@@ -29,6 +30,10 @@ function formatDate(value: string | null) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
+function formatServiceArea(town: string | null, county: string | null) {
+  return [town, county].filter(Boolean).join(", ");
+}
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -44,23 +49,75 @@ function getSubmissionMessage(searchParams: SearchParams) {
   if (submitted === "pickup") {
     return "Your pickup request was submitted. We will confirm timing soon.";
   }
+  if (submitted === "extension") {
+    return "Your extension request was submitted for review.";
+  }
+  if (submitted === "issue") {
+    return "Your issue report was submitted.";
+  }
   return null;
 }
 
 function ActionCard({
   title,
   description,
+  tone = "default",
   children,
 }: {
   title: string;
   description: string;
+  tone?: "default" | "muted";
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+    <div
+      className={[
+        "rounded-[28px] border p-5 shadow-sm",
+        tone === "muted" ? "border-slate-200 bg-slate-50/70" : "border-slate-200 bg-white",
+      ].join(" ")}
+    >
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+        Rental action
+      </div>
+      <h3 className="mt-2 text-base font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
       <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+function RequestHistoryCard({
+  request,
+}: {
+  request: Awaited<ReturnType<typeof getPortalRental>>["requests"][number];
+}) {
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+            {getActionTypeShortDescription(request.action_type)}
+          </div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">
+            {getActionTypeLabel(request.action_type)}
+          </div>
+        </div>
+        <span
+          className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${getCustomerVisibleStatusTone(
+            request.customer_visible_status,
+          )}`}
+        >
+          {getCustomerVisibleStatusLabel(request.customer_visible_status, request.action_type)}
+        </span>
+      </div>
+      <div className="mt-3 text-sm text-slate-500">Submitted {formatDateTime(request.submitted_at)}</div>
+      <div className="mt-2 text-sm leading-6 text-slate-600">{getPortalRequestSummary(request)}</div>
+      {request.customer_update?.trim() ? (
+        <div className="mt-3 rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Latest update</div>
+          <div className="mt-1">{request.customer_update.trim()}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -79,7 +136,7 @@ export default async function PortalRentalDetailPage({
 
   if (!rental) notFound();
 
-  const { booking, requests, pickupEligibility } = rental;
+  const { booking, requests, pickupEligibility, extensionEligibility, issueReportEligibility } = rental;
   const submissionMessage = getSubmissionMessage(resolvedSearchParams);
 
   return (
@@ -113,7 +170,13 @@ export default async function PortalRentalDetailPage({
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
           <section className="space-y-6">
             <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div
+                className={`grid gap-4 sm:grid-cols-2 ${
+                  formatServiceArea(booking.service_town, booking.service_county)
+                    ? "xl:grid-cols-4"
+                    : "xl:grid-cols-3"
+                }`}
+              >
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Delivery date
@@ -138,14 +201,16 @@ export default async function PortalRentalDetailPage({
                     {formatUsdFromCents(booking.total_price_cents)}
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Service area
+                {formatServiceArea(booking.service_town, booking.service_county) ? (
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Service area
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">
+                      {formatServiceArea(booking.service_town, booking.service_county)}
+                    </div>
                   </div>
-                  <div className="mt-2 text-sm font-semibold text-slate-900">
-                    {[booking.service_town, booking.service_county].filter(Boolean).join(", ") || "—"}
-                  </div>
-                </div>
+                ) : null}
               </div>
 
               <div className="mt-6 rounded-3xl border border-orange-100 bg-orange-50/70 px-5 py-4">
@@ -183,6 +248,7 @@ export default async function PortalRentalDetailPage({
                 <ActionCard
                   title="Request pickup"
                   description="Finished using your dumpster? Let us know and we’ll review your pickup request."
+                  tone={pickupEligibility.eligible ? "default" : "muted"}
                 >
                   {pickupEligibility.eligible ? (
                     <Link
@@ -192,7 +258,7 @@ export default async function PortalRentalDetailPage({
                       Start pickup request
                     </Link>
                   ) : (
-                    <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                    <div className="rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-500 ring-1 ring-slate-200">
                       {pickupEligibility.reason}
                     </div>
                   )}
@@ -200,54 +266,64 @@ export default async function PortalRentalDetailPage({
 
                 <ActionCard
                   title="Request more time"
-                  description="Need to keep the dumpster longer? Coming soon."
+                  description="Need to keep the dumpster longer? Send a request and we’ll review availability and any added cost."
+                  tone={extensionEligibility.eligible ? "default" : "muted"}
                 >
-                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-400">
-                    Extension requests are coming soon.
-                  </div>
+                  {extensionEligibility.eligible ? (
+                    <Link
+                      href={`/portal/rentals/${booking.id}/extension-request`}
+                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Start extension request
+                    </Link>
+                  ) : (
+                    <div className="rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-500 ring-1 ring-slate-200">
+                      {extensionEligibility.reason}
+                    </div>
+                  )}
                 </ActionCard>
 
                 <ActionCard
                   title="Report an issue"
-                  description="Tell us about service or rental problems. Coming soon."
+                  description="Tell us about service or rental problems and our team will review it."
+                  tone={issueReportEligibility.eligible ? "default" : "muted"}
                 >
-                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-400">
-                    Issue reporting is coming soon.
-                  </div>
+                  {issueReportEligibility.eligible ? (
+                    <Link
+                      href={`/portal/rentals/${booking.id}/issue-report`}
+                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Report an issue
+                    </Link>
+                  ) : (
+                    <div className="rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-500 ring-1 ring-slate-200">
+                      {issueReportEligibility.reason}
+                    </div>
+                  )}
                 </ActionCard>
               </div>
             </div>
 
             <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-900">Rental requests</h3>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Rental requests</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Track what you submitted and the latest response from Tan Can Man.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                  {requests.length} total
+                </span>
+              </div>
               <div className="mt-4 space-y-3">
                 {requests.length === 0 ? (
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                    No rental requests have been submitted for this rental yet.
+                  <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
+                    No rental requests have been submitted for this rental yet. When you request pickup,
+                    more time, or support, updates will appear here.
                   </div>
                 ) : (
-                  requests.slice(0, 5).map((request) => (
-                    <div key={request.id} className="rounded-2xl bg-slate-50 px-4 py-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-semibold text-slate-900">
-                          {getActionTypeLabel(request.action_type)}
-                        </div>
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${getCustomerVisibleStatusTone(
-                            request.customer_visible_status,
-                          )}`}
-                        >
-                          {getCustomerVisibleStatusLabel(request.customer_visible_status)}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-sm text-slate-500">
-                        Submitted {formatDateTime(request.submitted_at)}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        {getPortalRequestSummary(request)}
-                      </div>
-                    </div>
-                  ))
+                  requests.slice(0, 5).map((request) => <RequestHistoryCard key={request.id} request={request} />)
                 )}
               </div>
             </div>

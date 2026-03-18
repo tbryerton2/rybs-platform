@@ -1,6 +1,42 @@
+import Link from "next/link";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalDashboardData } from "@/lib/portal/data";
 import { PortalShell } from "../_components/portal-shell";
+import { PortalStatusBadge } from "../_components/portal-status-badge";
+
+function formatDate(value: string | null) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+function formatContactValue(value: string | null, fallback = "Not on file") {
+  return value?.trim() || fallback;
+}
+
+function formatAddressLine(parts: Array<string | null | undefined>, fallback: string) {
+  const value = parts.filter(Boolean).join(", ");
+  return value || fallback;
+}
+
+function ContactCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-sm leading-6 text-slate-900">{value}</div>
+    </div>
+  );
+}
 
 export default async function PortalAccountPage() {
   const customer = await requirePortalCustomer();
@@ -8,83 +44,183 @@ export default async function PortalAccountPage() {
 
   return (
     <PortalShell pathname="/portal/account">
-      <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="space-y-6">
         <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Account
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Portal account
+              </div>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                {customer.name || "Your portal account"}
+              </h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                Review your contact details, saved service locations, and recent rental activity.
+                Account settings stay read-only in v1.
+              </p>
+            </div>
+            <Link href="/portal" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
+              Back to dashboard
+            </Link>
           </div>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
-            Contact details
-          </h2>
 
-          <dl className="mt-6 space-y-5 text-sm">
-            <div>
-              <dt className="font-medium text-slate-500">Full name</dt>
-              <dd className="mt-1 text-slate-900">{customer.name || "—"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Email</dt>
-              <dd className="mt-1 text-slate-900">{customer.email || "—"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Phone</dt>
-              <dd className="mt-1 text-slate-900">{customer.phone || "—"}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-slate-500">Default address</dt>
-              <dd className="mt-1 text-slate-900">
-                {[customer.primary_street, customer.primary_city, customer.primary_zip]
-                  .filter(Boolean)
-                  .join(", ") || "—"}
-              </dd>
-            </div>
-          </dl>
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <ContactCard label="Full name" value={formatContactValue(customer.name)} />
+            <ContactCard label="Email" value={formatContactValue(customer.email)} />
+            <ContactCard label="Phone" value={formatContactValue(customer.phone)} />
+            <ContactCard
+              label="Default address"
+              value={formatAddressLine(
+                [customer.primary_street, customer.primary_city, customer.primary_zip],
+                "No default address saved",
+              )}
+            />
+          </div>
 
-          <div className="mt-6 rounded-2xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-500">
-            V1 portal account settings are read-only. Contact Tan Can Man if you need to update
-            your default contact details.
+          <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-4">
+            <div className="text-sm font-semibold text-slate-900">Account access</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">
+              Portal account settings are read-only for now. Contact Tan Can Man if you need to
+              update your default contact details.
+            </div>
           </div>
         </section>
 
-        <section className="space-y-6">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-900">Saved service locations</h2>
+        <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Saved service locations</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  Job sites Tan Can Man can reuse for future rentals and deliveries.
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                {locations.length} total
+              </span>
+            </div>
+
             <div className="mt-5 space-y-3">
               {locations.length === 0 ? (
-                <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                  No saved service locations yet.
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-6 text-slate-500">
+                  No saved service locations yet. As you book with Tan Can Man, job sites will
+                  appear here to make future rentals faster to review.
                 </div>
               ) : (
                 locations.map((location) => (
-                  <div key={location.id} className="rounded-2xl border border-slate-200 px-4 py-4">
+                  <div key={location.id} className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-semibold text-slate-900">{location.label}</div>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{location.label}</div>
+                        <div className="mt-1 text-sm leading-6 text-slate-500">
+                          {[location.street, location.city, location.zip].filter(Boolean).join(", ")}
+                        </div>
+                      </div>
                       {location.is_default ? (
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
                           Default
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-2 text-sm text-slate-500">
-                      {[location.street, location.city, location.zip].filter(Boolean).join(", ")}
-                    </div>
                     {location.delivery_notes ? (
-                      <div className="mt-2 text-sm text-slate-500">{location.delivery_notes}</div>
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
+                        {location.delivery_notes}
+                      </div>
                     ) : null}
                   </div>
                 ))
               )}
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-semibold text-slate-900">Rental history snapshot</h2>
-            <div className="mt-5 text-sm text-slate-500">
-              {recentBookings.length} linked booking{recentBookings.length === 1 ? "" : "s"} in your
-              portal account.
+          <section className="space-y-6">
+            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Rental history snapshot</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    A quick view of the rentals currently linked to this portal account.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                  {recentBookings.length} linked
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Total rentals
+                  </div>
+                  <div className="mt-2 text-lg font-semibold text-slate-900">{recentBookings.length}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Active rentals
+                  </div>
+                  <div className="mt-2 text-lg font-semibold text-slate-900">
+                    {
+                      recentBookings.filter((booking) =>
+                        ["confirmed", "scheduled", "delivered"].includes((booking.status ?? "").toLowerCase()),
+                      ).length
+                    }
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Saved locations
+                  </div>
+                  <div className="mt-2 text-lg font-semibold text-slate-900">{locations.length}</div>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {recentBookings.length === 0 ? (
+                  <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
+                    No rentals are linked to this account yet. When bookings are matched to your
+                    portal account, they will appear here automatically.
+                  </div>
+                ) : (
+                  recentBookings.slice(0, 4).map((booking) => (
+                    <Link
+                      key={booking.id}
+                      href={`/portal/rentals/${booking.id}`}
+                      className="block rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">Rental #{booking.id.slice(0, 8)}</div>
+                          <div className="mt-1 text-sm leading-6 text-slate-500">
+                            {booking.customer_street || "Address pending"}
+                          </div>
+                        </div>
+                        <PortalStatusBadge stage={booking.portalStage} />
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-2xl bg-white px-3 py-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Delivery
+                          </div>
+                          <div className="mt-1 text-sm font-semibold text-slate-900">
+                            {formatDate(booking.delivery_date)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl bg-white px-3 py-3">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            Latest activity
+                          </div>
+                          <div className="mt-1 text-sm leading-6 text-slate-600">
+                            {booking.latestRequestSummary || booking.nextAction}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </PortalShell>
   );

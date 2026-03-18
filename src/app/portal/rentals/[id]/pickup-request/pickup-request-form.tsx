@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PICKUP_REQUEST_NOTES_MAX_LENGTH } from "@/lib/rental-action-requests";
 
 type PickupRequestFormProps = {
   bookingId: string;
@@ -113,10 +114,14 @@ export function PickupRequestForm({
           id="notes"
           name="notes"
           rows={4}
+          maxLength={PICKUP_REQUEST_NOTES_MAX_LENGTH}
           defaultValue={defaultNotes}
           placeholder="Gate code, parked cars, special instructions"
           className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
         />
+        <div className="mt-2 text-xs text-slate-500">
+          Optional. Up to {PICKUP_REQUEST_NOTES_MAX_LENGTH} characters.
+        </div>
       </div>
 
       <button

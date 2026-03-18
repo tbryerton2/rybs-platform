@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeEmail } from "@/lib/customers";
+import { isPortalSchemaError } from "./schema";
 
 export const PORTAL_ACCESS_TOKEN_COOKIE = "tcm_portal_access_token";
 export const PORTAL_REFRESH_TOKEN_COOKIE = "tcm_portal_refresh_token";
@@ -19,6 +20,15 @@ type PortalCustomer = {
   portal_status: "invited" | "active" | "disabled";
   last_login_at: string | null;
 };
+
+type PortalCustomerRow = PortalCustomer & {
+  auth_user_id?: string | null;
+  normalized_email?: string | null;
+};
+
+const PORTAL_CUSTOMER_SELECT =
+  "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email";
+const PORTAL_CUSTOMER_FALLBACK_SELECT = "id, name, email, phone, primary_street, primary_city, primary_zip";
 
 export function createPortalAuthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -95,40 +105,37 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
   const user = data.user;
   const normalizedUserEmail = normalizeEmail(user.email);
 
-  const query = supabaseAdmin
+  let customer: PortalCustomerRow | null = null;
+
+  const authLookup = await supabaseAdmin
     .from("customers")
-    .select(
-      "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email",
-    )
+    .select(PORTAL_CUSTOMER_SELECT)
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  const { data: initialCustomer, error: customerError } = await query;
-  let customer = initialCustomer;
+  if (authLookup.error && !isPortalSchemaError(authLookup.error)) {
+    throw new Error(authLookup.error.message);
+  }
 
-  if (customerError) throw new Error(customerError.message);
+  customer = (authLookup.data as PortalCustomerRow | null) ?? null;
 
   if (!customer && normalizedUserEmail) {
     let lookup = await supabaseAdmin
       .from("customers")
-      .select(
-        "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email",
-      )
+      .select(PORTAL_CUSTOMER_SELECT)
       .eq("normalized_email", normalizedUserEmail)
       .maybeSingle();
 
-    if (lookup.error && lookup.error.message.toLowerCase().includes("normalized_email")) {
+    if (lookup.error && isPortalSchemaError(lookup.error)) {
       lookup = await supabaseAdmin
         .from("customers")
-        .select(
-          "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email",
-        )
+        .select(PORTAL_CUSTOMER_FALLBACK_SELECT)
         .ilike("email", normalizedUserEmail)
         .maybeSingle();
     }
 
     if (lookup.error) throw new Error(lookup.error.message);
-    customer = lookup.data;
+    customer = (lookup.data as PortalCustomerRow | null) ?? null;
 
     if (customer?.id && !customer.auth_user_id) {
       const { error: attachError } = await supabaseAdmin
@@ -136,14 +143,20 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
         .update({ auth_user_id: user.id, portal_status: "active", last_login_at: new Date().toISOString() })
         .eq("id", customer.id);
 
-      if (attachError) throw new Error(attachError.message);
-      customer.auth_user_id = user.id;
-      customer.portal_status = "active";
-      customer.last_login_at = new Date().toISOString();
+      if (attachError && !isPortalSchemaError(attachError)) {
+        throw new Error(attachError.message);
+      }
+
+      if (!attachError) {
+        customer.auth_user_id = user.id;
+        customer.portal_status = "active";
+        customer.last_login_at = new Date().toISOString();
+      }
     }
   }
 
-  if (!customer || customer.portal_status === "disabled") return null;
+  if (!customer) return null;
+  if ((customer.portal_status ?? "active") === "disabled") return null;
 
   return {
     id: customer.id,
@@ -153,8 +166,8 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
     primary_street: customer.primary_street,
     primary_city: customer.primary_city,
     primary_zip: customer.primary_zip,
-    portal_status: customer.portal_status,
-    last_login_at: customer.last_login_at,
+    portal_status: customer.portal_status ?? "active",
+    last_login_at: customer.last_login_at ?? null,
   };
 }
 

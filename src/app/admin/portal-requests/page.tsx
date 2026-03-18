@@ -4,10 +4,13 @@ export const revalidate = 0;
 import Link from "next/link";
 import {
   getActionTypeLabel,
+  getActionTypeShortDescription,
   getCustomerVisibleStatusLabel,
   getCustomerVisibleStatusTone,
   getInternalRequestStatusLabel,
   getInternalRequestStatusTone,
+  getRequestPriorityLabel,
+  getRequestPriorityTone,
 } from "@/lib/rental-action-requests";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -24,6 +27,7 @@ type PortalRequestListRow = {
     | "pickup_scheduled"
     | "unable_to_confirm"
     | "completed";
+  priority: "low" | "normal" | "high" | "urgent";
   submitted_at: string;
   customer: {
     id: string;
@@ -78,6 +82,7 @@ async function getPortalRequests(filter: string) {
       action_type,
       status,
       customer_visible_status,
+      priority,
       submitted_at,
       customer:customers(id, name, email),
       booking:bookings(id, customer_name, customer_street, customer_city, customer_zip, status)
@@ -89,6 +94,10 @@ async function getPortalRequests(filter: string) {
   const where = getFilterWhere(filter);
   if (where?.type === "eq") {
     query = query.eq("status", where.value);
+  }
+
+  if (filter === "pickup_request" || filter === "extension_request" || filter === "issue_report") {
+    query = query.eq("action_type", filter);
   }
 
   const { data, error } = await query;
@@ -147,21 +156,16 @@ export default async function AdminPortalRequestsPage({
 
         <div className="flex flex-wrap gap-2">
           <FilterLink href="/admin/portal-requests?filter=all" label="All" active={filter === "all"} />
-          <FilterLink
-            href="/admin/portal-requests?filter=submitted"
-            label="New"
-            active={filter === "submitted"}
-          />
+          <FilterLink href="/admin/portal-requests?filter=submitted" label="New" active={filter === "submitted"} />
           <FilterLink
             href="/admin/portal-requests?filter=under_review"
             label="Under review"
             active={filter === "under_review"}
           />
-          <FilterLink
-            href="/admin/portal-requests?filter=completed"
-            label="Completed"
-            active={filter === "completed"}
-          />
+          <FilterLink href="/admin/portal-requests?filter=completed" label="Completed" active={filter === "completed"} />
+          <FilterLink href="/admin/portal-requests?filter=pickup_request" label="Pickup" active={filter === "pickup_request"} />
+          <FilterLink href="/admin/portal-requests?filter=extension_request" label="Extension" active={filter === "extension_request"} />
+          <FilterLink href="/admin/portal-requests?filter=issue_report" label="Issues" active={filter === "issue_report"} />
         </div>
       </div>
 
@@ -173,7 +177,7 @@ export default async function AdminPortalRequestsPage({
         </div>
 
         {requests.length === 0 ? (
-          <div className="px-6 py-10 text-sm text-slate-500">
+          <div className="px-6 py-10 text-sm leading-6 text-slate-500">
             No portal requests match this filter yet.
           </div>
         ) : (
@@ -185,6 +189,7 @@ export default async function AdminPortalRequestsPage({
                   <th className="px-6 py-3">Request</th>
                   <th className="px-6 py-3">Customer</th>
                   <th className="px-6 py-3">Rental</th>
+                  <th className="px-6 py-3">Priority</th>
                   <th className="px-6 py-3">Address</th>
                   <th className="px-6 py-3">Internal</th>
                   <th className="px-6 py-3">Customer view</th>
@@ -196,9 +201,8 @@ export default async function AdminPortalRequestsPage({
                   <tr key={request.id} className="align-top">
                     <td className="px-6 py-4 text-slate-600">{formatDateTime(request.submitted_at)}</td>
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-900">
-                        {getActionTypeLabel(request.action_type)}
-                      </div>
+                      <div className="font-semibold text-slate-900">{getActionTypeLabel(request.action_type)}</div>
+                      <div className="mt-1 text-slate-500">{getActionTypeShortDescription(request.action_type)}</div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-semibold text-slate-900">
@@ -207,10 +211,17 @@ export default async function AdminPortalRequestsPage({
                       <div className="mt-1 text-slate-500">{request.customer?.email || "—"}</div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-semibold text-slate-900">
-                        Rental #{request.booking_id.slice(0, 8)}
-                      </div>
+                      <div className="font-semibold text-slate-900">Rental #{request.booking_id.slice(0, 8)}</div>
                       <div className="mt-1 text-slate-500">{request.booking?.status || "—"}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${getRequestPriorityTone(
+                          request.priority,
+                        )}`}
+                      >
+                        {getRequestPriorityLabel(request.priority)}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-slate-600">
                       {[request.booking?.customer_street, request.booking?.customer_city, request.booking?.customer_zip]
@@ -232,15 +243,15 @@ export default async function AdminPortalRequestsPage({
                           request.customer_visible_status,
                         )}`}
                       >
-                        {getCustomerVisibleStatusLabel(request.customer_visible_status)}
+                        {getCustomerVisibleStatusLabel(request.customer_visible_status, request.action_type)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <Link
                         href={`/admin/portal-requests/${request.id}`}
-                        className="font-semibold text-slate-900 hover:text-[#F97316]"
+                        className="inline-flex rounded-full border border-slate-200 px-3 py-1.5 font-semibold text-slate-900 transition hover:border-[#F97316]/30 hover:bg-[#F97316]/5 hover:text-[#F97316]"
                       >
-                        Open →
+                        Open
                       </Link>
                     </td>
                   </tr>

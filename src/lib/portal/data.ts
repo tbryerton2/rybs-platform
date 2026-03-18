@@ -1,10 +1,13 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
+  getExtensionEligibility,
+  getIssueReportEligibility,
   formatRequestSummary,
   getPickupEligibility,
   isOpenPickupRequest,
   type RentalActionRequestRow,
 } from "@/lib/rental-action-requests";
+import { isPortalSchemaError } from "./schema";
 import { getNextPortalAction, getPortalStage, type PortalStage } from "./status";
 
 export type PortalBooking = {
@@ -51,6 +54,11 @@ export type PortalLocation = {
 export type PortalBookingSummary = PortalBooking & {
   portalStage: PortalStage;
   nextAction: string;
+  requestCount: number;
+  latestRequestSummary: string | null;
+  pickupEligibility: ReturnType<typeof getPickupEligibility>;
+  extensionEligibility: ReturnType<typeof getExtensionEligibility>;
+  issueReportEligibility: ReturnType<typeof getIssueReportEligibility>;
 };
 
 const ACTIVE_STATUSES = new Set(["confirmed", "scheduled", "delivered"]);
@@ -60,6 +68,10 @@ function withPortalRequestSummary(
   requests: PortalBookingRequest[] = [],
 ): PortalBookingSummary {
   const latestPickupRequest = requests.find((request) => request.action_type === "pickup_request") ?? null;
+  const eligibilityInput = requests.map((request) => ({
+    action_type: request.action_type,
+    status: request.status,
+  }));
   const portalStage = getPortalStage({
     ...booking,
     hasOpenPickupRequest: requests.some((request) =>
@@ -75,11 +87,12 @@ function withPortalRequestSummary(
     ...booking,
     portalStage,
     nextAction: getNextPortalAction(portalStage),
+    requestCount: requests.length,
+    latestRequestSummary: requests[0] ? getPortalRequestSummary(requests[0]) : null,
+    pickupEligibility: getPickupEligibility(booking, eligibilityInput),
+    extensionEligibility: getExtensionEligibility(booking, eligibilityInput),
+    issueReportEligibility: getIssueReportEligibility(booking),
   };
-}
-
-function isMissingRelationError(message: string | undefined) {
-  return (message ?? "").toLowerCase().includes("does not exist");
 }
 
 export async function getPortalDashboardData(customerId: string) {
@@ -102,7 +115,7 @@ export async function getPortalDashboardData(customerId: string) {
     ]);
 
   if (bookingsError) throw new Error(bookingsError.message);
-  if (locationsError && !isMissingRelationError(locationsError.message)) {
+  if (locationsError && !isPortalSchemaError(locationsError)) {
     throw new Error(locationsError.message);
   }
 
@@ -121,7 +134,7 @@ export async function getPortalDashboardData(customerId: string) {
       )
       .order("submitted_at", { ascending: false });
 
-    if (requestLookup.error && !isMissingRelationError(requestLookup.error.message)) {
+    if (requestLookup.error && !isPortalSchemaError(requestLookup.error)) {
       throw new Error(requestLookup.error.message);
     }
 
@@ -169,25 +182,21 @@ export async function getPortalRental(customerId: string, bookingId: string) {
     ]);
 
   if (bookingError) throw new Error(bookingError.message);
-  if (requestsError && !isMissingRelationError(requestsError.message)) {
+  if (requestsError && !isPortalSchemaError(requestsError)) {
     throw new Error(requestsError.message);
   }
 
   if (!booking) return null;
 
   const requestRows = requestsError ? [] : ((requests ?? []) as PortalBookingRequest[]);
-  const pickupEligibility = getPickupEligibility(
-    booking as PortalBooking,
-    requestRows.map((request) => ({
-      action_type: request.action_type,
-      status: request.status,
-    })),
-  );
+  const bookingSummary = withPortalRequestSummary(booking as PortalBooking, requestRows);
 
   return {
-    booking: withPortalRequestSummary(booking as PortalBooking, requestRows),
+    booking: bookingSummary,
     requests: requestRows,
-    pickupEligibility,
+    pickupEligibility: bookingSummary.pickupEligibility,
+    extensionEligibility: bookingSummary.extensionEligibility,
+    issueReportEligibility: bookingSummary.issueReportEligibility,
   };
 }
 
