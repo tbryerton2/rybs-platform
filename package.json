@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "trim:zcta": "node scripts/trim-zcta-geojson.mjs"
+    "trim:zcta": "node scripts/trim-zcta-geojson.mjs",
+    "backfill:booking-customers": "node scripts/backfill-booking-customers.mjs"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

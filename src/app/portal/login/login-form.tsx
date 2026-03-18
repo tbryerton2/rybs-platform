@@ -1,0 +1,101 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+const COOLDOWN_KEY = "tcm_portal_login_cooldown_until";
+
+function readStoredCooldown() {
+  if (typeof window === "undefined") return 0;
+  const raw = window.localStorage.getItem(COOLDOWN_KEY);
+  const value = raw ? Number(raw) : 0;
+  return Number.isFinite(value) ? value : 0;
+}
+
+function persistCooldown(until: number) {
+  if (typeof window === "undefined") return;
+  if (until > Date.now()) {
+    window.localStorage.setItem(COOLDOWN_KEY, String(until));
+    return;
+  }
+  window.localStorage.removeItem(COOLDOWN_KEY);
+}
+
+export function PortalLoginForm({
+  action,
+  initialEmail,
+  initialCooldownSeconds,
+}: {
+  action: (formData: FormData) => void | Promise<void>;
+  initialEmail?: string;
+  initialCooldownSeconds?: number;
+}) {
+  const [email, setEmail] = useState(initialEmail ?? "");
+  const [cooldownUntil] = useState(() => {
+    const fromStorage = readStoredCooldown();
+    const fromServer =
+      initialCooldownSeconds && initialCooldownSeconds > 0
+        ? Date.now() + initialCooldownSeconds * 1000
+        : 0;
+
+    const next = Math.max(fromStorage, fromServer);
+    persistCooldown(next);
+    return next;
+  });
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const nextRemaining = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setSecondsRemaining(nextRemaining);
+
+      if (nextRemaining === 0) {
+        persistCooldown(0);
+      }
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [cooldownUntil]);
+
+  const inCooldown = secondsRemaining > 0;
+  const helperText = useMemo(() => {
+    if (!inCooldown) {
+      return "Use the same email you booked with. We will send a one-tap magic link for portal access.";
+    }
+
+    return `To prevent spam and Supabase rate-limit issues, you can request another link in ${secondsRemaining}s.`;
+  }, [inCooldown, secondsRemaining]);
+
+  return (
+    <form action={action} className="mt-8 space-y-5">
+      <div>
+        <label htmlFor="email" className="text-sm font-medium text-slate-700">
+          Email address
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="you@example.com"
+          className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
+        />
+        <p className="mt-2 text-xs leading-5 text-slate-500">{helperText}</p>
+      </div>
+
+      <button
+        type="submit"
+        disabled={inCooldown}
+        className={[
+          "inline-flex w-full items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold text-white transition",
+          inCooldown
+            ? "cursor-not-allowed bg-slate-300"
+            : "bg-[#F97316] hover:bg-orange-600",
+        ].join(" ")}
+      >
+        {inCooldown ? `Try again in ${secondsRemaining}s` : "Send secure sign-in link"}
+      </button>
+    </form>
+  );
+}

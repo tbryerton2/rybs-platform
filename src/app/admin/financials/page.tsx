@@ -4,6 +4,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -43,14 +44,6 @@ function sp(obj: SearchParams, key: string) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function money(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 function numberFmt(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -69,14 +62,9 @@ function formatDate(value: string | null) {
   }).format(parsed);
 }
 
-function centsToDollars(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  return value / 100;
-}
-
 function sumRevenue(rows: Array<{ total_price_cents: number | null }>) {
   return rows.reduce(
-    (sum, row) => sum + centsToDollars(row.total_price_cents),
+    (sum, row) => sum + (centsToDollars(row.total_price_cents) ?? 0),
     0
   );
 }
@@ -298,7 +286,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
     revenueByZipAllTime.set(
       zip,
       (revenueByZipAllTime.get(zip) ?? 0) +
-        centsToDollars(row.total_price_cents)
+        (centsToDollars(row.total_price_cents) ?? 0)
     );
   }
 
@@ -310,7 +298,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   );
 
   const filteredRevenue = filteredRevenueRows.reduce(
-    (sum, row) => sum + centsToDollars(row.total_price_cents),
+    (sum, row) => sum + (centsToDollars(row.total_price_cents) ?? 0),
     0
   );
 
@@ -330,7 +318,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   >();
 
   for (const row of filteredRevenueRows) {
-    const revenue = centsToDollars(row.total_price_cents);
+    const revenue = centsToDollars(row.total_price_cents) ?? 0;
 
     const zip = row.customer_zip?.trim();
     if (zip) {
@@ -410,7 +398,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         <div className={cardShell("p-5")}>
           <p className="text-sm font-medium text-slate-500">Revenue this month</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {money(revenueThisMonth)}
+            {formatUsd(revenueThisMonth, { maximumFractionDigits: 0 })}
           </p>
           <p className="mt-2 text-xs text-slate-500">
             Delivered and picked up jobs by delivery date
@@ -420,7 +408,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         <div className={cardShell("p-5")}>
           <p className="text-sm font-medium text-slate-500">Revenue last 30 days</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {money(revenueLast30Days)}
+            {formatUsd(revenueLast30Days, { maximumFractionDigits: 0 })}
           </p>
           <p className="mt-2 text-xs text-slate-500">
             Rolling 30-day operational revenue
@@ -430,7 +418,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         <div className={cardShell("p-5")}>
           <p className="text-sm font-medium text-slate-500">Average booking value</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {money(averageBookingValue)}
+            {formatUsd(averageBookingValue, { maximumFractionDigits: 0 })}
           </p>
           <p className="mt-2 text-xs text-slate-500">
             All revenue-producing jobs
@@ -455,7 +443,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
             {topZipAllTime?.[0] ?? "—"}
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            {topZipAllTime ? `${money(topZipAllTime[1])} all time` : "No data yet"}
+            {topZipAllTime ? `${formatUsd(topZipAllTime[1], { maximumFractionDigits: 0 })} all time` : "No data yet"}
           </p>
         </div>
       </section>
@@ -584,7 +572,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
               </p>
             </div>
             <div className="rounded-2xl bg-orange-50 px-3 py-2 text-sm font-semibold text-[#F97316]">
-              {money(filteredRevenue)}
+              {formatUsd(filteredRevenue, { maximumFractionDigits: 0 })}
             </div>
           </div>
 
@@ -604,7 +592,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
                     </p>
                   </div>
                   <p className="text-sm font-semibold text-slate-900">
-                    {money(item.revenue)}
+                    {formatUsd(item.revenue, { maximumFractionDigits: 0 })}
                   </p>
                 </div>
               ))
@@ -634,7 +622,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
                     </p>
                   </div>
                   <p className="text-sm font-semibold text-slate-900">
-                    {money(item.revenue)}
+                    {formatUsd(item.revenue, { maximumFractionDigits: 0 })}
                   </p>
                 </div>
               ))
@@ -666,7 +654,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
                     </p>
                   </div>
                   <p className="text-sm font-semibold text-slate-900">
-                    {money(item.revenue)}
+                    {formatUsd(item.revenue, { maximumFractionDigits: 0 })}
                   </p>
                 </div>
               ))
@@ -721,8 +709,6 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
 
               <tbody className="divide-y divide-slate-200 bg-white">
                 {tableRows.map((row) => {
-                  const price = centsToDollars(row.total_price_cents);
-
                   return (
                     <tr key={row.id} className="hover:bg-slate-50 transition">
                       <td className="px-6 py-4 text-sm font-semibold text-slate-900">
@@ -750,7 +736,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right text-sm font-semibold text-slate-900">
-                        {money(price)}
+                        {formatUsdFromCents(row.total_price_cents, { maximumFractionDigits: 0 })}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Link

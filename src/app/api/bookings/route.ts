@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
 
 export async function GET(req: Request) {
   try {
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
     const { data, error } = await supabaseAdmin
       .from("bookings")
       .select(
-        "id, status, total_price_cents, customer_name, customer_email, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county"
+        "id, status, total_price_cents, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county"
       )
       .eq("id", bookingId)
       .single();
@@ -27,9 +28,10 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ ok: true, booking: data });
-  } catch (e: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
+      { ok: false, error: message },
       { status: 500 }
     );
   }
@@ -42,6 +44,7 @@ export async function POST(req: Request) {
     const {
       customer_name,
       customer_email, // ✅ add
+      customer_phone,
       customer_street,
       customer_city,
       customer_zip,
@@ -61,11 +64,14 @@ export async function POST(req: Request) {
       );
     }
 
+    const normalizedCustomerPhone = normalizePhone(customer_phone);
+
     const { data, error } = await supabaseAdmin
       .from("bookings")
       .insert({
         customer_name,
         customer_email: customer_email ?? null, // ✅ add (nullable)
+        customer_phone: normalizedCustomerPhone,
         customer_street,
         customer_city,
         customer_zip,
@@ -87,10 +93,24 @@ export async function POST(req: Request) {
       );
     }
 
+    try {
+      await attachCustomerToBooking(data.id, {
+        fullName: customer_name,
+        email: customer_email,
+        phone: normalizedCustomerPhone,
+        street: customer_street,
+        city: customer_city,
+        zip: customer_zip,
+      }, supabaseAdmin);
+    } catch (customerLinkError) {
+      console.error("customer linkage failed for /api/bookings:", customerLinkError);
+    }
+
     return NextResponse.json({ ok: true, id: data.id });
-  } catch (e: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
+      { ok: false, error: message },
       { status: 500 }
     );
   }

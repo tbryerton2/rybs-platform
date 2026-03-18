@@ -2,17 +2,20 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getDefaultRentalDays } from "@/lib/config";
+import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
+import { supabaseServer } from "@/lib/supabase/server";
 
 type ConfirmBody = {
   holdId?: string;
+  totalPriceCents?: number;
   totalDollars?: number;
-  // NEW: support current checkout payload
   bookingDraft?: {
     deliveryDate?: string;
     pickupDate?: string;
     pickupMode?: "unspecified" | "date";
     customerName?: string;
     customerEmail?: string;
+    customerPhone?: string;
     customerStreet?: string;
     customerCity?: string;
     customerZip?: string;
@@ -24,6 +27,7 @@ type ConfirmBody = {
   pickupMode?: "unspecified" | "date";
   customerName?: string;
   customerEmail?: string;
+  customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
   customerZip?: string;
@@ -47,7 +51,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     message:
-      "POST with either { holdId, bookingDraft: { deliveryDate, pickupDate?, pickupMode?, customerName, customerEmail, customerStreet, customerCity, customerZip } } or the flat fields { holdId, deliveryDate, pickupDate?, pickupMode?, customerName, customerEmail, customerStreet, customerCity, customerZip }",
+      "POST with either { holdId, bookingDraft: { deliveryDate, pickupDate?, pickupMode?, customerName, customerEmail, customerPhone?, customerStreet, customerCity, customerZip } } or the flat fields { holdId, deliveryDate, pickupDate?, pickupMode?, customerName, customerEmail, customerPhone?, customerStreet, customerCity, customerZip }",
   });
 }
 
@@ -57,9 +61,17 @@ export async function POST(req: Request) {
 
     const holdId = (body.holdId || "").trim();
     const draft = body.bookingDraft || {};
-    const totalDollars = Number(body.totalDollars);
-    if (!Number.isFinite(totalDollars) || totalDollars <= 0) {
-      return NextResponse.json({ ok: false, error: "Missing/invalid totalDollars." }, { status: 400 });
+    const totalPriceCents = Number(body.totalPriceCents);
+    const fallbackTotalDollars = Number(body.totalDollars);
+    const normalizedTotalPriceCents =
+      Number.isFinite(totalPriceCents) && totalPriceCents > 0
+        ? Math.round(totalPriceCents)
+        : Number.isFinite(fallbackTotalDollars) && fallbackTotalDollars > 0
+        ? Math.round(fallbackTotalDollars * 100)
+        : null;
+
+    if (normalizedTotalPriceCents == null) {
+      return NextResponse.json({ ok: false, error: "Missing/invalid totalPriceCents." }, { status: 400 });
     }
 
     const deliveryDate = ((draft.deliveryDate ?? body.deliveryDate) || "").trim();
@@ -67,6 +79,7 @@ export async function POST(req: Request) {
 
     const customerName = ((draft.customerName ?? body.customerName) || "").trim();
     const customerEmail = ((draft.customerEmail ?? body.customerEmail) || "").trim();
+    const customerPhone = normalizePhone(draft.customerPhone ?? body.customerPhone);
     const customerStreet = ((draft.customerStreet ?? body.customerStreet) || "").trim();
     const customerCity = ((draft.customerCity ?? body.customerCity) || "").trim();
     const customerZip = ((draft.customerZip ?? body.customerZip) || "").trim();
@@ -176,9 +189,10 @@ export async function POST(req: Request) {
         delivery_date: deliveryDate,
         pickup_date: effectivePickup || null,
         status: "confirmed",
-        total_price_cents: totalDollars,
+        total_price_cents: normalizedTotalPriceCents,
         customer_name: customerName || null,
         customer_email: customerEmail || null,
+        customer_phone: customerPhone,
         customer_street: customerStreet || null,
         customer_city: customerCity || null,
         customer_zip: customerZip || null,
@@ -199,6 +213,23 @@ export async function POST(req: Request) {
         { ok: false, error: insertBooking.error.message || "Booking creation failed." },
         { status: 500 }
       );
+    }
+
+    try {
+      await attachCustomerToBooking(
+        insertBooking.data.id,
+        {
+          fullName: customerName,
+          email: customerEmail,
+          phone: customerPhone,
+          street: customerStreet,
+          city: customerCity,
+          zip: customerZip,
+        },
+        supabaseServer(),
+      );
+    } catch (customerLinkError) {
+      console.error("customer linkage failed after confirm-booking:", customerLinkError);
     }
 
     const ev = await supabase.from("booking_events").insert({
@@ -247,9 +278,10 @@ export async function POST(req: Request) {
       ok: true,
       bookingId: insertBooking.data.id,
     });
-  } catch (e: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Confirm failed.";
     return NextResponse.json(
-      { ok: false, error: e?.message || "Confirm failed." },
+      { ok: false, error: message },
       { status: 500 }
     );
   }

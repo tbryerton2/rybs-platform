@@ -12,6 +12,7 @@ type BookingDraft = {
 
   customerName?: string;
   customerEmail?: string;
+  customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
   customerZip?: string;

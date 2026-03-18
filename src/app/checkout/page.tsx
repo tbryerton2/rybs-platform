@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatUsdFromCents } from "@/lib/money";
 
 type BookingDraft = {
   zip?: string;
@@ -136,9 +137,6 @@ export default function CheckoutPage() {
     return secondsLeft <= 0;
   }, [secondsLeft]);
 
-  // TODO: wire real pricing later
-  const priceLabel = "$___"; // placeholder
-
   async function handleSimulatePayment() {
     setError(null);
 
@@ -179,8 +177,6 @@ export default function CheckoutPage() {
       // 💳 Simulate payment
       await new Promise((r) => setTimeout(r, 600));
 
-      const totalDollars = Math.round(totalCents / 100);
-
       // ✅ Convert hold -> booking
       const confirmRes = await fetch("/api/confirm-booking", {
         method: "POST",
@@ -189,7 +185,7 @@ export default function CheckoutPage() {
           holdId: draft.holdId,
           deliveryDate: deliveryDateYMD, // ✅ IMPORTANT: send YYYY-MM-DD explicitly
           bookingDraft: draft,
-          totalDollars, // ✅ add this
+          totalPriceCents: totalCents,
         }),
       });
 
@@ -212,7 +208,7 @@ export default function CheckoutPage() {
       // 🚀 Redirect to success page
       const bookingId = confirmJson.bookingId || draft.holdId; // fallback until bookingId exists
       router.push(`/success?bookingId=${encodeURIComponent(bookingId)}`);
-    } catch (err) {
+    } catch {
       setError("Payment failed. Please try again.");
     } finally {
       setIsPaying(false);
@@ -226,12 +222,7 @@ export default function CheckoutPage() {
   const salesTaxCents = Math.round(subtotalCents * salesTaxRate);
   const feesCents = 0; // TODO: fees later
   const totalCents = subtotalCents + salesTaxCents + feesCents;
-  const totalDollars = Math.round(totalCents / 100);
-
-  const fmtMoney = (cents: number) =>
-    new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(
-      (cents || 0) / 100
-    );
+  const fmtMoney = (cents: number) => formatUsdFromCents(cents);
     
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">

@@ -4,6 +4,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatUsdFromCents } from "@/lib/money";
 import {
   quickCancelBookingAction,
   quickMarkDeliveredAction,
@@ -98,15 +99,6 @@ function timelineDotClasses(done: boolean, active = false) {
   if (done) return "bg-emerald-500 ring-emerald-200";
   if (active) return "bg-[#F97316] ring-[#F97316]/20";
   return "bg-slate-300 ring-slate-200";
-}
-
-function formatMoney(cents: number | null) {
-  if (cents == null) return "—";
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
 }
 
 function toSmsHref(phone: string) {
@@ -742,7 +734,7 @@ export default async function AdminBookingDetailPage({
 
           <Section title="Financial" icon={<CurrencyDollarIcon className="h-4 w-4" />}>
             <div className="grid gap-4">
-              <Field label="Price" value={formatMoney(booking.total_price_cents)} />
+              <Field label="Price" value={formatUsdFromCents(booking.total_price_cents)} />
             </div>
           </Section>
 

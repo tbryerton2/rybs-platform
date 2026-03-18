@@ -1,9 +1,10 @@
-// src/app/admin/analytics/zip-heatmap/page.tsx
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-import type { ComponentType } from "react";
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { centsToDollars, formatUsd } from "@/lib/money";
+import { ZipAnalyticsStatCard } from "../zip-analytics-stat-card";
+import { ZipAnalyticsViewTabs } from "../zip-analytics-view-tabs";
 import {
   CubeIcon,
   CurrencyDollarIcon,
@@ -67,14 +68,6 @@ function startDateFromDays(days: number | null) {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString();
-}
-
-function currency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function number(value: number) {
@@ -191,7 +184,7 @@ function RevenueCell({
   return (
     <div className="flex w-[96px] flex-col items-center">
       <div className="text-[18px] font-semibold leading-none text-slate-900">
-        {currency(value)}
+        {formatUsd(value, { maximumFractionDigits: 0 })}
       </div>
 
       <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -225,53 +218,6 @@ function BookingCountCell({
           className="h-full rounded-full bg-[#F97316]"
           style={{ width: `${width}%` }}
         />
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  hint,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  icon: ComponentType<{ className?: string }>;
-  accent?: "orange" | "emerald" | "slate";
-}) {
-  const accentClasses =
-    accent === "orange"
-      ? "bg-orange-50 text-[#F97316]"
-      : accent === "emerald"
-        ? "bg-emerald-50 text-emerald-600"
-        : "bg-slate-100 text-slate-600";
-
-  return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm">
-      <div className="flex h-full min-h-[168px] flex-col">
-        <div className="flex min-h-[58px] items-start justify-between gap-4">
-          <div className="max-w-[72%] text-sm font-medium leading-6 text-slate-500">
-            {label}
-          </div>
-
-          <div
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${accentClasses}`}
-          >
-            <Icon className="h-6 w-6" />
-          </div>
-        </div>
-
-        <div className="mt-2 text-[34px] font-semibold leading-[1] tracking-tight text-slate-900">
-          {value}
-        </div>
-
-        <div className="mt-4 min-h-[52px] text-sm leading-5 text-slate-500">
-          {hint ?? ""}
-        </div>
       </div>
     </div>
   );
@@ -530,7 +476,7 @@ export default async function ZipHeatMapPage({
       };
 
     current.bookingCount += 1;
-    current.revenue += (booking.total_price_cents ?? 0) / 100;
+    current.revenue += centsToDollars(booking.total_price_cents) ?? 0;
 
     analyticsMap.set(zip, current);
   }
@@ -589,10 +535,11 @@ export default async function ZipHeatMapPage({
         <div className="mx-auto max-w-7xl px-6 pb-16 pt-10">
             <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
-                <h1 className="text-[34px] font-semibold tracking-tight text-slate-900">ZIP Heat Map</h1>
+                <h1 className="text-[34px] font-semibold tracking-tight text-slate-900">ZIP Analytics</h1>
                 <p className="mt-2 text-base text-slate-600">
-                    See which ZIP codes drive bookings and revenue.
+                    Compare ZIP performance across bookings, revenue, and service coverage.
                 </p>
+                <ZipAnalyticsViewTabs active="heat" />
                 </div>
 
                 <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1.5 text-sm font-semibold text-[#F97316]">
@@ -614,7 +561,7 @@ export default async function ZipHeatMapPage({
             </div>
 
             <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <MetricCard
+                <ZipAnalyticsStatCard
                     label="Total bookings"
                     value={number(totalBookings)}
                     hint="Non-cancelled bookings in selected period"
@@ -622,15 +569,15 @@ export default async function ZipHeatMapPage({
                     accent="orange"
                 />
 
-                <MetricCard
+                <ZipAnalyticsStatCard
                     label="Total revenue"
-                    value={currency(totalRevenue)}
+                    value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
                     hint="Collected from booking totals"
                     icon={CurrencyDollarIcon}
                     accent="emerald"
                 />
 
-                <MetricCard
+                <ZipAnalyticsStatCard
                     label="Active ZIPs with bookings"
                     value={number(activeZipsWithBookings)}
                     hint="Supported ZIPs producing work"
@@ -638,7 +585,7 @@ export default async function ZipHeatMapPage({
                     accent="slate"
                 />
 
-                <MetricCard
+                <ZipAnalyticsStatCard
                     label="Top ZIP by bookings"
                     value={topZipByBookings ? topZipByBookings.zip : "—"}
                     hint={
@@ -650,12 +597,12 @@ export default async function ZipHeatMapPage({
                     accent="orange"
                 />
 
-                <MetricCard
+                <ZipAnalyticsStatCard
                     label="Top ZIP by revenue"
                     value={topZipByRevenue ? topZipByRevenue.zip : "—"}
                     hint={
                         topZipByRevenue
-                        ? currency(topZipByRevenue.revenue)
+                        ? formatUsd(topZipByRevenue.revenue, { maximumFractionDigits: 0 })
                         : "No revenue in range"
                     }
                     icon={TrophyIcon}
@@ -778,7 +725,7 @@ export default async function ZipHeatMapPage({
                             <td className="px-6 py-3 align-middle text-center">
                               <div className="flex min-h-[74px] items-center justify-center">
                                 <span className="inline-flex min-w-[64px] items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm">
-                                  {row.bookingCount > 0 ? currency(row.avgBookingValue) : "—"}
+                                  {row.bookingCount > 0 ? formatUsd(row.avgBookingValue, { maximumFractionDigits: 0 }) : "—"}
                                 </span>
                               </div>
                             </td>
@@ -827,7 +774,7 @@ export default async function ZipHeatMapPage({
                         </div>
                         <div className="mt-1 text-sm font-semibold text-slate-900">
                         {topZipByRevenue
-                            ? `${topZipByRevenue.zip} • ${currency(topZipByRevenue.revenue)}`
+                            ? `${topZipByRevenue.zip} • ${formatUsd(topZipByRevenue.revenue, { maximumFractionDigits: 0 })}`
                             : "No revenue in this period"}
                         </div>
                     </div>

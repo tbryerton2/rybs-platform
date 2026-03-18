@@ -8,6 +8,7 @@ export type AdminNavItem = {
     | "customers"
     | "financials"
     | "analytics"
+    | "portalRequests"
     | "pricing"
     | "zips"
     | "docs"
@@ -30,6 +31,12 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Operations",
     items: [
       { label: "Bookings", href: "/admin/bookings", icon: "bookings", matchers: ["/admin/bookings"] },
+      {
+        label: "Portal requests",
+        href: "/admin/portal-requests",
+        icon: "portalRequests",
+        matchers: ["/admin/portal-requests"],
+      },
       { label: "Schedule", href: "/admin/schedule", icon: "schedule", matchers: ["/admin/schedule"] },
     ],
   },

@@ -4,6 +4,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatUsdFromCents } from "@/lib/money";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -49,15 +50,6 @@ function formatDate(value: string | null) {
     day: "numeric",
     year: "numeric",
   }).format(date);
-}
-
-function formatMoney(value: number | null) {
-  if (value == null) return "—";
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
 }
 
 function statusPillClass(status: string | null) {
@@ -366,11 +358,7 @@ export default async function CustomerDetailPage({ params }: PageProps) {
                     </td>
 
                     <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                      {formatMoney(
-                        booking.total_price_cents != null
-                          ? booking.total_price_cents / 100
-                          : null
-                      )}
+                      {formatUsdFromCents(booking.total_price_cents)}
                     </td>
 
                     <td className="px-6 py-4 text-right">

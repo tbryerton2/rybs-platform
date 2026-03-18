@@ -2,8 +2,12 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { CubeIcon, CurrencyDollarIcon, FireIcon, MapPinIcon, TrophyIcon } from "@heroicons/react/24/solid";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { centsToDollars, formatUsd } from "@/lib/money";
 import ZipMapClientWrapper from "./map-client-wrapper";
+import { ZipAnalyticsStatCard } from "../zip-analytics-stat-card";
+import { ZipAnalyticsViewTabs } from "../zip-analytics-view-tabs";
 
 type SearchParams = {
   range?: string;
@@ -69,14 +73,6 @@ function startDateFromDays(days: number | null) {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString();
-}
-
-function currency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
 }
 
 function number(value: number) {
@@ -152,54 +148,6 @@ function MetricTabs({
 }
 
 
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm">
-      <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{value}</div>
-      {hint ? <div className="mt-2 text-sm text-slate-500">{hint}</div> : null}
-    </div>
-  );
-}
-
-function AnalyticsViewTabs({ active }: { active: "heat" | "map" }) {
-  return (
-    <div className="mt-4 flex flex-wrap gap-2">
-      <Link
-        href="/admin/analytics/zip-heatmap"
-        className={[
-          "inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold transition",
-          active === "heat"
-            ? "bg-[#F97316] text-white shadow-sm"
-            : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
-        ].join(" ")}
-      >
-        Heat Table
-      </Link>
-
-      <Link
-        href="/admin/analytics/zip-map"
-        className={[
-          "inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold transition",
-          active === "map"
-            ? "bg-[#F97316] text-white shadow-sm"
-            : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
-        ].join(" ")}
-      >
-        Map View
-      </Link>
-    </div>
-  );
-}
-
 export default async function ZipMapPage({
   searchParams,
 }: {
@@ -246,7 +194,7 @@ export default async function ZipMapPage({
 
     const current = bookingsByZip.get(zip) ?? { bookingCount: 0, revenue: 0 };
     current.bookingCount += 1;
-    current.revenue += (booking.total_price_cents ?? 0) / 100;
+    current.revenue += centsToDollars(booking.total_price_cents) ?? 0;
     bookingsByZip.set(zip, current);
   }
 
@@ -287,11 +235,11 @@ export default async function ZipMapPage({
       <div className="mx-auto max-w-7xl px-6 pb-16 pt-10">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-                <h1 className="text-[34px] font-semibold tracking-tight text-slate-900">ZIP Heat Map</h1>
+                <h1 className="text-[34px] font-semibold tracking-tight text-slate-900">ZIP Analytics</h1>
                 <p className="mt-2 text-base text-slate-600">
-                    See which ZIP areas drive bookings and revenue.
+                    Compare ZIP performance across bookings, revenue, and service coverage.
                 </p>
-                <AnalyticsViewTabs active="map" />
+                <ZipAnalyticsViewTabs active="map" />
             </div>
 
           <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1.5 text-sm font-semibold text-[#F97316]">
@@ -313,30 +261,40 @@ export default async function ZipMapPage({
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <StatCard
+          <ZipAnalyticsStatCard
             label="Total bookings"
             value={number(totalBookings)}
             hint="Mapped ZIPs in selected period"
+            icon={CubeIcon}
+            accent="orange"
           />
-          <StatCard
+          <ZipAnalyticsStatCard
             label="Total revenue"
-            value={currency(totalRevenue)}
+            value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
             hint="From service ZIPs in selected period"
+            icon={CurrencyDollarIcon}
+            accent="emerald"
           />
-          <StatCard
+          <ZipAnalyticsStatCard
             label="ZIPs on map"
             value={number(zipsOnMap)}
             hint="Service ZIPs eligible for polygon matching"
+            icon={MapPinIcon}
+            accent="slate"
           />
-          <StatCard
+          <ZipAnalyticsStatCard
             label="Active ZIPs"
             value={number(activeZipsOnMap)}
             hint="Currently bookable ZIPs in service settings"
+            icon={FireIcon}
+            accent="orange"
           />
-          <StatCard
+          <ZipAnalyticsStatCard
             label="Top ZIP by bookings"
             value={topZip ? topZip.zip : "—"}
             hint={topZip ? `${number(topZip.bookingCount)} bookings` : "No bookings in range"}
+            icon={TrophyIcon}
+            accent="emerald"
           />
         </div>
 

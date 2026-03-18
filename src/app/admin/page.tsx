@@ -10,6 +10,7 @@ import { RevenueMTDCard } from "./_components/RevenueMTDCard";
 import { TopZipCodesCard } from "./_components/TopZipCodesCard";
 import { revalidatePath } from "next/cache";
 import { SummaryStatCard } from "./_components/SummaryStatCard";
+import { centsToDollars, formatUsd } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
@@ -126,17 +127,17 @@ export default async function AdminDashboardPage() {
 
     const { data: revenueRows } = await supabase
         .from("bookings")
-        .select("price")
+        .select("total_price_cents")
         .gte("delivery_date", monthStartStr)
         .lte("delivery_date", todayStr)
         .in("status", ["delivered", "picked_up"]);
 
     const revenueMTD =
-        (revenueRows ?? []).reduce((sum, r) => sum + Number(r.price ?? 0), 0);
+        (revenueRows ?? []).reduce((sum, r) => sum + (centsToDollars(r.total_price_cents) ?? 0), 0);
 
     // Holds expiring soon: active holds expiring in next 30 minutes
     const nowIso = new Date().toISOString();
-    const soonIso = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const soonIso = new Date(now.getTime() + 30 * 60 * 1000).toISOString();
 
     const { data: zipRows } = await supabase
         .from("bookings")
@@ -211,11 +212,7 @@ export default async function AdminDashboardPage() {
 
                 <SummaryStatCard
                     label="Revenue MTD"
-                    value={revenueMTD.toLocaleString("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                    maximumFractionDigits: 0,
-                    })}
+                    value={formatUsd(revenueMTD, { maximumFractionDigits: 0 })}
                     tone="success"
                     href={`/admin/bookings?view=revenue-mtd&from=${monthStartStr}&to=${todayStr}`}
                 />

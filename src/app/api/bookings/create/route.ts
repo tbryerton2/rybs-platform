@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
 
 type Payload = {
   customer_name: string;
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
     }
 
     const supabase = supabaseServer();
+    const customerPhone = normalizePhone(body.customer_phone);
 
     const insertRow = {
       customer_name: body.customer_name.trim(),
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
       pickup_date: body.pickup_date ?? null,
 
       total_price_cents: typeof body.total_price_cents === "number" ? body.total_price_cents : null,
-      customer_phone: body.customer_phone?.trim() ?? null,
+      customer_phone: customerPhone,
       customer_email: body.customer_email?.trim() ?? null,
 
       status: "draft",
@@ -66,8 +68,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
+    try {
+      await attachCustomerToBooking(data.id, {
+        fullName: insertRow.customer_name,
+        email: insertRow.customer_email,
+        phone: insertRow.customer_phone,
+        street: insertRow.customer_street,
+        city: insertRow.customer_city,
+        zip: insertRow.customer_zip,
+      }, supabase);
+    } catch (customerLinkError) {
+      console.error("customer linkage failed for /api/bookings/create:", customerLinkError);
+    }
+
     return NextResponse.json({ ok: true, booking_id: data.id });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "Unknown error" }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

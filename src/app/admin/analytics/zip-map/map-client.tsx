@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { GeoJSON, MapContainer, Pane, TileLayer } from "react-leaflet";
 import type { GeoJsonObject, Feature, FeatureCollection, Geometry } from "geojson";
 import L from "leaflet";
+import { formatUsd } from "@/lib/money";
 
 type MapZipRow = {
   id: string | null;
@@ -37,14 +38,6 @@ const DEFAULT_BOUNDS = L.latLngBounds(
   L.latLng(43.35, -75.75)
 );
 const GEOJSON_URL = "/data/us-zcta-boundaries.geojson";
-
-function currency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 function number(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -341,9 +334,9 @@ export default function ZipMapClient({
                 row.town ? `<div class="tcm-zip-tooltip-town">${row.town}</div>` : "",
                 `<div class="tcm-zip-tooltip-metrics">`,
                 `<div><span>Bookings:</span> <strong>${number(row.bookingCount)}</strong></div>`,
-                `<div><span>Revenue:</span> <strong>${currency(row.revenue)}</strong></div>`,
+                `<div><span>Revenue:</span> <strong>${formatUsd(row.revenue, { maximumFractionDigits: 0 })}</strong></div>`,
                 `<div><span>Avg booking:</span> <strong>${
-                  row.bookingCount > 0 ? currency(row.avgBookingValue) : "—"
+                  row.bookingCount > 0 ? formatUsd(row.avgBookingValue, { maximumFractionDigits: 0 }) : "—"
                 }</div>`,
                 `</div>`,
                 `</div>`,

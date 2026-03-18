@@ -4,6 +4,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatUsd } from "@/lib/money";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -44,15 +45,6 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatMoney(value: number | null) {
-  if (!value) return "—";
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
-}
-
 function formatPhone(phone: string | null) {
   if (!phone) return "—";
 
@@ -72,7 +64,7 @@ function getLocationLabel(city: string | null, zip: string | null) {
 
 async function getCustomers(search: string) {
   let query = supabaseAdmin
-    .from("customers")
+    .from("customer_rollups")
     .select(
       `
       id,
@@ -115,7 +107,7 @@ async function getCustomers(search: string) {
 
 async function getStats() {
   const { data, error } = await supabaseAdmin
-    .from("customers")
+    .from("customer_rollups")
     .select("id, booking_count");
 
   if (error) throw new Error(error.message);
@@ -454,7 +446,7 @@ export default async function AdminCustomersPage({
 
                       <td className="px-3 py-4 align-top text-center text-sm font-semibold text-slate-900">
                         <div className="text-sm font-semibold text-slate-900">
-                          {formatMoney(customer.lifetime_revenue)}
+                          {formatUsd(customer.lifetime_revenue)}
                         </div>
                       </td>
 

@@ -2,10 +2,38 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import {
+  CalendarDaysIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  EllipsisHorizontalIcon,
+  FunnelIcon,
+  TicketIcon,
+} from "@heroicons/react/24/outline";
+import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { deleteBookingAction } from "./actions";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type BookingRow = {
+  id: string;
+  created_at: string | null;
+  status: string | null;
+  customer_name: string | null;
+  customer_city: string | null;
+  customer_zip: string | null;
+  delivery_date: string | null;
+  pickup_mode: string | null;
+  pickup_date: string | null;
+};
+
+type HoldRow = {
+  id: string;
+  created_at: string | null;
+  delivery_date: string | null;
+  expires_at: string | null;
+  zip: string | null;
+  status?: string | null;
+};
 
 function sp(obj: SearchParams, key: string) {
   const v = obj[key];
@@ -34,7 +62,17 @@ function pillBase(className: string) {
   return `inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset leading-5 ${className}`;
 }
 
-function applyWhenFilter(q: any, when: string | undefined, today: string) {
+function cardShell(extra = "") {
+  return `rounded-[28px] border border-slate-200/80 bg-white shadow-sm ${extra}`;
+}
+
+function applyWhenFilter<
+  T extends {
+    lt: (column: string, value: string) => T;
+    eq: (column: string, value: string) => T;
+    gt: (column: string, value: string) => T;
+  },
+>(q: T, when: string | undefined, today: string) {
   if (!when || when === "all") return q;
   if (when === "past") return q.lt("delivery_date", today);
   if (when === "current") return q.eq("delivery_date", today);
@@ -47,14 +85,14 @@ function statusPillClass(status: string | null | undefined) {
 
 
   if (s === "confirmed" || s === "paid")
-    return "bg-emerald-100 text-emerald-800 ring-emerald-200";
-  if (s === "scheduled") return "bg-blue-100 text-blue-800 ring-blue-200";
-  if (s === "draft") return "bg-slate-100 text-slate-800 ring-slate-200";
-  if (s === "cancelled") return "bg-rose-100 text-rose-800 ring-rose-200";
-  if (s === "delivered") return "bg-slate-900 text-white ring-slate-900/20";
-  if (s === "picked_up") return "bg-slate-900 text-white ring-slate-900/20";
+    return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (s === "scheduled") return "bg-blue-50 text-blue-700 ring-blue-200";
+  if (s === "draft") return "bg-slate-100 text-slate-700 ring-slate-200";
+  if (s === "cancelled") return "bg-rose-50 text-rose-700 ring-rose-200";
+  if (s === "delivered") return "bg-slate-900 text-white ring-slate-900/10";
+  if (s === "picked_up") return "bg-slate-900 text-white ring-slate-900/10";
 
-  return "bg-slate-100 text-slate-800 ring-slate-200";
+  return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
 function parseISODateOnly(iso: string) {
@@ -102,7 +140,6 @@ async function getBookings(filters: {
   pickup?: string;
 }) {
   const today = todayISO();
-  const todayET = todayISOET();
 
   let q = supabaseAdmin
     .from("bookings")
@@ -125,10 +162,10 @@ async function getBookings(filters: {
     console.error("ADMIN BOOKINGS ERROR:", error);
     return [];
   }
-  return data ?? [];
+  return (data ?? []) as BookingRow[];
 }
 
-function bookingIndicatorColor(b: any) {
+function bookingIndicatorColor(b: BookingRow) {
   const s = (b.status ?? "").toLowerCase();
 
   if (["cancelled", "delivered", "picked_up"].includes(s)) return "#0F172A";
@@ -148,7 +185,7 @@ function bookingIndicatorColor(b: any) {
   return "#CBD5E1";
 }
 
-function bookingUrgencyTone(b: any) {
+function bookingUrgencyTone(b: BookingRow) {
   const s = (b.status ?? "").toLowerCase();
   if (!b.delivery_date) return "normal";
   if (["cancelled", "delivered"].includes(s)) return "normal";
@@ -257,11 +294,6 @@ export default async function AdminBookingsPage({
     (dashboardView === "deliveries-today" ? dashboardDate : "");
   
 
-  const fieldClass =
-    "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 " +
-    "shadow-sm placeholder:text-slate-400 " +
-    "focus:outline-none focus:ring-4 focus:ring-[#F97316]/15 focus:border-[#F97316]/40";
-
   const labelClass = "block text-sm font-semibold text-slate-700 mb-2";
 
   const controlClass =
@@ -349,8 +381,8 @@ export default async function AdminBookingsPage({
         .lte("delivery_date", endStr)
         .order("delivery_date", { ascending: true });
 
-      const combinedRaw = [...(active ?? []), ...(week ?? [])];
-      const combined = Array.from(new Map(combinedRaw.map((b: any) => [b.id, b])).values());
+      const combinedRaw = [...(active ?? []), ...(week ?? [])] as BookingRow[];
+      const combined = Array.from(new Map(combinedRaw.map((b) => [b.id, b])).values());
 
       if (combined.length > 0) return combined;
 
@@ -364,15 +396,19 @@ export default async function AdminBookingsPage({
         .order("delivery_date", { ascending: true })
         .limit(3);
 
-      return upcoming ?? [];
+      return (upcoming ?? []) as BookingRow[];
     })(),
     holdsView === "expired" ? getExpiredHolds() : getActiveHolds(),
   ]);
 
   const holdsVisible = holds ?? [];
+  const activeBookingCount = bookings.filter((b) =>
+    ["confirmed", "paid", "scheduled", "delivered"].includes((b.status ?? "").toLowerCase()),
+  ).length;
+  const todayBookingCount = bookings.filter((b) => (b.delivery_date ?? "") === todayET).length;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
+    <main className="min-h-screen bg-slate-100">
       <style>{`
         /* default */
         [data-filters] .filters-collapse { display: none; }
@@ -384,21 +420,83 @@ export default async function AdminBookingsPage({
         [data-filters] .filters-chevron { transition: transform 200ms ease; }
         [data-filters][open] .filters-chevron { transform: rotate(180deg); }
       `}</style>
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl px-6 pb-16 pt-10">
         {/* Page header */}
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Bookings</h1>
-            <p className="mt-1 text-sm text-slate-600">Manage bookings and holds</p>
+            <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
+              Admin
+            </div>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+              Bookings
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Manage booking operations, dispatch timelines, and active holds in one workspace.
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden text-sm text-slate-500 sm:block">Today: {todayET}</div>
-            <span className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-sm font-semibold text-[#F97316] ring-1 ring-inset ring-[#F97316]/20">
-              Admin
+            <span className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-500 shadow-sm sm:inline-flex">
+              Today: {todayET}
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm">
+              {bookings.length} bookings
             </span>
           </div>
         </div>
+
+        <section className="mb-8 grid gap-4 md:grid-cols-3">
+          <div className={cardShell("p-5")}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Visible bookings</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                  {bookings.length}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Current result set for the selected view
+                </div>
+              </div>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F97316]/10 text-[#F97316]">
+                <CalendarDaysIcon className="h-6 w-6" />
+              </span>
+            </div>
+          </div>
+
+          <div className={cardShell("p-5")}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Active jobs</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                  {activeBookingCount}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Confirmed, scheduled, paid, and delivered bookings
+                </div>
+              </div>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <TicketIcon className="h-6 w-6" />
+              </span>
+            </div>
+          </div>
+
+          <div className={cardShell("p-5")}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium text-slate-500">Holds in view</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                  {holdsVisible.length}
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {holdsView === "expired" ? "Expired holds" : "Active holds"} plus {todayBookingCount} deliveries today
+                </div>
+              </div>
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                <ClockIcon className="h-6 w-6" />
+              </span>
+            </div>
+          </div>
+        </section>
 
         {/* Layout */}
         <div className="grid gap-6 lg:grid-cols-12">
@@ -406,26 +504,22 @@ export default async function AdminBookingsPage({
           <section className="lg:col-span-4">
             <details
               data-filters
-              style={{ backgroundColor: "#2C394A" }}
-              className="group rounded-2xl border border-slate-900/10 shadow-sm"
+              className={cardShell("group overflow-hidden")}
               open={hasFilters}
             >
-              <summary className="cursor-pointer list-none text-white">
-                <div className="flex items-center justify-between gap-4 px-6 py-4">
+              <summary className="cursor-pointer list-none">
+                <div className="flex items-center justify-between gap-4 px-6 py-5">
                   {/* LEFT: icon + title */}
                   <div className="flex min-w-0 items-center gap-3">
-                    <span
-                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-[#F97316]"
-                      aria-hidden="true"
-                    >
-                      ⚙️
+                    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F97316]/10 text-[#F97316]">
+                      <FunnelIcon className="h-6 w-6" />
                     </span>
 
                     <div className="min-w-0">
-                      <div className="text-[15px] font-semibold leading-5 text-white">Filters</div>
-
-                      {/* ✅ keep this to ONE line so the header doesn't get tall */}
-                      
+                      <div className="text-base font-semibold leading-5 text-slate-900">Filters</div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        Narrow bookings by date, status, pickup mode, and ZIP.
+                      </div>
                     </div>
                   </div>
 
@@ -436,32 +530,19 @@ export default async function AdminBookingsPage({
                       pointer-events-none select-none
                       inline-flex h-8 items-stretch overflow-hidden rounded-xl
                       shrink-0
-                      mr-2
                     "
-                    style={{
-                      marginRight: 12,
-                      background: "rgba(255,255,255,0.08)",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                    }}
+                    style={{ background: "#F8FAFC", border: "1px solid #E2E8F0" }}
                   >
-                    <span className="flex items-center px-3 text-sm font-semibold text-white">
+                    <span className="flex items-center px-3 text-sm font-semibold text-slate-700">
                       <span className="filters-expand">Expand</span>
                       <span className="filters-collapse">Collapse</span>
                     </span>
 
                     <span
-                      className="flex items-center justify-center px-4 text-white/80"
-                      style={{ borderLeft: "1px solid rgba(255,255,255,0.15)" }}
+                      className="flex items-center justify-center px-3 text-slate-500"
+                      style={{ borderLeft: "1px solid #E2E8F0" }}
                     >
-                      <svg className="filters-chevron" width="11" height="11" viewBox="0 0 12 12" fill="none">
-                        <path
-                          d="M2 4L6 8L10 4"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <ChevronDownIcon className="filters-chevron h-4 w-4" />
                     </span>
                   </span>
                 </div>
@@ -470,8 +551,7 @@ export default async function AdminBookingsPage({
 
               
               
-
-              <div className="border-t border-white/10 bg-slate-50 px-6 py-6">
+              <div className="border-t border-slate-200 bg-slate-50/70 px-6 py-6">
                 <form action="/admin/bookings" method="GET" className="grid gap-4">
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
                     <div>
@@ -562,41 +642,20 @@ export default async function AdminBookingsPage({
                   </div>
 
                   
-                  <div className="flex items-center gap-3 pt-5">
+                  <div className="flex flex-wrap items-center gap-3 pt-5">
                     <button
                       type="submit"
-                      className="
-                        h-12
-                        rounded-xl
-                        bg-[#F97316]
-                        px-6
-                        text-sm font-semibold text-white
-                        shadow-sm
-                        hover:bg-[#F97316]/90
-                        transition
-                        shadow-[0_4px_14px_rgba(249,115,22,0.35)]
-                      "
+                      className="inline-flex h-12 items-center rounded-2xl bg-[#F97316] px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600"
                     >
                       Apply filters
                     </button>
 
-                    <a
+                    <Link
                       href="/admin/bookings"
-                      className="
-                        h-12
-                        inline-flex items-center
-                        rounded-xl
-                        border border-slate-200
-                        bg-white
-                        px-6
-                        text-sm font-semibold text-slate-700
-                        shadow-sm
-                        hover:bg-slate-100
-                        transition
-                      "
+                      className="inline-flex h-12 items-center rounded-2xl border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
                     >
                       Clear
-                    </a>
+                    </Link>
                   </div>
                 </form>
               </div>
@@ -608,36 +667,32 @@ export default async function AdminBookingsPage({
             {/* Bookings card */}
             <div
               id="bookings"
-              className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              className={`scroll-mt-24 overflow-hidden ${cardShell()}`}
             >
-              
-                <div
-                  style={{ backgroundColor: "#2C394A" }}
-                  className="flex items-center justify-between px-6 py-4 text-white border-b border-slate-900/10 rounded-t-2xl"
-                >
-                  
+                <div className="border-b border-slate-200 px-6 py-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <div className="text-lg font-semibold text-white">Bookings</div>
-                    <div className="text-sm text-white/70">Showing {bookings.length} bookings</div>
+                    <div className="text-lg font-semibold text-slate-900">Bookings</div>
+                    <div className="mt-1 text-sm text-slate-500">Showing {bookings.length} bookings</div>
                   </div>
 
                   <span
                     className={pillBase(
                       isDefaultView
-                        ? "bg-white text-slate-700 ring-slate-200"
+                        ? "bg-slate-100 text-slate-700 ring-slate-200"
                         : "bg-[#F97316]/10 text-[#F97316] ring-[#F97316]/20"
                     )}
                   >
                     {isDefaultView ? "DEFAULT VIEW" : "FILTERED"}
                   </span>
-            
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-8 border-b border-slate-200 bg-white px-6 py-3 text-sm text-slate-600">
-                  <span className="font-semibold text-slate-800">Status:</span>
+                <div className="flex flex-wrap items-center gap-6 border-b border-slate-200 bg-slate-50/60 px-6 py-4 text-sm text-slate-600">
+                  <span className="font-semibold text-slate-800">Delivery timing:</span>
 
                   <span className="flex items-center gap-2">
-                    <span style={{ width: 10, height: 10, borderRadius: 9999, background: "#ef4444", display: "inline-block" }} />
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500" />
                     Overdue
                   </span>
 
@@ -652,24 +707,24 @@ export default async function AdminBookingsPage({
                   </span>
 
                   <span className="flex items-center gap-2">
-                    <span style={{ width: 10, height: 10, borderRadius: 9999, background: "#3b82f6", display: "inline-block" }} />
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
                     Future
                   </span>
                 </div>
               
-              <div className="divide-y divide-slate-100 space-y-4 px-6 py-5 overflow-visible">
-                {bookings.map((b: any) => (
+              <div className="space-y-4 px-6 py-5 overflow-visible">
+                {bookings.map((b) => (
                   <div
                     key={b.id}
                     className={[
-                      "group relative overflow-visible rounded-2xl p-5 pl-7 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md",
+                      "group relative overflow-visible rounded-[28px] border p-5 pl-7 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md",
                       bookingUrgencyTone(b) === "overdue"
-                        ? "border-rose-200 bg-rose-50/40 ring-1 ring-rose-200/60"
+                        ? "border-rose-200 bg-rose-50/50 ring-1 ring-rose-200/70"
                         : bookingUrgencyTone(b) === "today"
                           ? "border-[#F97316]/25 bg-[#F97316]/[0.06] ring-1 ring-[#F97316]/20"
-                          : bookingUrgencyTone(b) === "soon"
-                            ? "border-emerald-200/60 bg-emerald-50/30"
-                            : "border-slate-200/50 bg-white",
+                        : bookingUrgencyTone(b) === "soon"
+                            ? "border-emerald-200/70 bg-emerald-50/30 ring-1 ring-emerald-200/40"
+                            : "border-slate-200 bg-white",
                     ].join(" ")}
                   >
                     {/* LEFT quick indicator rail */}
@@ -699,7 +754,7 @@ export default async function AdminBookingsPage({
                         </div>
 
                         {/* Meta panel */}
-                        <div className="mt-3 rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
+                        <div className="mt-3 rounded-2xl bg-slate-50/80 px-4 py-3 ring-1 ring-slate-200">
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-700">
                             {/* Delivery */}
                             <div className="flex items-center gap-2">
@@ -733,7 +788,7 @@ export default async function AdminBookingsPage({
                             <span className="font-mono break-all">{b.id}</span>
 
                             {/* optional “copy” affordance (visual only, since this is server component) */}
-                            <span className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 ring-1 ring-slate-200">
+                            <span className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white text-slate-400 ring-1 ring-slate-200">
                               ⧉
                             </span>
                           </div>
@@ -746,8 +801,8 @@ export default async function AdminBookingsPage({
                           <summary
                             className="
                               list-none cursor-pointer
-                              inline-flex h-9 w-9 items-center justify-center
-                              rounded-xl border border-slate-200 bg-white
+                              inline-flex h-10 w-10 items-center justify-center
+                              rounded-2xl border border-slate-200 bg-white
                               text-slate-700 shadow-sm
                               hover:bg-slate-50
                               focus:outline-none focus:ring-4 focus:ring-[#F97316]/10
@@ -755,16 +810,16 @@ export default async function AdminBookingsPage({
                             aria-label="Booking actions"
                             title="Actions"
                           >
-                            <span className="text-xl leading-none">…</span>
+                            <EllipsisHorizontalIcon className="h-5 w-5" />
                           </summary>
 
-                          <div className="absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                            <a
+                          <div className="absolute right-0 top-12 z-20 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                            <Link
                               href={`/admin/bookings/${encodeURIComponent(b.id)}`}
                               className="block whitespace-nowrap px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                             >
                               Edit
-                            </a>
+                            </Link>
 
                             <form action="/api/admin/mark-delivered?debug=1" method="POST">
                               <input type="hidden" name="id" value={b.id} />
@@ -821,7 +876,7 @@ export default async function AdminBookingsPage({
 
                 {bookings.length === 0 ? (
                   <div className="p-6">
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-sm text-slate-600">
                       No bookings found.
                     </div>
                   </div>
@@ -832,29 +887,25 @@ export default async function AdminBookingsPage({
             {/* Holds card */}
               <div
                 id="holds"
-                className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                className={`scroll-mt-24 overflow-hidden ${cardShell()}`}
               >
-              {/* ✅ Header background matches bookings header */}
-              <div
-                style={{ backgroundColor: "#2C394A" }}
-                className="flex items-center justify-between px-6 py-4 text-white border-b border-slate-900/10 rounded-t-2xl"
-              >
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
                 <div>
-                  <div className="text-lg font-semibold text-white">Booking holds</div>
-                  <div className="text-sm text-white/70">
+                  <div className="text-lg font-semibold text-slate-900">Booking holds</div>
+                  <div className="mt-1 text-sm text-slate-500">
                     Showing {holdsVisible.length} {holdsView === "expired" ? "expired" : "active"} holds
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="inline-flex rounded-full bg-white/10 p-1 ring-1 ring-white/20">
+                  <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1">
                     <a
                       href={holdsActiveHref}
                       className={[
                         "px-3 py-1.5 text-xs font-semibold rounded-full transition",
                         holdsView === "active"
-                          ? "bg-white text-slate-900"
-                          : "text-white/80 hover:text-white",
+                          ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                          : "text-slate-500 hover:text-slate-700",
                       ].join(" ")}
                     >
                       Active
@@ -864,22 +915,22 @@ export default async function AdminBookingsPage({
                       className={[
                         "px-3 py-1.5 text-xs font-semibold rounded-full transition",
                         holdsView === "expired"
-                          ? "bg-white text-slate-900"
-                          : "text-white/80 hover:text-white",
+                          ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                          : "text-slate-500 hover:text-slate-700",
                       ].join(" ")}
                     >
                       Expired
                     </a>
                   </div>
 
-                  <span className={pillBase("bg-white/10 text-white ring-white/20")}>
+                  <span className={pillBase("bg-slate-100 text-slate-700 ring-slate-200")}>
                     {holdsVisible.length}
                   </span>
                 </div>
               </div>
 
               <div className="space-y-3 p-4 sm:p-6">
-                {holdsVisible.map((h: any) => {
+                {holdsVisible.map((h: HoldRow) => {
                   const expired = holdsView === "expired" ? true : isHoldExpired(h.expires_at);
                   const zipVal = (h.zip ?? "").toString().trim();
                   const isToday = holdsView !== "expired" && (h.delivery_date ?? "") === todayET;
@@ -887,7 +938,7 @@ export default async function AdminBookingsPage({
                   return (
                     <div
                       key={h.id}
-                      className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                      className="group relative overflow-hidden rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                     >
                       <div
                         className={`absolute left-0 top-0 h-full w-1.5 ${
@@ -940,7 +991,7 @@ export default async function AdminBookingsPage({
                           />
                           <button
                             type="submit"
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-[#F97316]/10"
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-[#F97316]/10"
                           >
                             Delete hold
                           </button>
@@ -952,9 +1003,9 @@ export default async function AdminBookingsPage({
 
                 {/* ✅ Empty state row: more vertical spacing */}
                 {holdsVisible.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10">
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10">
                     <div className="flex items-center gap-4">
-                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white ring-1 ring-slate-200">
+                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white ring-1 ring-slate-200">
                         💤
                       </span>
                       <div className="text-sm font-medium text-slate-700">

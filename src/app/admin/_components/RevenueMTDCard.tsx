@@ -1,18 +1,11 @@
 import { Card } from "./Card";
-
-function formatUSD(amount: number) {
-  return amount.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
-}
+import { formatUsd } from "@/lib/money";
 
 export function RevenueMTDCard(props: { amount: number }) {
   return (
     <Card title="Revenue MTD" subtitle="Sum of delivered jobs this month">
       <div className="text-3xl font-semibold text-slate-900">
-        {formatUSD(props.amount)}
+        {formatUsd(props.amount, { maximumFractionDigits: 0 })}
       </div>
 
       <div className="mt-2 text-xs text-slate-600">
