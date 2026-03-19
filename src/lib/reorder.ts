@@ -80,8 +80,8 @@ export function buildReorderDraft(source: ReorderSourceBookingRow): ReorderDraft
 
 export function getReorderNotice(sourceBookingShortId: string | null | undefined) {
   return sourceBookingShortId
-    ? `We prefilled this booking using your previous rental #${sourceBookingShortId}. Review and update anything you need before confirming.`
-    : "We prefilled this booking using your previous rental. Review and update anything you need before confirming.";
+    ? `Based on your previous rental #${sourceBookingShortId}, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.`
+    : "Based on your previous rental, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.";
 }
 
 export async function attachReorderReference(

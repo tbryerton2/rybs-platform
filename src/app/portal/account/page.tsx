@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalDashboardData } from "@/lib/portal/data";
+import { canReorderBooking } from "@/lib/reorder";
 import { PortalShell } from "../_components/portal-shell";
 import { PortalStatusBadge } from "../_components/portal-status-badge";
 
@@ -182,10 +183,9 @@ export default async function PortalAccountPage() {
                   </div>
                 ) : (
                   recentBookings.slice(0, 4).map((booking) => (
-                    <Link
+                    <div
                       key={booking.id}
-                      href={`/portal/rentals/${booking.id}`}
-                      className="block rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4 transition hover:border-slate-300 hover:bg-slate-50"
+                      className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -214,7 +214,23 @@ export default async function PortalAccountPage() {
                           </div>
                         </div>
                       </div>
-                    </Link>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <Link
+                          href={`/portal/rentals/${booking.id}`}
+                          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          View rental
+                        </Link>
+                        {canReorderBooking(booking.status) ? (
+                          <Link
+                            href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
+                            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                          >
+                            Book again
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
                   ))
                 )}
               </div>

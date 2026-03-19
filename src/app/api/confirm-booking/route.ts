@@ -292,8 +292,15 @@ export async function POST(req: Request) {
       console.error("customer linkage failed after confirm-booking:", customerLinkError);
     }
 
+    let reorderReferenceSkipped = false;
+
     try {
-      await attachReorderReference(supabase, insertBooking.data.id, reorderSourceBookingId);
+      const reorderReferenceResult = await attachReorderReference(
+        supabase,
+        insertBooking.data.id,
+        reorderSourceBookingId,
+      );
+      reorderReferenceSkipped = reorderReferenceResult.skipped;
     } catch (reorderReferenceError) {
       console.error("reorder reference write failed after confirm-booking:", reorderReferenceError);
     }
@@ -344,6 +351,7 @@ export async function POST(req: Request) {
       ok: true,
       bookingId: insertBooking.data.id,
       placementPersistenceSkipped,
+      reorderReferenceSkipped,
       warning: placementPersistenceSkipped
         ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
         : undefined,

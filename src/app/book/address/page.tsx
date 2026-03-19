@@ -121,7 +121,9 @@ export default function AddressStepPage() {
         setReorderNotice(getReorderNotice(existing.reorderSourceBookingShortId));
       }
 
-      if (existing.town && existing.county) {
+      if (existing.reorderSourceBookingId) {
+        setZipStatus({ state: "idle" });
+      } else if (existing.town && existing.county) {
         setZipStatus({ state: "valid", town: existing.town, county: existing.county });
       }
     } catch {
@@ -175,11 +177,7 @@ export default function AddressStepPage() {
 
         const nextZip = ((nextDraft.customerZip || nextDraft.zip || "") + "").replace(/\D/g, "").slice(0, 5);
         setZip(nextZip);
-        setZipStatus(
-          nextDraft.town && nextDraft.county
-            ? { state: "valid", town: nextDraft.town, county: nextDraft.county }
-            : { state: "idle" },
-        );
+        setZipStatus({ state: "idle" });
         setReorderError(null);
         setReorderNotice(getReorderNotice(nextDraft.reorderSourceBookingShortId));
       } catch {

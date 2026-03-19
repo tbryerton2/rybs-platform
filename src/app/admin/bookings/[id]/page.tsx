@@ -63,6 +63,8 @@ type PickupMode = "request" | "schedule" | null;
 
 type Booking = {
   id: string;
+  customer_id: string | null;
+  reordered_from_booking_id: string | null;
   created_at: string | null;
   customer_name: string | null;
   customer_email: string | null;
@@ -90,6 +92,16 @@ type Booking = {
   alternate_contact_phone: string | null;
   placement_photo_url: string | null;
   special_delivery_instructions: string | null;
+};
+
+type BookingRelationshipSummary = {
+  id: string;
+  customer_name: string | null;
+  customer_street: string | null;
+  customer_city: string | null;
+  customer_zip: string | null;
+  delivery_date: string | null;
+  created_at: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -295,8 +307,10 @@ export default async function AdminBookingDetailPage({
   const { id } = await params;
   const { saved, placementError } = await searchParams;
 
-  const bookingSelect = `
+    const bookingSelect = `
       id,
+      customer_id,
+      reordered_from_booking_id,
       created_at,
       customer_name,
       customer_email,
@@ -326,7 +340,31 @@ export default async function AdminBookingDetailPage({
       special_delivery_instructions
     `;
 
-  const baseBookingSelect = `
+    const baseBookingSelect = `
+      id,
+      customer_id,
+      reordered_from_booking_id,
+      created_at,
+      customer_name,
+      customer_email,
+      customer_phone,
+      customer_street,
+      customer_city,
+      customer_zip,
+      delivery_date,
+      pickup_mode,
+      pickup_date,
+      status,
+      total_price_cents,
+      service_county,
+      service_town,
+      delivered_at,
+      picked_up_at,
+      job_type,
+      notes
+    `;
+
+    const legacyBookingSelect = `
       id,
       created_at,
       customer_name,
@@ -364,13 +402,31 @@ export default async function AdminBookingDetailPage({
       .eq("id", id)
       .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>>();
 
-    booking = fallback.data
-      ? ({
-          ...fallback.data,
-          ...EMPTY_BOOKING_PLACEMENT_FIELDS,
-        } as Booking)
-      : null;
-    error = fallback.error;
+    if (fallback.error && isBookingSchemaError(fallback.error)) {
+      const legacyFallback = await supabaseAdmin
+        .from("bookings")
+        .select(legacyBookingSelect)
+        .eq("id", id)
+        .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS | "customer_id" | "reordered_from_booking_id">>();
+
+      booking = legacyFallback.data
+        ? ({
+            customer_id: null,
+            reordered_from_booking_id: null,
+            ...legacyFallback.data,
+            ...EMPTY_BOOKING_PLACEMENT_FIELDS,
+          } as Booking)
+        : null;
+      error = legacyFallback.error;
+    } else {
+      booking = fallback.data
+        ? ({
+            ...fallback.data,
+            ...EMPTY_BOOKING_PLACEMENT_FIELDS,
+          } as Booking)
+        : null;
+      error = fallback.error;
+    }
   }
 
   if (error) {
@@ -380,6 +436,75 @@ export default async function AdminBookingDetailPage({
   if (!booking) {
     notFound();
   }
+
+  const [
+    sourceBookingResult,
+    priorCustomerBookingsResult,
+    priorAddressBookingsResult,
+    derivedFromThisBookingResult,
+  ] = await Promise.all([
+    booking.reordered_from_booking_id
+      ? supabaseAdmin
+          .from("bookings")
+          .select("id, customer_name, customer_street, customer_city, customer_zip, delivery_date, created_at")
+          .eq("id", booking.reordered_from_booking_id)
+          .maybeSingle<BookingRelationshipSummary>()
+      : Promise.resolve({ data: null, error: null }),
+    booking.customer_id
+      ? supabaseAdmin
+          .from("bookings")
+          .select("id", { count: "exact", head: true })
+          .eq("customer_id", booking.customer_id)
+          .neq("id", booking.id)
+      : Promise.resolve({ count: null, error: null }),
+    booking.customer_street && booking.customer_city && booking.customer_zip
+      ? supabaseAdmin
+          .from("bookings")
+          .select("id", { count: "exact", head: true })
+          .eq("customer_street", booking.customer_street)
+          .eq("customer_city", booking.customer_city)
+          .eq("customer_zip", booking.customer_zip)
+          .neq("id", booking.id)
+      : Promise.resolve({ count: null, error: null }),
+    supabaseAdmin
+      .from("bookings")
+      .select("id, customer_name, delivery_date, created_at", { count: "exact" })
+      .eq("reordered_from_booking_id", booking.id)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  if (sourceBookingResult.error && !isBookingSchemaError(sourceBookingResult.error)) {
+    throw new Error(sourceBookingResult.error.message);
+  }
+  if (priorCustomerBookingsResult.error && !isBookingSchemaError(priorCustomerBookingsResult.error)) {
+    throw new Error(priorCustomerBookingsResult.error.message);
+  }
+  if (priorAddressBookingsResult.error && !isBookingSchemaError(priorAddressBookingsResult.error)) {
+    throw new Error(priorAddressBookingsResult.error.message);
+  }
+  if (derivedFromThisBookingResult.error && !isBookingSchemaError(derivedFromThisBookingResult.error)) {
+    throw new Error(derivedFromThisBookingResult.error.message);
+  }
+
+  const sourceBooking = isBookingSchemaError(sourceBookingResult.error)
+    ? null
+    : (sourceBookingResult.data as BookingRelationshipSummary | null);
+  const priorCustomerBookingCount = isBookingSchemaError(priorCustomerBookingsResult.error)
+    ? 0
+    : Number(priorCustomerBookingsResult.count ?? 0);
+  const priorAddressBookingCount = isBookingSchemaError(priorAddressBookingsResult.error)
+    ? 0
+    : Number(priorAddressBookingsResult.count ?? 0);
+  const derivedFromThisBookingCount = isBookingSchemaError(derivedFromThisBookingResult.error)
+    ? 0
+    : Number(derivedFromThisBookingResult.count ?? 0);
+  const latestDerivedBooking = isBookingSchemaError(derivedFromThisBookingResult.error)
+    ? null
+    : ((derivedFromThisBookingResult.data ?? [])[0] as
+        | Pick<BookingRelationshipSummary, "id" | "customer_name" | "delivery_date" | "created_at">
+        | undefined
+        | null);
 
   const futureDependencyDatesResult = await supabaseAdmin
     .from("bookings")
@@ -472,6 +597,11 @@ export default async function AdminBookingDetailPage({
               >
                 {booking.status.replace("_", " ")}
               </span>
+              {booking.reordered_from_booking_id ? (
+                <span className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
+                  Reorder
+                </span>
+              ) : null}
             </div>
 
             <div className="mt-2 break-all text-sm text-slate-500">
@@ -543,6 +673,80 @@ export default async function AdminBookingDetailPage({
         </div>
       </div>
 
+      {booking.reordered_from_booking_id || derivedFromThisBookingCount > 0 ? (
+        <div className="mb-6 rounded-[32px] bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200/70 sm:px-8">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
+            <div>
+              <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
+                {booking.reordered_from_booking_id ? "Reordered booking" : "Source booking"}
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-slate-900">
+                {booking.reordered_from_booking_id
+                  ? "This booking was created from a previous rental"
+                  : "This booking has been used as a reorder source"}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {booking.reordered_from_booking_id
+                  ? "Helpful repeat-booking context for office staff and dispatch."
+                  : "Later bookings may reuse the same customer setup and placement details from this rental."}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {booking.reordered_from_booking_id ? (
+                sourceBooking ? (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Source booking
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">
+                      <Link href={`/admin/bookings/${sourceBooking.id}`} className="hover:underline">
+                        Booking #{sourceBooking.id.slice(0, 8)}
+                      </Link>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {sourceBooking.customer_name || "Customer"}
+                      {sourceBooking.delivery_date ? ` • Delivered ${formatDate(sourceBooking.delivery_date)}` : ""}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {[sourceBooking.customer_street, sourceBooking.customer_city, sourceBooking.customer_zip]
+                        .filter(Boolean)
+                        .join(", ") || "Address unavailable"}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+                    Source booking unavailable.
+                  </div>
+                )
+              ) : null}
+
+              {derivedFromThisBookingCount > 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Later reorders
+                  </div>
+                  <div className="mt-2 text-sm font-semibold text-slate-900">
+                    Used to create {derivedFromThisBookingCount} later booking{derivedFromThisBookingCount === 1 ? "" : "s"}
+                  </div>
+                  {latestDerivedBooking ? (
+                    <div className="mt-2 text-sm text-slate-600">
+                      Latest:{" "}
+                      <Link href={`/admin/bookings/${latestDerivedBooking.id}`} className="font-medium text-slate-900 hover:underline">
+                        Booking #{latestDerivedBooking.id.slice(0, 8)}
+                      </Link>
+                      {latestDerivedBooking.delivery_date
+                        ? ` • Delivery ${formatDate(latestDerivedBooking.delivery_date)}`
+                        : ""}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mb-6 rounded-[32px] bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200/70 sm:px-8">
         <div className="mb-6 border-b border-slate-200 pb-4">
           <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2">
@@ -609,6 +813,21 @@ export default async function AdminBookingDetailPage({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <div className="min-w-0 space-y-6">
           <Section title="Customer" description="Contact and service location" icon={<UserIcon className="h-4 w-4" />}>
+            {priorCustomerBookingCount > 0 || priorAddressBookingCount > 0 ? (
+              <div className="mb-6 flex flex-wrap gap-2">
+                {priorCustomerBookingCount > 0 ? (
+                  <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">
+                    Repeat customer • {priorCustomerBookingCount} prior rental{priorCustomerBookingCount === 1 ? "" : "s"}
+                  </span>
+                ) : null}
+                {priorAddressBookingCount > 0 ? (
+                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+                    {priorAddressBookingCount} prior rental{priorAddressBookingCount === 1 ? "" : "s"} at this address
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Customer name" value={booking.customer_name} />
               <Field

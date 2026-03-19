@@ -21,6 +21,8 @@ type BookingDraft = {
   customerStreet?: string;
   customerCity?: string;
   customerZip?: string;
+  reorderSourceBookingId?: string;
+  reorderSourceBookingShortId?: string;
   placementPreference?: PlacementPreference | null;
   placementDetails?: string | null;
   accessIssues?: AccessIssue[];

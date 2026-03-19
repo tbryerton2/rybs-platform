@@ -29,6 +29,7 @@ type BookingRow = {
   id: string;
   created_at: string | null;
   status: string | null;
+  reordered_from_booking_id: string | null;
   customer_name: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -89,13 +90,16 @@ function cardShell(extra = "") {
 const BOOKING_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
 
-const BOOKING_LIST_SELECT = `id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, ${BOOKING_PLACEMENT_SELECT}`;
+const BOOKING_LIST_SELECT = `id, created_at, status, reordered_from_booking_id, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, ${BOOKING_PLACEMENT_SELECT}`;
+const BOOKING_LIST_SELECT_WITH_REORDER_ONLY =
+  "id, created_at, status, reordered_from_booking_id, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
 const BASE_BOOKING_LIST_SELECT =
   "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
 
 function withEmptyPlacementFields(rows: Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[]) {
   return rows.map((row) => ({
     ...row,
+    reordered_from_booking_id: null,
     ...EMPTY_BOOKING_PLACEMENT_FIELDS,
   })) as BookingRow[];
 }
@@ -106,13 +110,28 @@ async function runBookingQuery(
   const { data, error } = await build(BOOKING_LIST_SELECT);
 
   if (error && isBookingSchemaError(error)) {
-    const fallback = await build(BASE_BOOKING_LIST_SELECT);
-    if (fallback.error) {
-      console.error("ADMIN BOOKINGS ERROR:", fallback.error);
-      return [];
+    const reorderFallback = await build(BOOKING_LIST_SELECT_WITH_REORDER_ONLY);
+
+    if (!reorderFallback.error) {
+      return withEmptyPlacementFields(
+        (reorderFallback.data ?? []) as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[],
+      );
     }
 
-    return withEmptyPlacementFields((fallback.data ?? []) as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[]);
+    if (isBookingSchemaError(reorderFallback.error)) {
+      const fallback = await build(BASE_BOOKING_LIST_SELECT);
+      if (fallback.error) {
+        console.error("ADMIN BOOKINGS ERROR:", fallback.error);
+        return [];
+      }
+
+      return withEmptyPlacementFields(
+        (fallback.data ?? []) as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[],
+      );
+    }
+
+    console.error("ADMIN BOOKINGS ERROR:", reorderFallback.error);
+    return [];
   }
 
   if (error) {
@@ -871,6 +890,12 @@ export default async function AdminBookingsPage({
                           <span className={pillBase(statusPillClass(b.status))}>
                             {(b.status ?? "—").toUpperCase()}
                           </span>
+
+                          {b.reordered_from_booking_id ? (
+                            <span className={pillBase("bg-orange-50 text-orange-700 ring-orange-200")}>
+                              Reorder
+                            </span>
+                          ) : null}
                         </div>
 
                         {/* Row 2: Location */}
@@ -936,6 +961,15 @@ export default async function AdminBookingsPage({
                               ⧉
                             </span>
                           </div>
+
+                          {b.reordered_from_booking_id ? (
+                            <div className="mt-2 text-xs text-slate-500">
+                              Based on prior rental{" "}
+                              <span className="font-mono text-slate-700">
+                                {b.reordered_from_booking_id.slice(0, 8)}
+                              </span>
+                            </div>
+                          ) : null}
 
                           {placementView.summary !== "No placement details collected" ? (
                             <div className="mt-3 rounded-xl bg-white px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-200">
