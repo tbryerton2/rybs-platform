@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { isBookingSchemaError } from "@/lib/booking-schema";
 import { supabaseServer } from "@/lib/supabase/server";
 import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
+import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
+import { attachReorderReference } from "@/lib/reorder";
 
 type Payload = {
   customer_name: string;
@@ -18,6 +21,16 @@ type Payload = {
   total_price_cents?: number;
   customer_phone?: string;
   customer_email?: string;
+  placement_preference?: string | null;
+  placement_details?: string | null;
+  access_issues?: string[];
+  gate_instructions?: string | null;
+  delivery_presence?: string | null;
+  alternate_contact_name?: string | null;
+  alternate_contact_phone?: string | null;
+  placement_photo_url?: string | null;
+  special_delivery_instructions?: string | null;
+  reordered_from_booking_id?: string | null;
 };
 
 export async function POST(req: Request) {
@@ -37,8 +50,24 @@ export async function POST(req: Request) {
 
     const supabase = supabaseServer();
     const customerPhone = normalizePhone(body.customer_phone);
+    const placement = sanitizePlacementDetails({
+      placementPreference: body.placement_preference,
+      placementDetails: body.placement_details,
+      accessIssues: body.access_issues,
+      gateInstructions: body.gate_instructions,
+      deliveryPresence: body.delivery_presence,
+      alternateContactName: body.alternate_contact_name,
+      alternateContactPhone: body.alternate_contact_phone,
+      placementPhotoUrl: body.placement_photo_url,
+      specialDeliveryInstructions: body.special_delivery_instructions,
+    });
+    const placementError = validatePlacementDetails(placement);
 
-    const insertRow = {
+    if (placementError) {
+      return NextResponse.json({ ok: false, error: placementError }, { status: 400 });
+    }
+
+    const baseInsertRow = {
       customer_name: body.customer_name.trim(),
       customer_street: body.customer_street.trim(),
       customer_city: body.customer_city?.trim() ?? null,
@@ -54,15 +83,33 @@ export async function POST(req: Request) {
       total_price_cents: typeof body.total_price_cents === "number" ? body.total_price_cents : null,
       customer_phone: customerPhone,
       customer_email: body.customer_email?.trim() ?? null,
-
-      status: "draft",
+      status: "draft" as const,
     };
 
-    const { data, error } = await supabase
-      .from("bookings")
-      .insert(insertRow)
-      .select("id")
-      .single();
+    const insertWithPlacementRow = {
+      ...baseInsertRow,
+      placement_preference: placement.placementPreference,
+      placement_details: placement.placementDetails,
+      access_issues: placement.accessIssues,
+      gate_instructions: placement.gateInstructions,
+      delivery_presence: placement.deliveryPresence,
+      alternate_contact_name: placement.alternateContactName,
+      alternate_contact_phone: placement.alternateContactPhone,
+      placement_photo_url: placement.placementPhotoUrl,
+      special_delivery_instructions: placement.specialDeliveryInstructions,
+    };
+
+    let placementPersistenceSkipped = false;
+
+    let insertResult = await supabase.from("bookings").insert(insertWithPlacementRow).select("id").single();
+
+    if (insertResult.error && isBookingSchemaError(insertResult.error)) {
+      placementPersistenceSkipped = true;
+      console.warn("placement fields unavailable on bookings; retrying /api/bookings/create without placement columns");
+      insertResult = await supabase.from("bookings").insert(baseInsertRow).select("id").single();
+    }
+
+    const { data, error } = insertResult;
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
@@ -70,18 +117,31 @@ export async function POST(req: Request) {
 
     try {
       await attachCustomerToBooking(data.id, {
-        fullName: insertRow.customer_name,
-        email: insertRow.customer_email,
-        phone: insertRow.customer_phone,
-        street: insertRow.customer_street,
-        city: insertRow.customer_city,
-        zip: insertRow.customer_zip,
+        fullName: baseInsertRow.customer_name,
+        email: baseInsertRow.customer_email,
+        phone: baseInsertRow.customer_phone,
+        street: baseInsertRow.customer_street,
+        city: baseInsertRow.customer_city,
+        zip: baseInsertRow.customer_zip,
       }, supabase);
     } catch (customerLinkError) {
       console.error("customer linkage failed for /api/bookings/create:", customerLinkError);
     }
 
-    return NextResponse.json({ ok: true, booking_id: data.id });
+    try {
+      await attachReorderReference(supabase, data.id, body.reordered_from_booking_id);
+    } catch (reorderReferenceError) {
+      console.error("reorder reference write failed for /api/bookings/create:", reorderReferenceError);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      booking_id: data.id,
+      placementPersistenceSkipped,
+      warning: placementPersistenceSkipped
+        ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
+        : undefined,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

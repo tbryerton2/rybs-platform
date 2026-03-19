@@ -29,7 +29,7 @@ export default async function BookPage({
       <div className="mx-auto max-w-6xl px-6 py-12 space-y-10">
         <StepHeader
           step={1}
-          total={5}
+          total={6}
           title="Book Your Dumpster"
           subtitle="Dumpster selection"
         />

@@ -4,6 +4,15 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { getScheduleJobs, FLEET_SIZE } from "@/lib/admin/schedule";
+import {
+  getPlacementCompactSignals,
+  getPlacementDispatchSummary,
+  sanitizePlacementDetails,
+} from "@/lib/placement";
+import {
+  buildPickupPlanningModel,
+  getAvailabilityRiskClasses,
+} from "@/lib/pickup-planning";
 import ScheduleBoard from "../_components/admin/schedule/schedule-board";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -19,6 +28,15 @@ type BookingRow = {
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
   created_at: string | null;
   job_type: "delivery" | "pickup" | "swap" | null;
+  placement_preference: string | null;
+  placement_details: string | null;
+  access_issues: string[] | null;
+  gate_instructions: string | null;
+  delivery_presence: string | null;
+  alternate_contact_name: string | null;
+  alternate_contact_phone: string | null;
+  placement_photo_url: string | null;
+  special_delivery_instructions: string | null;
 };
 
 function sp(obj: SearchParams, key: string) {
@@ -99,30 +117,45 @@ function formatShortDate(iso?: string | null) {
   }).format(dateFromISO(iso));
 }
 
-function badgeClasses(status: BookingRow["status"]) {
-  switch (status) {
-    case "confirmed":
+function placementSignalClasses(tone: "amber" | "blue" | "emerald" | "slate") {
+  switch (tone) {
+    case "amber":
       return "bg-amber-50 text-amber-700 ring-amber-200";
-    case "scheduled":
+    case "blue":
       return "bg-blue-50 text-blue-700 ring-blue-200";
-    case "delivered":
+    case "emerald":
       return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-    case "picked_up":
-      return "bg-slate-100 text-slate-700 ring-slate-200";
-    case "cancelled":
-      return "bg-rose-50 text-rose-700 ring-rose-200";
     default:
       return "bg-slate-100 text-slate-700 ring-slate-200";
   }
 }
 
-function statusLabel(status: BookingRow["status"]) {
-  switch (status) {
-    case "picked_up":
-      return "Picked up";
-    default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
-  }
+function getPlacementViewModel(job: BookingRow) {
+  const placement = sanitizePlacementDetails({
+    placementPreference: job.placement_preference,
+    placementDetails: job.placement_details,
+    accessIssues: job.access_issues ?? [],
+    gateInstructions: job.gate_instructions,
+    deliveryPresence: job.delivery_presence,
+    alternateContactName: job.alternate_contact_name,
+    alternateContactPhone: job.alternate_contact_phone,
+    placementPhotoUrl: job.placement_photo_url,
+    specialDeliveryInstructions: job.special_delivery_instructions,
+  });
+
+  return {
+    summary: getPlacementDispatchSummary(placement),
+    signals: getPlacementCompactSignals(placement, 3),
+  };
+}
+
+function getPickupViewModel(job: BookingRow, futureDeliveryDates: string[]) {
+  return buildPickupPlanningModel({
+    deliveryDate: job.delivery_date,
+    pickupDate: job.pickup_date,
+    pickupMode: job.pickup_mode,
+    futureDeliveryDates,
+  });
 }
 
 function sameISO(a?: string | null, b?: string | null) {
@@ -235,6 +268,10 @@ export default async function AdminSchedulePage({
         return job.pickup_date < todayISO;
     }).length;
 
+  const futureDeliveryDates = jobs
+    .filter((job) => ["confirmed", "scheduled"].includes(job.status) && Boolean(job.delivery_date))
+    .map((job) => job.delivery_date as string);
+
   return (
     <div className="mx-auto max-w-[1700px] px-6 pt-10 pb-16">
       <div className="rounded-[32px] bg-white px-8 pb-8 pt-6 shadow-xl ring-1 ring-slate-200/70">
@@ -326,8 +363,8 @@ export default async function AdminSchedulePage({
         />
 
           <>
-            <PickupRequestPanel requests={pickupRequests} />
-            <ActiveDumpstersPanel dumpsters={activeDumpsters} />
+            <PickupRequestPanel requests={pickupRequests} futureDeliveryDates={futureDeliveryDates} />
+            <ActiveDumpstersPanel dumpsters={activeDumpsters} futureDeliveryDates={futureDeliveryDates} />
           </>
         </div>
       </div>
@@ -361,310 +398,13 @@ function StatCard({
   );
 }
 
-function groupByZip(jobs: BookingRow[]) {
-  const groups: Record<string, BookingRow[]> = {};
-
-  for (const job of jobs) {
-    const zip = job.customer_zip ?? "Unknown";
-
-    if (!groups[zip]) {
-      groups[zip] = [];
-    }
-
-    groups[zip].push(job);
-  }
-
-  return groups;
-}
-
-function DayColumn({
-  day,
+function PickupRequestPanel({
+  requests,
+  futureDeliveryDates,
 }: {
-  day: {
-    iso: string;
-    date: Date;
-    deliveries: BookingRow[];
-    pickups: BookingRow[];
-    startOnSite: number;
-    endOnSite: number;
-    remaining: number;
-    hasCapacityIssue: boolean;
-  };
+  requests: BookingRow[];
+  futureDeliveryDates: string[];
 }) {
-  return (
-    <section
-        className={`rounded-[28px] border p-4 ${
-            toISODate(day.date) === toISODate(todayETDate())
-            ? "border-[#F97316]/40 bg-[#F97316]/5 ring-2 ring-[#F97316]/20"
-            : "border-slate-200 bg-slate-50/70"
-        }`}
-    >
-      <div className="border-b border-slate-200 pb-4">
-        <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-                <div className="text-base font-semibold text-slate-900">
-                {formatDayLabel(day.date)}
-                </div>
-                <div className="mt-1 flex items-center gap-2">
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {day.deliveries.length + day.pickups.length}{" "}
-                    {day.deliveries.length + day.pickups.length === 1 ? "stop" : "stops"}
-                </span>
-                </div>
-            </div>
-
-            {toISODate(day.date) === toISODate(todayETDate()) && (
-                <span className="shrink-0 rounded-full bg-[#F97316]/10 px-2.5 py-0.5 text-xs font-semibold text-[#F97316]">
-                TODAY
-                </span>
-            )}
-        </div>
-        <div className="mt-3 rounded-2xl bg-white p-3 ring-1 ring-slate-200">
-            {day.hasCapacityIssue && (
-                <div className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                ⚠ Fleet capacity exceeded
-                </div>
-        )}
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium text-slate-600">Projected capacity</span>
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                day.hasCapacityIssue
-                  ? "bg-rose-50 text-rose-700"
-                  : day.remaining === 0
-                    ? "bg-amber-50 text-amber-700"
-                    : "bg-emerald-50 text-emerald-700"
-              }`}
-            >
-              {day.remaining} remaining
-            </span>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-slate-700">
-            <div className="rounded-xl bg-slate-50 px-3 py-2">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Start on-site</div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">{day.startOnSite}</div>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-3 py-2">
-              <div className="text-xs uppercase tracking-wide text-slate-500">End on-site</div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">{day.endOnSite}</div>
-            </div>
-          </div>
-
-          <div className="mt-3 text-xs text-slate-500">
-            +{day.deliveries.length} deliveries · -{day.pickups.length} pickups · fleet size {FLEET_SIZE}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 space-y-5">
-        <DispatchSection title="Deliveries" count={day.deliveries.length}>
-          {day.deliveries.length ? (
-                Object.entries(groupByZip(day.deliveries)).map(([zip, jobs]) => (
-                    <div key={zip} className="space-y-2 pt-2 first:pt-0 border-t first:border-t-0 border-slate-200">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                        <span>📍 {zip}</span>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                            {jobs.length} {jobs.length === 1 ? "stop" : "stops"}
-                        </span>
-                    </div>
-
-                    {jobs.map((job) => (
-                        <JobCard key={job.id} job={job} type="delivery" />
-                    ))}
-                    </div>
-                ))
-                ) : (
-                <EmptyState label="No deliveries scheduled" />
-            )}
-        </DispatchSection>
-
-        <DispatchSection title="Pickups" count={day.pickups.length}>
-            {day.pickups.length ? (
-                Object.entries(groupByZip(day.pickups)).map(([zip, jobs]) => (
-                    <div key={zip} className="space-y-2 pt-2 first:pt-0 border-t first:border-t-0 border-slate-200">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                        <span>📍 {zip}</span>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                            {jobs.length} {jobs.length === 1 ? "stop" : "stops"}
-                        </span>
-                    </div>
-
-                    {jobs.map((job) => (
-                        <JobCard key={job.id} job={job} type="pickup" />
-                    ))}
-                    </div>
-                ))
-                ) : (
-                <EmptyState label="No pickups scheduled" />
-            )}
-        </DispatchSection>
-      </div>
-    </section>
-  );
-}
-
-function DispatchSection({
-  title,
-  count,
-  children,
-}: {
-  title: string;
-  count: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h2>
-        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
-            {count} {count === 1 ? "stop" : "stops"}
-        </span>
-      </div>
-      <div className="space-y-3">{children}</div>
-    </div>
-  );
-}
-
-function needsAttention(job: BookingRow) {
-  const todayISO = toISODate(todayETDate());
-
-  if (job.status === "delivered" && job.pickup_date && job.pickup_date < todayISO) {
-    return "Overdue pickup";
-  }
-
-  if (job.status === "delivered" && job.delivery_date) {
-    const days = daysOnSite(job.delivery_date);
-    if (days >= 8) return "Aging on-site";
-  }
-
-  return null;
-}
-
-
-function JobCard({
-  job,
-  type,
-}: {
-  job: BookingRow;
-  type: "delivery" | "pickup";
-}) {
-  return (
-    <div
-        draggable
-        data-id={job.id}
-        data-type={type}
-        className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 cursor-grab active:cursor-grabbing"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-slate-900">
-            {job.customer_name || "Unnamed customer"}
-          </div>
-          <div className="mt-1 text-sm text-slate-600">
-            {[job.customer_city, job.customer_zip].filter(Boolean).join(" · ") || "Location missing"}
-          </div>
-            {needsAttention(job) && (
-                <div className="mt-2">
-                    <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
-                    {needsAttention(job)}
-                    </span>
-                </div>
-            )}
-        </div>
-
-        {job.job_type === "swap" && (
-            <span className="inline-flex shrink-0 rounded-full bg-purple-50 px-2.5 py-1 text-xs font-semibold text-purple-700 ring-1 ring-purple-200">
-                Swap
-            </span>
-        )}
-
-        <span
-          className={`inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${badgeClasses(job.status)}`}
-        >
-          {statusLabel(job.status)}
-        </span>
-      </div>
-
-    {job.job_type === "swap" ? (
-        <div className="mt-3 rounded-xl bg-purple-50 px-3 py-3 text-xs ring-1 ring-purple-200">
-            <div className="font-semibold uppercase tracking-wide text-purple-700">Swap stop</div>
-            <div className="mt-2 flex items-center justify-between gap-3 text-slate-700">
-            <div>
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Remove full</div>
-                <div className="mt-1 font-medium text-slate-900">
-                {formatShortDate(job.pickup_date)}
-                </div>
-            </div>
-
-            <div className="text-slate-400">→</div>
-
-            <div>
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">Drop empty</div>
-                <div className="mt-1 font-medium text-slate-900">
-                {formatShortDate(job.delivery_date)}
-                </div>
-            </div>
-            </div>
-        </div>
-        ) : (
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-            <div className="rounded-xl bg-slate-50 px-3 py-2">
-            <div className="uppercase tracking-wide text-slate-500">Delivery</div>
-            <div className="mt-1 font-medium text-slate-900">{formatShortDate(job.delivery_date)}</div>
-            </div>
-            <div className="rounded-xl bg-slate-50 px-3 py-2">
-            <div className="uppercase tracking-wide text-slate-500">Pickup</div>
-            <div className="mt-1 font-medium text-slate-900">
-                {job.pickup_mode === "request" && !job.pickup_date
-                ? "Requested"
-                : formatShortDate(job.pickup_date)}
-            </div>
-            </div>
-        </div>
-    )}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Link
-          href={`/admin/bookings/${encodeURIComponent(job.id)}`}
-          className="inline-flex h-9 items-center rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          View booking
-        </Link>
-
-        {type === "delivery" && (
-            <form action="/api/admin/mark-delivered" method="POST">
-                <input type="hidden" name="id" value={job.id} />
-                <input type="hidden" name="redirectTo" value="/admin/schedule" />
-
-                <button
-                type="submit"
-                className="inline-flex h-9 items-center rounded-xl bg-[#F97316] px-3 text-sm font-medium text-white hover:opacity-90"
-                >
-                Mark delivered
-                </button>
-            </form>
-            )}
-
-            {type === "pickup" && (
-            <form action="/api/admin/mark-picked-up" method="POST">
-                <input type="hidden" name="id" value={job.id} />
-                <input type="hidden" name="redirectTo" value="/admin/schedule" />
-
-                <button
-                type="submit"
-                className="inline-flex h-9 items-center rounded-xl bg-slate-900 px-3 text-sm font-medium text-white hover:opacity-90"
-                >
-                Mark picked up
-                </button>
-            </form>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PickupRequestPanel({ requests }: { requests: BookingRow[] }) {
   return (
     <aside className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-4">
         <div className="border-b border-slate-200 pb-4">
@@ -681,36 +421,86 @@ function PickupRequestPanel({ requests }: { requests: BookingRow[] }) {
 
       <div className="mt-4 space-y-3">
         {requests.length ? (
-          requests.map((job) => (
-            <div key={job.id} className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-900">
-                    {job.customer_name || "Unnamed customer"}
+          requests.map((job) => {
+            const placementView = getPlacementViewModel(job);
+            const pickupView = getPickupViewModel(
+              job,
+              futureDeliveryDates.filter((date) => date !== job.delivery_date),
+            );
+
+            return (
+              <div key={job.id} className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-slate-900">
+                      {job.customer_name || "Unnamed customer"}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {[job.customer_city, job.customer_zip].filter(Boolean).join(" · ") ||
+                        "Location missing"}
+                    </div>
                   </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    {[job.customer_city, job.customer_zip].filter(Boolean).join(" · ") ||
-                      "Location missing"}
-                  </div>
+
+                  <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                    Needs date
+                  </span>
                 </div>
 
-                <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-                  Needs date
-                </span>
-              </div>
+                <div className="mt-3 text-xs text-slate-500">
+                  Delivered {formatShortDate(job.delivery_date)}
+                </div>
 
-              <div className="mt-3 text-xs text-slate-500">
-                Delivered {formatShortDate(job.delivery_date)}
-              </div>
+                {placementView.summary !== "No placement details collected" ? (
+                  <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Placement
+                    </div>
+                    <div className="mt-1 text-sm text-slate-700">{placementView.summary}</div>
+                    {placementView.signals.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {placementView.signals.map((signal) => (
+                          <span
+                            key={signal.key}
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${placementSignalClasses(signal.tone)}`}
+                          >
+                            {signal.label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link
-                  href={`/admin/bookings/${encodeURIComponent(job.id)}`}
-                  className="inline-flex h-9 items-center rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  View booking
-                </Link>
-                <div className="flex flex-wrap gap-2">
+                <div className="mt-3 rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-900">Pickup status:</span>
+                    <span className="text-sm text-slate-700">{pickupView.pickupStatusLabel}</span>
+                    {pickupView.risk !== "none" ? (
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${getAvailabilityRiskClasses(
+                          pickupView.risk,
+                        )}`}
+                      >
+                        {pickupView.riskLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  {pickupView.expectedAvailableDate ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      Expected available again {formatShortDate(pickupView.expectedAvailableDate)}.{" "}
+                      {pickupView.expectedAvailabilityHelper}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href={`/admin/bookings/${encodeURIComponent(job.id)}`}
+                    className="inline-flex h-9 items-center rounded-xl border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    View booking
+                  </Link>
+                  <div className="flex flex-wrap gap-2">
 
                     <form action="/api/admin/schedule-pickup" method="POST">
                         <input type="hidden" name="id" value={job.id} />
@@ -752,9 +542,10 @@ function PickupRequestPanel({ requests }: { requests: BookingRow[] }) {
                     </form>
 
                 </div>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <EmptyState label="No open pickup requests" />
         )}
@@ -773,7 +564,13 @@ function daysOnSite(delivery_date?: string | null) {
   return Math.max(diff, 0);
 }
 
-function ActiveDumpstersPanel({ dumpsters }: { dumpsters: BookingRow[] }) {
+function ActiveDumpstersPanel({
+  dumpsters,
+  futureDeliveryDates,
+}: {
+  dumpsters: BookingRow[];
+  futureDeliveryDates: string[];
+}) {
   return (
     <aside className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-4">
         <div className="border-b border-slate-200 pb-4">
@@ -790,56 +587,110 @@ function ActiveDumpstersPanel({ dumpsters }: { dumpsters: BookingRow[] }) {
 
       <div className="mt-4 space-y-3">
         {dumpsters.length ? (
-          dumpsters.map((job) => (
-            <div key={job.id} className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-              <div className="text-sm font-semibold text-slate-900">
-                {job.customer_name || "Unnamed customer"}
-              </div>
+          dumpsters.map((job) => {
+            const placementView = getPlacementViewModel(job);
+            const pickupView = getPickupViewModel(
+              job,
+              futureDeliveryDates.filter((date) => date !== job.delivery_date),
+            );
 
-              <div className="mt-1 text-sm text-slate-600">
-                {[job.customer_city, job.customer_zip].filter(Boolean).join(" · ")}
-              </div>
-
-              <div className="mt-2 flex items-center justify-between text-xs">
-                <span className="text-slate-500">
-                    Delivered {formatShortDate(job.delivery_date)}
-                </span>
-
-                {(() => {
-                    const days = daysOnSite(job.delivery_date);
-
-                    const tone =
-                    days >= 8
-                        ? "bg-rose-50 text-rose-700"
-                        : days >= 6
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-emerald-50 text-emerald-700";
-
-                    return (
-                    <span className={`rounded-full px-2 py-0.5 font-semibold ${tone}`}>
-                        {days} days
-                    </span>
-                    );
-                })()}
-              </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                    <Link
-                        href={`/admin/bookings/${encodeURIComponent(job.id)}`}
-                        className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                        View
-                    </Link>
-
-                    <Link
-                        href={`/admin/bookings/${encodeURIComponent(job.id)}?action=swap`}
-                        className="inline-flex h-8 items-center rounded-lg bg-purple-50 px-3 text-xs font-medium text-purple-700 ring-1 ring-purple-200 hover:bg-purple-100"
-                    >
-                        Create swap
-                    </Link>
+            return (
+              <div key={job.id} className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                <div className="text-sm font-semibold text-slate-900">
+                  {job.customer_name || "Unnamed customer"}
                 </div>
-            </div>
-          ))
+
+                <div className="mt-1 text-sm text-slate-600">
+                  {[job.customer_city, job.customer_zip].filter(Boolean).join(" · ")}
+                </div>
+
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">
+                      Delivered {formatShortDate(job.delivery_date)}
+                  </span>
+
+                  {(() => {
+                      const days = daysOnSite(job.delivery_date);
+
+                      const tone =
+                      days >= 8
+                          ? "bg-rose-50 text-rose-700"
+                          : days >= 6
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-emerald-50 text-emerald-700";
+
+                      return (
+                      <span className={`rounded-full px-2 py-0.5 font-semibold ${tone}`}>
+                          {days} days
+                      </span>
+                      );
+                  })()}
+                </div>
+
+                {placementView.summary !== "No placement details collected" ? (
+                  <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      Placement
+                    </div>
+                    <div className="mt-1 text-sm text-slate-700">{placementView.summary}</div>
+                    {placementView.signals.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {placementView.signals.map((signal) => (
+                          <span
+                            key={signal.key}
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${placementSignalClasses(signal.tone)}`}
+                          >
+                            {signal.label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-900">Pickup status:</span>
+                    <span className="text-sm text-slate-700">{pickupView.pickupStatusLabel}</span>
+                    {pickupView.risk !== "none" ? (
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${getAvailabilityRiskClasses(
+                          pickupView.risk,
+                        )}`}
+                      >
+                        {pickupView.riskLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                  {pickupView.expectedAvailableDate ? (
+                    <div className="mt-1 text-xs text-slate-500">
+                      Expected available again {formatShortDate(pickupView.expectedAvailableDate)}.{" "}
+                      {pickupView.expectedAvailabilityHelper}
+                    </div>
+                  ) : null}
+                  {pickupView.riskMessage ? (
+                    <div className="mt-2 text-xs text-slate-600">{pickupView.riskMessage}</div>
+                  ) : null}
+                </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                      <Link
+                          href={`/admin/bookings/${encodeURIComponent(job.id)}`}
+                          className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                          View
+                      </Link>
+
+                      <Link
+                          href={`/admin/bookings/${encodeURIComponent(job.id)}?action=swap`}
+                          className="inline-flex h-8 items-center rounded-lg bg-purple-50 px-3 text-xs font-medium text-purple-700 ring-1 ring-purple-200 hover:bg-purple-100"
+                      >
+                          Create swap
+                      </Link>
+                  </div>
+              </div>
+            );
+          })
         ) : (
           <EmptyState label="No dumpsters currently on-site" />
         )}

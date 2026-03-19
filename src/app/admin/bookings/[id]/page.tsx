@@ -1,19 +1,38 @@
+/* eslint-disable @next/next/no-img-element */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { formatUsdFromCents } from "@/lib/money";
+import {
+  buildPickupPlanningModel,
+  getAvailabilityRiskClasses,
+} from "@/lib/pickup-planning";
+import {
+  ACCESS_ISSUES,
+  DELIVERY_PRESENCE_OPTIONS,
+  PLACEMENT_PREFERENCES,
+  getAccessIssueLabel,
+  getPlacementCompactSignals,
+  getDeliveryPresenceLabel,
+  getPlacementDispatchSummary,
+  getPlacementPreferenceLabel,
+  hasCollectedPlacementDetails,
+  sanitizePlacementDetails,
+} from "@/lib/placement";
 import {
   quickCancelBookingAction,
   quickMarkDeliveredAction,
   quickMarkPickedUpAction,
   updateBookingStatusAction,
   updateDeliveryDateAction,
-  updatePickupDetailsAction,
+  updatePlacementDetailsAction,
   updateNotesAction,
 } from "./actions";
+import PickupDetailsForm from "./pickup-details-form";
 
 import {
   PhoneIcon,
@@ -62,6 +81,15 @@ type Booking = {
   picked_up_at: string | null;
   job_type: string | null;
   notes: string | null;
+  placement_preference: string | null;
+  placement_details: string | null;
+  access_issues: string[] | null;
+  gate_instructions: string | null;
+  delivery_presence: string | null;
+  alternate_contact_name: string | null;
+  alternate_contact_phone: string | null;
+  placement_photo_url: string | null;
+  special_delivery_instructions: string | null;
 };
 
 function formatDate(value: string | null) {
@@ -89,6 +117,15 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function todayISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 function isFilled(value: string | null | undefined) {
@@ -146,6 +183,19 @@ function statusClasses(status: BookingStatus) {
       return "bg-rose-50 text-rose-700 ring-rose-200";
     default:
       return "bg-slate-50 text-slate-700 ring-slate-200";
+  }
+}
+
+function placementSignalClasses(tone: "amber" | "blue" | "emerald" | "slate") {
+  switch (tone) {
+    case "amber":
+      return "bg-amber-50 text-amber-700 ring-amber-200";
+    case "blue":
+      return "bg-blue-50 text-blue-700 ring-blue-200";
+    case "emerald":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+    default:
+      return "bg-slate-100 text-slate-700 ring-slate-200";
   }
 }
 
@@ -240,14 +290,43 @@ export default async function AdminBookingDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string }>;
+  searchParams: Promise<{ saved?: string; placementError?: string }>;
 }) {
   const { id } = await params;
-  const { saved } = await searchParams;
+  const { saved, placementError } = await searchParams;
 
-  const { data: booking, error } = await supabaseAdmin
-    .from("bookings")
-    .select(`
+  const bookingSelect = `
+      id,
+      created_at,
+      customer_name,
+      customer_email,
+      customer_phone,
+      customer_street,
+      customer_city,
+      customer_zip,
+      delivery_date,
+      pickup_mode,
+      pickup_date,
+      status,
+      total_price_cents,
+      service_county,
+      service_town,
+      delivered_at,
+      picked_up_at,
+      job_type,
+      notes,
+      placement_preference,
+      placement_details,
+      access_issues,
+      gate_instructions,
+      delivery_presence,
+      alternate_contact_name,
+      alternate_contact_phone,
+      placement_photo_url,
+      special_delivery_instructions
+    `;
+
+  const baseBookingSelect = `
       id,
       created_at,
       customer_name,
@@ -267,9 +346,32 @@ export default async function AdminBookingDetailPage({
       picked_up_at,
       job_type,
       notes
-    `)
+    `;
+
+  let placementSchemaAvailable = true;
+
+  let { data: booking, error } = await supabaseAdmin
+    .from("bookings")
+    .select(bookingSelect)
     .eq("id", id)
     .single<Booking>();
+
+  if (error && isBookingSchemaError(error)) {
+    placementSchemaAvailable = false;
+    const fallback = await supabaseAdmin
+      .from("bookings")
+      .select(baseBookingSelect)
+      .eq("id", id)
+      .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>>();
+
+    booking = fallback.data
+      ? ({
+          ...fallback.data,
+          ...EMPTY_BOOKING_PLACEMENT_FIELDS,
+        } as Booking)
+      : null;
+    error = fallback.error;
+  }
 
   if (error) {
     throw new Error(error.message);
@@ -279,15 +381,22 @@ export default async function AdminBookingDetailPage({
     notFound();
   }
 
+  const futureDependencyDatesResult = await supabaseAdmin
+    .from("bookings")
+    .select("id, delivery_date")
+    .in("status", ["confirmed", "scheduled"])
+    .gte("delivery_date", todayISO())
+    .neq("id", booking.id)
+    .order("delivery_date", { ascending: true })
+    .limit(50);
+
+  const futureDependencyDates = (futureDependencyDatesResult.data ?? [])
+    .map((row) => row.delivery_date)
+    .filter((value): value is string => Boolean(value));
+
   const onSite = booking.status === "delivered";
   const deliveryPending =
     booking.status === "confirmed" || booking.status === "scheduled";
-  const pickupRequested =
-    booking.status === "delivered" && booking.pickup_mode === "request";
-  const pickupScheduled =
-    booking.status === "delivered" &&
-    booking.pickup_mode === "schedule" &&
-    !!booking.pickup_date;
 
   const canMarkDelivered =
   booking.status === "confirmed" || booking.status === "scheduled";
@@ -305,13 +414,38 @@ export default async function AdminBookingDetailPage({
   const createdDone = isFilled(booking.created_at);
   const deliveryScheduledDone = isFilled(booking.delivery_date);
   const deliveredDone = isFilled(booking.delivered_at) || booking.status === "delivered" || booking.status === "picked_up";
-  const pickupRequestedDone = booking.pickup_mode === "request";
   const pickupScheduledDone = isFilled(booking.pickup_date) && booking.pickup_mode === "schedule";
   const pickedUpDone = isFilled(booking.picked_up_at) || booking.status === "picked_up";
+  const pickupPlanning = buildPickupPlanningModel({
+    deliveryDate: booking.delivery_date,
+    pickupDate: booking.pickup_date,
+    pickupMode: booking.pickup_mode,
+    futureDeliveryDates: futureDependencyDates,
+  });
+  const editablePickupDate =
+    booking.pickup_mode === "schedule" && pickupPlanning.scheduledPickupDate
+      ? pickupPlanning.scheduledPickupDate
+      : "";
   const daysOnSite =
   booking.status === "delivered"
     ? getDaysOnSite(booking.delivered_at, booking.delivery_date)
     : null;
+  const placement = sanitizePlacementDetails({
+    placementPreference: booking.placement_preference,
+    placementDetails: booking.placement_details,
+    accessIssues: booking.access_issues ?? [],
+    gateInstructions: booking.gate_instructions,
+    deliveryPresence: booking.delivery_presence,
+    alternateContactName: booking.alternate_contact_name,
+    alternateContactPhone: booking.alternate_contact_phone,
+    placementPhotoUrl: booking.placement_photo_url,
+    specialDeliveryInstructions: booking.special_delivery_instructions,
+  });
+  const placementSignals = getPlacementCompactSignals(placement, 8);
+  const placementSummary = placementSchemaAvailable
+    ? getPlacementDispatchSummary(placement)
+    : "Placement fields unavailable in this environment";
+  const hasPlacementData = placementSchemaAvailable && hasCollectedPlacementDetails(placement);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
@@ -348,15 +482,13 @@ export default async function AdminBookingDetailPage({
               <Field label="Delivery date" value={formatDate(booking.delivery_date)} />
               <Field label="Created" value={formatDateTime(booking.created_at)} />
               <Field
-                label="Pickup"
+                label="Pickup status"
                 value={
-                  booking.pickup_mode === "schedule"
-                    ? booking.pickup_date
-                      ? formatDate(booking.pickup_date)
+                  pickupPlanning.pickupStatus === "scheduled"
+                    ? pickupPlanning.scheduledPickupDate
+                      ? `Scheduled for ${formatDate(pickupPlanning.scheduledPickupDate)}`
                       : "Scheduled"
-                    : booking.pickup_mode === "request"
-                    ? "Pickup requested"
-                    : "—"
+                    : pickupPlanning.pickupStatusLabel
                 }
               />
             </div>
@@ -624,60 +756,311 @@ export default async function AdminBookingDetailPage({
                 ) : null}
 
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
-                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Current pickup state
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Pickup status
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-slate-900">
+                        {pickupPlanning.pickupStatusLabel}
+                      </div>
+                      {pickupPlanning.pickupStatus === "scheduled" && pickupPlanning.scheduledPickupDate ? (
+                        <div className="mt-1 text-sm text-slate-600">
+                          Confirmed pickup date: {formatDate(pickupPlanning.scheduledPickupDate)}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {pickupPlanning.expectedAvailableDate ? (
+                      <div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          Expected available again
+                        </div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {formatDate(pickupPlanning.expectedAvailableDate)}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {pickupPlanning.expectedAvailabilityHelper}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="mt-2 text-sm font-medium text-slate-900">
-                    {booking.pickup_mode === "request" && "Pickup requested"}
-                    {booking.pickup_mode === "schedule" &&
-                      (booking.pickup_date
-                        ? `Scheduled for ${formatDate(booking.pickup_date)}`
-                        : "Scheduled")}
-                    {!booking.pickup_mode && "No pickup details set"}
-                  </div>
+
+                  {pickupPlanning.risk !== "none" ? (
+                    <div className="mt-4 rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${getAvailabilityRiskClasses(
+                            pickupPlanning.risk,
+                          )}`}
+                        >
+                          {pickupPlanning.riskLabel}
+                        </span>
+                        {pickupPlanning.nextDeliveryDate ? (
+                          <span className="text-xs font-medium text-slate-500">
+                            Next upcoming delivery: {formatDate(pickupPlanning.nextDeliveryDate)}
+                          </span>
+                        ) : null}
+                      </div>
+                      {pickupPlanning.riskMessage ? (
+                        <div className="mt-2 text-sm text-slate-700">{pickupPlanning.riskMessage}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
-                <form action={updatePickupDetailsAction} className="space-y-4">
-                  <input type="hidden" name="id" value={booking.id} />
+                <PickupDetailsForm
+                  bookingId={booking.id}
+                  initialPickupMode={booking.pickup_mode === "schedule" ? "schedule" : "request"}
+                  initialPickupDate={editablePickupDate}
+                />
+              </div>
+            </Section>
+          </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-sm font-medium text-slate-700">
-                        Pickup mode
-                      </span>
-                      <select
-                        name="pickup_mode"
-                        defaultValue={booking.pickup_mode ?? "request"}
-                        className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
-                      >
-                        <option value="request">Request</option>
-                        <option value="schedule">Scheduled</option>
-                      </select>
-                    </label>
-
-                    <label className="block">
-                        <span className="mb-1.5 block text-sm font-medium text-slate-700">
-                          Pickup date
-                        </span>
-
-                        <div className="h-12 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-                          <input
-                            type="date"
-                            name="pickup_date"
-                            defaultValue={booking.pickup_date ?? ""}
-                            className="h-full w-full border-0 bg-transparent px-4 text-sm text-slate-900 outline-none"
-                          />
-                        </div>
-                      </label>
+          <div id="placement-access">
+            <Section
+              title="Placement & access"
+              description="Structured delivery instructions for office staff, dispatch, and drivers."
+              icon={<TruckIcon className="h-4 w-4" />}
+            >
+              <div className="space-y-5">
+                {!placementSchemaAvailable ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    Placement & access columns are not available in this database yet, so bookings created here cannot persist or display structured placement details until the latest placement migration is applied and the Supabase schema cache is refreshed.
                   </div>
+                ) : null}
 
-                  <button
-                    type="submit"
-                    className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    Save pickup details
-                  </button>
-                </form>
+                {saved === "placement" ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+                    Placement details saved.
+                  </div>
+                ) : null}
+
+                {placementError ? (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                    {placementError}
+                  </div>
+                ) : null}
+
+                <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Dispatch summary
+                  </div>
+                  <div className="mt-2 text-sm font-medium text-slate-900">{placementSummary}</div>
+                </div>
+
+                {placementSignals.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {placementSignals.map((signal) => (
+                      <span
+                        key={signal.key}
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${placementSignalClasses(signal.tone)}`}
+                      >
+                        {signal.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!hasPlacementData && placementSchemaAvailable ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
+                    No placement details collected.
+                  </div>
+                ) : (
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field label="Placement preference" value={getPlacementPreferenceLabel(placement.placementPreference)} />
+                    <Field label="Exact placement details" value={placement.placementDetails || "Not provided"} />
+                    <Field
+                      label="Access issues"
+                      value={
+                        placement.accessIssues.length
+                          ? placement.accessIssues.map(getAccessIssueLabel).join(", ")
+                          : "No access issues noted"
+                      }
+                    />
+                    <Field label="Gate / access instructions" value={placement.gateInstructions || "None provided"} />
+                    <Field label="Delivery presence" value={getDeliveryPresenceLabel(placement.deliveryPresence)} />
+                    <Field
+                      label="Alternate contact"
+                      value={
+                        [placement.alternateContactName, placement.alternateContactPhone].filter(Boolean).join(" • ") ||
+                        (booking.customer_phone ? `Use customer phone • ${booking.customer_phone}` : "Use customer phone")
+                      }
+                    />
+                    <Field
+                      label="Special instructions"
+                      value={placement.specialDeliveryInstructions || "None provided"}
+                    />
+                  </div>
+                )}
+
+                {placement.placementPhotoUrl ? (
+                  <div className="space-y-3">
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Delivery photo</div>
+                    <a href={placement.placementPhotoUrl} target="_blank" rel="noreferrer">
+                      <img
+                        src={placement.placementPhotoUrl}
+                        alt="Placement area"
+                        className="h-64 w-full rounded-2xl border border-slate-200 object-cover"
+                      />
+                    </a>
+                  </div>
+                ) : null}
+
+                {placementSchemaAvailable ? (
+                  <details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white" open={saved === "placement" || Boolean(placementError)}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">Edit placement details</div>
+                        <div className="mt-1 text-sm text-slate-500">
+                          Correct structured placement and access details without using Admin notes.
+                        </div>
+                      </div>
+                      <span className="text-slate-400 transition group-open:rotate-180">⌄</span>
+                    </summary>
+
+                    <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
+                      <form action={updatePlacementDetailsAction} className="space-y-4">
+                        <input type="hidden" name="id" value={booking.id} />
+                        <input type="hidden" name="placement_photo_url" value={placement.placementPhotoUrl ?? ""} />
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Placement preference
+                            </span>
+                            <select
+                              name="placement_preference"
+                              defaultValue={placement.placementPreference ?? ""}
+                              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                            >
+                              <option value="">Choose placement</option>
+                              {PLACEMENT_PREFERENCES.map((option) => (
+                                <option key={option} value={option}>
+                                  {getPlacementPreferenceLabel(option)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Delivery presence
+                            </span>
+                            <select
+                              name="delivery_presence"
+                              defaultValue={placement.deliveryPresence ?? ""}
+                              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                            >
+                              <option value="">Choose presence</option>
+                              {DELIVERY_PRESENCE_OPTIONS.map((option) => (
+                                <option key={option} value={option}>
+                                  {getDeliveryPresenceLabel(option)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <label className="block">
+                          <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Exact placement details
+                          </span>
+                          <textarea
+                            name="placement_details"
+                            defaultValue={placement.placementDetails ?? ""}
+                            rows={3}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                          />
+                        </label>
+
+                        <div className="space-y-3 rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200">
+                          <div>
+                            <div className="text-sm font-medium text-slate-700">Access issues</div>
+                            <div className="mt-1 text-xs text-slate-500">
+                              Check anything the driver should know before arriving.
+                            </div>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {ACCESS_ISSUES.map((issue) => (
+                              <label key={issue} className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  name="access_issues"
+                                  value={issue}
+                                  defaultChecked={placement.accessIssues.includes(issue)}
+                                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]/20"
+                                />
+                                <span>{getAccessIssueLabel(issue)}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Gate / access instructions
+                            </span>
+                            <textarea
+                              name="gate_instructions"
+                              defaultValue={placement.gateInstructions ?? ""}
+                              rows={3}
+                              placeholder="Required if gated property is selected."
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Special instructions
+                            </span>
+                            <textarea
+                              name="special_delivery_instructions"
+                              defaultValue={placement.specialDeliveryInstructions ?? ""}
+                              rows={3}
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                            />
+                          </label>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Alternate contact name
+                            </span>
+                            <input
+                              type="text"
+                              name="alternate_contact_name"
+                              defaultValue={placement.alternateContactName ?? ""}
+                              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Alternate contact phone
+                            </span>
+                            <input
+                              type="tel"
+                              name="alternate_contact_phone"
+                              defaultValue={placement.alternateContactPhone ?? ""}
+                              className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                            />
+                          </label>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                        >
+                          Save placement details
+                        </button>
+                      </form>
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </Section>
           </div>
@@ -718,9 +1101,23 @@ export default async function AdminBookingDetailPage({
                   Dispatch signals
                 </div>
                 <div className="mt-2 space-y-2 text-sm text-slate-700">
-                  <div>{pickupRequested ? "• Pickup requested and needs scheduling" : "• No unscheduled pickup request"}</div>
-                  <div>{pickupScheduled ? "• Pickup date is set" : "• No pickup date scheduled"}</div>
+                  <div>
+                    •{" "}
+                    {pickupPlanning.pickupStatus === "scheduled"
+                      ? `Confirmed pickup date: ${formatDate(pickupPlanning.scheduledPickupDate)}`
+                      : pickupPlanning.pickupStatus === "requested"
+                        ? "Pickup requested but not yet scheduled"
+                        : "Awaiting customer pickup request"}
+                  </div>
+                  <div>
+                    •{" "}
+                    {pickupPlanning.expectedAvailableDate
+                      ? `Expected available again ${formatDate(pickupPlanning.expectedAvailableDate)}`
+                      : "No forecasted availability date"}
+                  </div>
                   <div>{onSite ? "• Dumpster currently with customer" : "• Dumpster not currently on site"}</div>
+                  <div>• {placementSummary}</div>
+                  {pickupPlanning.riskMessage ? <div>• {pickupPlanning.riskMessage}</div> : null}
                 </div>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
@@ -794,7 +1191,7 @@ export default async function AdminBookingDetailPage({
                     name="notes"
                     defaultValue={booking.notes ?? ""}
                     rows={6}
-                    placeholder="Customer instructions, driveway notes, gate code, placement details, call before arrival, internal follow-up..."
+                    placeholder="Internal ops notes, follow-up items, customer context, or dispatch coordination notes..."
                     className="w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
                   />
                 </label>

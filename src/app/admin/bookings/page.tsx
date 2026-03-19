@@ -11,6 +11,17 @@ import {
   TicketIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
+import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
+import {
+  getPlacementCompactSignals,
+  getPlacementDispatchSummary,
+  getPlacementPreferenceLabel,
+  sanitizePlacementDetails,
+} from "@/lib/placement";
+import {
+  buildPickupPlanningModel,
+  getAvailabilityRiskClasses,
+} from "@/lib/pickup-planning";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -24,6 +35,15 @@ type BookingRow = {
   delivery_date: string | null;
   pickup_mode: string | null;
   pickup_date: string | null;
+  placement_preference: string | null;
+  placement_details: string | null;
+  access_issues: string[] | null;
+  gate_instructions: string | null;
+  delivery_presence: string | null;
+  alternate_contact_name: string | null;
+  alternate_contact_phone: string | null;
+  placement_photo_url: string | null;
+  special_delivery_instructions: string | null;
 };
 
 type HoldRow = {
@@ -66,6 +86,86 @@ function cardShell(extra = "") {
   return `rounded-[28px] border border-slate-200/80 bg-white shadow-sm ${extra}`;
 }
 
+const BOOKING_PLACEMENT_SELECT =
+  "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
+
+const BOOKING_LIST_SELECT = `id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, ${BOOKING_PLACEMENT_SELECT}`;
+const BASE_BOOKING_LIST_SELECT =
+  "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
+
+function withEmptyPlacementFields(rows: Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[]) {
+  return rows.map((row) => ({
+    ...row,
+    ...EMPTY_BOOKING_PLACEMENT_FIELDS,
+  })) as BookingRow[];
+}
+
+async function runBookingQuery(
+  build: (selectClause: string) => Promise<{ data: BookingRow[] | null; error: { message?: string | null } | null }>,
+) {
+  const { data, error } = await build(BOOKING_LIST_SELECT);
+
+  if (error && isBookingSchemaError(error)) {
+    const fallback = await build(BASE_BOOKING_LIST_SELECT);
+    if (fallback.error) {
+      console.error("ADMIN BOOKINGS ERROR:", fallback.error);
+      return [];
+    }
+
+    return withEmptyPlacementFields((fallback.data ?? []) as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[]);
+  }
+
+  if (error) {
+    console.error("ADMIN BOOKINGS ERROR:", error);
+    return [];
+  }
+
+  return (data ?? []) as BookingRow[];
+}
+
+function placementSignalClasses(tone: "amber" | "blue" | "emerald" | "slate") {
+  switch (tone) {
+    case "amber":
+      return "bg-amber-50 text-amber-700 ring-amber-200";
+    case "blue":
+      return "bg-blue-50 text-blue-700 ring-blue-200";
+    case "emerald":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+    default:
+      return "bg-slate-100 text-slate-700 ring-slate-200";
+  }
+}
+
+function getPlacementViewModel(row: BookingRow) {
+  const placement = sanitizePlacementDetails({
+    placementPreference: row.placement_preference,
+    placementDetails: row.placement_details,
+    accessIssues: row.access_issues ?? [],
+    gateInstructions: row.gate_instructions,
+    deliveryPresence: row.delivery_presence,
+    alternateContactName: row.alternate_contact_name,
+    alternateContactPhone: row.alternate_contact_phone,
+    placementPhotoUrl: row.placement_photo_url,
+    specialDeliveryInstructions: row.special_delivery_instructions,
+  });
+
+  const summary = getPlacementDispatchSummary(placement);
+  const signals = getPlacementCompactSignals(placement, 4);
+  const preferenceLabel =
+    placement.placementPreference ? getPlacementPreferenceLabel(placement.placementPreference) : null;
+
+  return { summary, signals, preferenceLabel };
+}
+
+function getPickupViewModel(row: BookingRow, futureDeliveryDates: string[]) {
+  return buildPickupPlanningModel({
+    deliveryDate: row.delivery_date,
+    pickupDate: row.pickup_date,
+    pickupMode: row.pickup_mode,
+    futureDeliveryDates,
+  });
+}
+
 function applyWhenFilter<
   T extends {
     lt: (column: string, value: string) => T;
@@ -98,6 +198,16 @@ function statusPillClass(status: string | null | undefined) {
 function parseISODateOnly(iso: string) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d); // local midnight
+}
+
+function formatDateLabel(iso?: string | null) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(y, m - 1, d));
 }
 
 function startOfDayLocal(d: Date) {
@@ -141,28 +251,23 @@ async function getBookings(filters: {
 }) {
   const today = todayISO();
 
-  let q = supabaseAdmin
-    .from("bookings")
-    .select(
-      "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date"
-    )
-    .order("created_at", { ascending: false })
-    .limit(200);
+  return runBookingQuery((selectClause) => {
+    let q = supabaseAdmin
+      .from("bookings")
+      .select(selectClause)
+      .order("created_at", { ascending: false })
+      .limit(200);
 
-  q = applyWhenFilter(q, filters.when, today);
+    q = applyWhenFilter(q, filters.when, today);
 
-  if (filters.status && filters.status !== "all") q = q.eq("status", filters.status);
-  if (filters.pickup && filters.pickup !== "all") q = q.eq("pickup_mode", filters.pickup);
-  if (filters.zip) q = q.eq("customer_zip", filters.zip);
-  if (filters.dateFrom) q = q.gte("delivery_date", filters.dateFrom);
-  if (filters.dateTo) q = q.lte("delivery_date", filters.dateTo);
+    if (filters.status && filters.status !== "all") q = q.eq("status", filters.status);
+    if (filters.pickup && filters.pickup !== "all") q = q.eq("pickup_mode", filters.pickup);
+    if (filters.zip) q = q.eq("customer_zip", filters.zip);
+    if (filters.dateFrom) q = q.gte("delivery_date", filters.dateFrom);
+    if (filters.dateTo) q = q.lte("delivery_date", filters.dateTo);
 
-  const { data, error } = await q;
-  if (error) {
-    console.error("ADMIN BOOKINGS ERROR:", error);
-    return [];
-  }
-  return (data ?? []) as BookingRow[];
+    return q;
+  });
 }
 
 function bookingIndicatorColor(b: BookingRow) {
@@ -354,14 +459,14 @@ export default async function AdminBookingsPage({
       const now = new Date();
 
       // 1️⃣ Currently active (delivery <= today) and in active-ish statuses
-      const { data: active } = await supabaseAdmin
-        .from("bookings")
-        .select(
-          "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date"
-        )
-        .lte("delivery_date", today)
-        .in("status", ["confirmed", "paid", "scheduled", "delivered"])
-        .order("delivery_date", { ascending: true });
+      const active = await runBookingQuery((selectClause) =>
+        supabaseAdmin
+          .from("bookings")
+          .select(selectClause)
+          .lte("delivery_date", today)
+          .in("status", ["confirmed", "paid", "scheduled", "delivered"])
+          .order("delivery_date", { ascending: true }),
+      );
 
       // 2️⃣ This week (Sun-Sat)
       const start = new Date(now);
@@ -372,34 +477,44 @@ export default async function AdminBookingsPage({
       const startStr = start.toISOString().slice(0, 10);
       const endStr = end.toISOString().slice(0, 10);
 
-      const { data: week } = await supabaseAdmin
-        .from("bookings")
-        .select(
-          "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date"
-        )
-        .gte("delivery_date", startStr)
-        .lte("delivery_date", endStr)
-        .order("delivery_date", { ascending: true });
+      const week = await runBookingQuery((selectClause) =>
+        supabaseAdmin
+          .from("bookings")
+          .select(selectClause)
+          .gte("delivery_date", startStr)
+          .lte("delivery_date", endStr)
+          .order("delivery_date", { ascending: true }),
+      );
 
-      const combinedRaw = [...(active ?? []), ...(week ?? [])] as BookingRow[];
+      const combinedRaw = [...active, ...week] as BookingRow[];
       const combined = Array.from(new Map(combinedRaw.map((b) => [b.id, b])).values());
 
       if (combined.length > 0) return combined;
 
       // 3️⃣ Fallback: next 3 upcoming
-      const { data: upcoming } = await supabaseAdmin
-        .from("bookings")
-        .select(
-          "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date"
-        )
-        .gt("delivery_date", today)
-        .order("delivery_date", { ascending: true })
-        .limit(3);
-
-      return (upcoming ?? []) as BookingRow[];
+      return runBookingQuery((selectClause) =>
+        supabaseAdmin
+          .from("bookings")
+          .select(selectClause)
+          .gt("delivery_date", today)
+          .order("delivery_date", { ascending: true })
+          .limit(3),
+      );
     })(),
     holdsView === "expired" ? getExpiredHolds() : getActiveHolds(),
   ]);
+
+  const futureInventoryDeliveriesResult = await supabaseAdmin
+    .from("bookings")
+    .select("id, delivery_date")
+    .in("status", ["confirmed", "scheduled"])
+    .gte("delivery_date", today)
+    .order("delivery_date", { ascending: true })
+    .limit(200);
+
+  const futureInventoryDeliveries = (futureInventoryDeliveriesResult.data ?? [])
+    .map((row) => ({ id: row.id as string, deliveryDate: row.delivery_date as string | null }))
+    .filter((row) => Boolean(row.deliveryDate));
 
   const holdsVisible = holds ?? [];
   const activeBookingCount = bookings.filter((b) =>
@@ -736,6 +851,17 @@ export default async function AdminBookingsPage({
                     <div className="flex items-start justify-between gap-4">
                       {/* LEFT */}
                       <div className="min-w-0 flex-1 relative z-0">
+                        {(() => {
+                          const placementView = getPlacementViewModel(b);
+                          const pickupView = getPickupViewModel(
+                            b,
+                            futureInventoryDeliveries
+                              .filter((row) => row.id !== b.id)
+                              .map((row) => row.deliveryDate as string),
+                          );
+
+                          return (
+                            <>
                         {/* Row 1: Title + pills */}
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-base font-semibold text-slate-900">
@@ -752,6 +878,24 @@ export default async function AdminBookingsPage({
                           {b.customer_city ?? "—"}, NY{" "}
                           <span className="font-medium text-slate-900">{b.customer_zip ?? "—"}</span>
                         </div>
+
+                        {placementView.preferenceLabel || placementView.signals.length ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {placementView.preferenceLabel ? (
+                              <span className={pillBase("bg-slate-100 text-slate-700 ring-slate-200")}>
+                                {placementView.preferenceLabel}
+                              </span>
+                            ) : null}
+                            {placementView.signals.map((signal) => (
+                              <span
+                                key={signal.key}
+                                className={pillBase(placementSignalClasses(signal.tone))}
+                              >
+                                {signal.label}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
 
                         {/* Meta panel */}
                         <div className="mt-3 rounded-2xl bg-slate-50/80 px-4 py-3 ring-1 ring-slate-200">
@@ -775,9 +919,9 @@ export default async function AdminBookingsPage({
                             <div className="flex items-center gap-2">
                               <span className="text-slate-500">Pickup:</span>
                               <span className="font-semibold text-slate-900">
-                                {b.pickup_mode === "scheduled"
-                                  ? `Scheduled: ${b.pickup_date ?? "—"}`
-                                  : "Request"}
+                                {pickupView.pickupStatus === "scheduled"
+                                  ? `Scheduled: ${pickupView.scheduledPickupDate ?? "—"}`
+                                  : pickupView.pickupStatusLabel}
                               </span>
                             </div>
                           </div>
@@ -792,7 +936,42 @@ export default async function AdminBookingsPage({
                               ⧉
                             </span>
                           </div>
+
+                          {placementView.summary !== "No placement details collected" ? (
+                            <div className="mt-3 rounded-xl bg-white px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-200">
+                              <span className="font-semibold text-slate-900">Dispatch:</span>{" "}
+                              {placementView.summary}
+                            </div>
+                          ) : null}
+
+                          {(pickupView.expectedAvailableDate || pickupView.risk !== "none") ? (
+                            <div className="mt-3 rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200">
+                              {pickupView.expectedAvailableDate ? (
+                                <div className="text-sm text-slate-600">
+                                  <span className="font-semibold text-slate-900">Expected available:</span>{" "}
+                                  {formatDateLabel(pickupView.expectedAvailableDate)}
+                                </div>
+                              ) : null}
+                              {pickupView.risk !== "none" ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={pillBase(
+                                      getAvailabilityRiskClasses(pickupView.risk),
+                                    )}
+                                  >
+                                    {pickupView.riskLabel}
+                                  </span>
+                                  {pickupView.riskMessage ? (
+                                    <span className="text-xs text-slate-500">{pickupView.riskMessage}</span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* RIGHT actions */}

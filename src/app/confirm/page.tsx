@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { getDefaultRentalDays } from "@/lib/config";
+import { getReorderNotice } from "@/lib/reorder";
 
 type BookingDraft = {
   zip?: string;
@@ -16,6 +17,15 @@ type BookingDraft = {
   customerStreet?: string;
   customerCity?: string;
   customerZip?: string;
+  placementPreference?: string | null;
+  placementDetails?: string | null;
+  accessIssues?: string[];
+  gateInstructions?: string | null;
+  deliveryPresence?: string | null;
+  alternateContactName?: string | null;
+  alternateContactPhone?: string | null;
+  placementPhotoUrl?: string | null;
+  specialDeliveryInstructions?: string | null;
 
   deliveryDate?: string;
 
@@ -30,6 +40,8 @@ type BookingDraft = {
   maxPickupDate?: string; // YYYY-MM-DD
   maxDaysAllowed?: number; // integer
   limitedAck?: boolean; // checkbox on date page
+  reorderSourceBookingId?: string;
+  reorderSourceBookingShortId?: string;
 };
 
 function isYMD(s: string) {
@@ -448,10 +460,10 @@ export default function ConfirmPage() {
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 3 of 4
+                  Step 5 of 6
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-3/4 rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-[83.333%] rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>
@@ -461,6 +473,13 @@ export default function ConfirmPage() {
           </div>
 
           <section className="mt-8 space-y-6 mb-2">
+            {draft.reorderSourceBookingId ? (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm leading-6 text-slate-700">
+                <div className="font-semibold text-slate-900">New booking based on a previous rental</div>
+                <div className="mt-1">{getReorderNotice(draft.reorderSourceBookingShortId)}</div>
+              </div>
+            ) : null}
+
             {draft.holdExpiresAt && secondsLeft != null && !holdExpired && (
               <div className="rounded-xl border border-[#FDBA74] bg-[#FFF7ED] px-4 py-3 text-sm text-slate-900">
                 <div className="font-semibold">Your delivery date is being held. Time left: {formatMMSS(secondsLeft)}</div>

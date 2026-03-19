@@ -6,6 +6,7 @@ import {
   getCustomerVisibleStatusLabel,
   getCustomerVisibleStatusTone,
 } from "@/lib/rental-action-requests";
+import { canReorderBooking } from "@/lib/reorder";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalRental, getPortalRequestSummary } from "@/lib/portal/data";
 import { formatUsdFromCents } from "@/lib/money";
@@ -138,6 +139,7 @@ export default async function PortalRentalDetailPage({
 
   const { booking, requests, pickupEligibility, extensionEligibility, issueReportEligibility } = rental;
   const submissionMessage = getSubmissionMessage(resolvedSearchParams);
+  const reorderEligible = canReorderBooking(booking.status);
 
   return (
     <PortalShell pathname={`/portal/rentals/${booking.id}`}>
@@ -301,6 +303,20 @@ export default async function PortalRentalDetailPage({
                     </div>
                   )}
                 </ActionCard>
+
+                {reorderEligible ? (
+                  <ActionCard
+                    title="Book this setup again"
+                    description="Start a new booking using this rental as your starting point. You can review and update everything before confirming."
+                  >
+                    <Link
+                      href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
+                      className="inline-flex items-center justify-center rounded-2xl bg-[#F97316] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#EA580C]"
+                    >
+                      Book this setup again
+                    </Link>
+                  </ActionCard>
+                ) : null}
               </div>
             </div>
 

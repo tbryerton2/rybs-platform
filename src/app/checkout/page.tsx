@@ -4,6 +4,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatUsdFromCents } from "@/lib/money";
+import { getReorderNotice } from "@/lib/reorder";
+import {
+  getAccessIssueLabel,
+  getDeliveryPresenceLabel,
+  getPlacementPreferenceLabel,
+  sanitizePlacementDetails,
+  type AccessIssue,
+  type DeliveryPresence,
+  type PlacementPreference,
+} from "@/lib/placement";
 
 type BookingDraft = {
   zip?: string;
@@ -15,6 +25,15 @@ type BookingDraft = {
   customerStreet?: string;
   customerCity?: string;
   customerZip?: string;
+  placementPreference?: PlacementPreference | null;
+  placementDetails?: string | null;
+  accessIssues?: AccessIssue[];
+  gateInstructions?: string | null;
+  deliveryPresence?: DeliveryPresence | null;
+  alternateContactName?: string | null;
+  alternateContactPhone?: string | null;
+  placementPhotoUrl?: string | null;
+  specialDeliveryInstructions?: string | null;
 
   deliveryDate?: string;
 
@@ -26,6 +45,8 @@ type BookingDraft = {
 
   pickupMode?: "unspecified" | "date";
   pickupDate?: string; // YYYY-MM-DD (optional)
+  reorderSourceBookingId?: string;
+  reorderSourceBookingShortId?: string;
 };
 
 function isYMD(s: string) {
@@ -120,6 +141,22 @@ export default function CheckoutPage() {
     return "Schedule later (from confirmation link)";
   }, [draft.pickupMode, draft.pickupDate]);
 
+  const placementDetails = useMemo(
+    () =>
+      sanitizePlacementDetails({
+        placementPreference: draft.placementPreference ?? null,
+        placementDetails: draft.placementDetails ?? null,
+        accessIssues: draft.accessIssues ?? [],
+        gateInstructions: draft.gateInstructions ?? null,
+        deliveryPresence: draft.deliveryPresence ?? null,
+        alternateContactName: draft.alternateContactName ?? null,
+        alternateContactPhone: draft.alternateContactPhone ?? null,
+        placementPhotoUrl: draft.placementPhotoUrl ?? null,
+        specialDeliveryInstructions: draft.specialDeliveryInstructions ?? null,
+      }),
+    [draft],
+  );
+
   const holdExpiresAtMs = useMemo(() => {
     const iso = (draft.holdExpiresAt || "").trim();
     if (!iso) return null;
@@ -198,6 +235,27 @@ export default function CheckoutPage() {
         return;
       }
 
+      if (confirmJson?.placementPersistenceSkipped) {
+        try {
+          sessionStorage.setItem(
+            "tcm.last-booking-warning",
+            JSON.stringify({
+              bookingId: confirmJson.bookingId || draft.holdId,
+              type: "placement-persistence-skipped",
+              message: confirmJson.warning,
+            }),
+          );
+        } catch {
+          // ignore
+        }
+      } else {
+        try {
+          sessionStorage.removeItem("tcm.last-booking-warning");
+        } catch {
+          // ignore
+        }
+      }
+
       // 🧹 Clear draft now that booking is confirmed
       try {
         sessionStorage.removeItem("tcm.booking");
@@ -233,7 +291,7 @@ export default function CheckoutPage() {
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 4 of 4
+                  Step 6 of 6
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
                   <div className="h-2 w-full rounded-full bg-[#F97316]" />
@@ -280,7 +338,16 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-4">
+            <div className="mt-4 grid gap-4">
+                {draft.reorderSourceBookingId ? (
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm leading-6 text-slate-700">
+                    <div className="font-semibold text-slate-900">New booking based on a previous rental</div>
+                    <div className="mt-1">
+                      {getReorderNotice(draft.reorderSourceBookingShortId)}
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* 1) Contact */}
                 {/* Contact */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -318,6 +385,74 @@ export default function CheckoutPage() {
                     <br />
                     {(draft.customerCity || "").trim() || "—"}
                     {draft.customerZip ? `, NY ${draft.customerZip}` : ", NY"}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-slate-900">Placement & access</div>
+                  <div className="mt-2 space-y-2 text-sm text-slate-700">
+                    <div>
+                      <span className="text-slate-500">Placement:</span>{" "}
+                      <span className="font-medium text-slate-900">
+                        {getPlacementPreferenceLabel(placementDetails.placementPreference)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Drop area:</span>{" "}
+                      <span className="font-medium text-slate-900">
+                        {placementDetails.placementDetails || "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Delivery presence:</span>{" "}
+                      <span className="font-medium text-slate-900">
+                        {getDeliveryPresenceLabel(placementDetails.deliveryPresence)}
+                      </span>
+                    </div>
+                    {placementDetails.accessIssues.length ? (
+                      <div>
+                        <span className="text-slate-500">Access issues:</span>{" "}
+                        <span className="font-medium text-slate-900">
+                          {placementDetails.accessIssues.map(getAccessIssueLabel).join(", ")}
+                        </span>
+                      </div>
+                    ) : null}
+                    {placementDetails.gateInstructions ? (
+                      <div>
+                        <span className="text-slate-500">Gate / access:</span>{" "}
+                        <span className="font-medium text-slate-900">{placementDetails.gateInstructions}</span>
+                      </div>
+                    ) : null}
+                    {placementDetails.alternateContactName || placementDetails.alternateContactPhone ? (
+                      <div>
+                        <span className="text-slate-500">Alternate contact:</span>{" "}
+                        <span className="font-medium text-slate-900">
+                          {[placementDetails.alternateContactName, formatPhoneUS(placementDetails.alternateContactPhone || "")]
+                            .filter((value) => value && value !== "—")
+                            .join(" • ")}
+                        </span>
+                      </div>
+                    ) : null}
+                    {placementDetails.specialDeliveryInstructions ? (
+                      <div>
+                        <span className="text-slate-500">Special instructions:</span>{" "}
+                        <span className="font-medium text-slate-900">
+                          {placementDetails.specialDeliveryInstructions}
+                        </span>
+                      </div>
+                    ) : null}
+                    {placementDetails.placementPhotoUrl ? (
+                      <div className="pt-1">
+                        <a
+                          href={placementDetails.placementPhotoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm font-semibold text-[#F97316] hover:underline"
+                        >
+                          View placement photo
+                        </a>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 // src/app/book/date/page.tsx
 "use client";
 
@@ -71,21 +72,7 @@ export default function DateStepPage() {
   // Normalize (future-proof if we ever change date input type)
   const normalizedDate = useMemo(() => (deliveryDate || "").trim(), [deliveryDate]);
 
-  // Save date to sessionStorage (merge, don’t overwrite)
-  function saveDeliveryDate(date: string) {
-    const raw = sessionStorage.getItem("tcm.booking");
-    const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-
-    sessionStorage.setItem(
-      "tcm.booking",
-      JSON.stringify({
-        ...existing,
-        deliveryDate: date,
-      })
-    );
-  }
-
-  function hasActiveHoldForDate(draft: any, selectedDeliveryYMD: string) {
+  function hasActiveHoldForDate(draft: Partial<BookingDraft>, selectedDeliveryYMD: string) {
     const holdId = (draft?.holdId || "").trim();
     const holdDelivery = (draft?.holdDeliveryDate || "").trim(); // should be YYYY-MM-DD
     const expiresAt = (draft?.holdExpiresAt || "").trim();
@@ -219,11 +206,12 @@ export default function DateStepPage() {
           }
         }
 
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (cancelled) return;
+        const message = e instanceof Error ? e.message : "Availability check failed.";
         setAvailability({
           state: "error",
-          message: e?.message || "Availability check failed.",
+          message,
         });
       }
     })();
@@ -321,10 +309,11 @@ export default function DateStepPage() {
 
       setHold({ state: "idle" });
       router.push("/confirm");
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Hold failed. Please try again.";
       setHold({
         state: "error",
-        message: e?.message || "Hold failed. Please try again.",
+        message,
       });
     }
   }
@@ -338,11 +327,11 @@ export default function DateStepPage() {
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 2 of 4
+                  Step 4 of 6
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-2/4 rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-[66.667%] rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>
@@ -480,7 +469,7 @@ export default function DateStepPage() {
 
               <div className="w-full">
                 <a
-                  href="/book/address"
+                  href="/book/placement"
                   className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
                 >
                   ← Back

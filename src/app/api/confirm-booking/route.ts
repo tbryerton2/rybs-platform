@@ -1,8 +1,11 @@
 // src/app/api/confirm-booking/route.ts
 import { NextResponse } from "next/server";
+import { isBookingSchemaError } from "@/lib/booking-schema";
 import { supabase } from "@/lib/supabase";
 import { getDefaultRentalDays } from "@/lib/config";
 import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
+import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
+import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
 
 type ConfirmBody = {
@@ -19,6 +22,16 @@ type ConfirmBody = {
     customerStreet?: string;
     customerCity?: string;
     customerZip?: string;
+    placementPreference?: string | null;
+    placementDetails?: string | null;
+    accessIssues?: string[];
+    gateInstructions?: string | null;
+    deliveryPresence?: string | null;
+    alternateContactName?: string | null;
+    alternateContactPhone?: string | null;
+    placementPhotoUrl?: string | null;
+    specialDeliveryInstructions?: string | null;
+    reorderSourceBookingId?: string | null;
   };
 
   // keep backward-compatible flat fields too
@@ -31,6 +44,16 @@ type ConfirmBody = {
   customerStreet?: string;
   customerCity?: string;
   customerZip?: string;
+  placementPreference?: string | null;
+  placementDetails?: string | null;
+  accessIssues?: string[];
+  gateInstructions?: string | null;
+  deliveryPresence?: string | null;
+  alternateContactName?: string | null;
+  alternateContactPhone?: string | null;
+  placementPhotoUrl?: string | null;
+  specialDeliveryInstructions?: string | null;
+  reorderSourceBookingId?: string | null;
 };
 
 function isYMD(s: string) {
@@ -83,6 +106,20 @@ export async function POST(req: Request) {
     const customerStreet = ((draft.customerStreet ?? body.customerStreet) || "").trim();
     const customerCity = ((draft.customerCity ?? body.customerCity) || "").trim();
     const customerZip = ((draft.customerZip ?? body.customerZip) || "").trim();
+    const reorderSourceBookingId = ((draft.reorderSourceBookingId ?? body.reorderSourceBookingId) || "").trim();
+    const placement = sanitizePlacementDetails({
+      placementPreference: draft.placementPreference ?? body.placementPreference ?? null,
+      placementDetails: draft.placementDetails ?? body.placementDetails ?? null,
+      accessIssues: draft.accessIssues ?? body.accessIssues ?? [],
+      gateInstructions: draft.gateInstructions ?? body.gateInstructions ?? null,
+      deliveryPresence: draft.deliveryPresence ?? body.deliveryPresence ?? null,
+      alternateContactName: draft.alternateContactName ?? body.alternateContactName ?? null,
+      alternateContactPhone: draft.alternateContactPhone ?? body.alternateContactPhone ?? null,
+      placementPhotoUrl: draft.placementPhotoUrl ?? body.placementPhotoUrl ?? null,
+      specialDeliveryInstructions:
+        draft.specialDeliveryInstructions ?? body.specialDeliveryInstructions ?? null,
+    });
+    const placementError = validatePlacementDetails(placement);
 
     if (!holdId) {
       return NextResponse.json({ ok: false, error: "Missing holdId." }, { status: 400 });
@@ -100,6 +137,10 @@ export async function POST(req: Request) {
         { ok: false, error: "Invalid pickupDate. Use YYYY-MM-DD." },
         { status: 400 }
       );
+    }
+
+    if (placementError) {
+      return NextResponse.json({ ok: false, error: placementError }, { status: 400 });
     }
 
     // 1) Atomically "claim" the hold so two requests can't confirm the same hold
@@ -183,22 +224,41 @@ export async function POST(req: Request) {
 
     // 2) Create booking row (confirmed)
     // IMPORTANT: don't write pickup_mode yet (it is failing your DB check constraint)
-    const insertBooking = await supabase
-      .from("bookings")
-      .insert({
-        delivery_date: deliveryDate,
-        pickup_date: effectivePickup || null,
-        status: "confirmed",
-        total_price_cents: normalizedTotalPriceCents,
-        customer_name: customerName || null,
-        customer_email: customerEmail || null,
-        customer_phone: customerPhone,
-        customer_street: customerStreet || null,
-        customer_city: customerCity || null,
-        customer_zip: customerZip || null,
-      })
-      .select("id")
-      .single();
+    const baseInsertRow = {
+      delivery_date: deliveryDate,
+      pickup_date: effectivePickup || null,
+      status: "confirmed" as const,
+      total_price_cents: normalizedTotalPriceCents,
+      customer_name: customerName || null,
+      customer_email: customerEmail || null,
+      customer_phone: customerPhone,
+      customer_street: customerStreet || null,
+      customer_city: customerCity || null,
+      customer_zip: customerZip || null,
+    };
+
+    const insertWithPlacementRow = {
+      ...baseInsertRow,
+      placement_preference: placement.placementPreference,
+      placement_details: placement.placementDetails,
+      access_issues: placement.accessIssues,
+      gate_instructions: placement.gateInstructions,
+      delivery_presence: placement.deliveryPresence,
+      alternate_contact_name: placement.alternateContactName,
+      alternate_contact_phone: placement.alternateContactPhone,
+      placement_photo_url: placement.placementPhotoUrl,
+      special_delivery_instructions: placement.specialDeliveryInstructions,
+    };
+
+    let placementPersistenceSkipped = false;
+
+    let insertBooking = await supabase.from("bookings").insert(insertWithPlacementRow).select("id").single();
+
+    if (insertBooking.error && isBookingSchemaError(insertBooking.error)) {
+      placementPersistenceSkipped = true;
+      console.warn("placement fields unavailable on bookings; retrying confirm-booking without placement columns");
+      insertBooking = await supabase.from("bookings").insert(baseInsertRow).select("id").single();
+    }
 
 
     if (insertBooking.error) {
@@ -230,6 +290,12 @@ export async function POST(req: Request) {
       );
     } catch (customerLinkError) {
       console.error("customer linkage failed after confirm-booking:", customerLinkError);
+    }
+
+    try {
+      await attachReorderReference(supabase, insertBooking.data.id, reorderSourceBookingId);
+    } catch (reorderReferenceError) {
+      console.error("reorder reference write failed after confirm-booking:", reorderReferenceError);
     }
 
     const ev = await supabase.from("booking_events").insert({
@@ -277,6 +343,10 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       bookingId: insertBooking.data.id,
+      placementPersistenceSkipped,
+      warning: placementPersistenceSkipped
+        ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
+        : undefined,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Confirm failed.";

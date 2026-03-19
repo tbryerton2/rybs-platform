@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { isBookingSchemaError } from "@/lib/booking-schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
+import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
+import { attachReorderReference } from "@/lib/reorder";
 
 export async function GET(req: Request) {
   try {
@@ -48,6 +51,16 @@ export async function POST(req: Request) {
       customer_street,
       customer_city,
       customer_zip,
+      placement_preference,
+      placement_details,
+      access_issues,
+      gate_instructions,
+      delivery_presence,
+      alternate_contact_name,
+      alternate_contact_phone,
+      placement_photo_url,
+      special_delivery_instructions,
+      reordered_from_booking_id,
       delivery_date,
       pickup_mode,
       pickup_date,
@@ -65,26 +78,63 @@ export async function POST(req: Request) {
     }
 
     const normalizedCustomerPhone = normalizePhone(customer_phone);
+    const placement = sanitizePlacementDetails({
+      placementPreference: placement_preference,
+      placementDetails: placement_details,
+      accessIssues: access_issues,
+      gateInstructions: gate_instructions,
+      deliveryPresence: delivery_presence,
+      alternateContactName: alternate_contact_name,
+      alternateContactPhone: alternate_contact_phone,
+      placementPhotoUrl: placement_photo_url,
+      specialDeliveryInstructions: special_delivery_instructions,
+    });
+    const placementError = validatePlacementDetails(placement);
 
-    const { data, error } = await supabaseAdmin
-      .from("bookings")
-      .insert({
-        customer_name,
-        customer_email: customer_email ?? null, // ✅ add (nullable)
-        customer_phone: normalizedCustomerPhone,
-        customer_street,
-        customer_city,
-        customer_zip,
-        delivery_date,
-        pickup_mode: pickup_mode ?? "request",
-        pickup_date: pickup_date ?? null,
-        status: "confirmed",
-        total_price_cents: total_price_cents ?? null,
-        service_county: service_county ?? null,
-        service_town: service_town ?? null,
-      })
-      .select("id")
-      .single();
+    if (placementError) {
+      return NextResponse.json({ ok: false, error: placementError }, { status: 400 });
+    }
+
+    const baseInsertRow = {
+      customer_name,
+      customer_email: customer_email ?? null,
+      customer_phone: normalizedCustomerPhone,
+      customer_street,
+      customer_city,
+      customer_zip,
+      delivery_date,
+      pickup_mode: pickup_mode ?? "request",
+      pickup_date: pickup_date ?? null,
+      status: "confirmed" as const,
+      total_price_cents: total_price_cents ?? null,
+      service_county: service_county ?? null,
+      service_town: service_town ?? null,
+    };
+
+    const insertWithPlacementRow = {
+      ...baseInsertRow,
+      placement_preference: placement.placementPreference,
+      placement_details: placement.placementDetails,
+      access_issues: placement.accessIssues,
+      gate_instructions: placement.gateInstructions,
+      delivery_presence: placement.deliveryPresence,
+      alternate_contact_name: placement.alternateContactName,
+      alternate_contact_phone: placement.alternateContactPhone,
+      placement_photo_url: placement.placementPhotoUrl,
+      special_delivery_instructions: placement.specialDeliveryInstructions,
+    };
+
+    let placementPersistenceSkipped = false;
+
+    let insertResult = await supabaseAdmin.from("bookings").insert(insertWithPlacementRow).select("id").single();
+
+    if (insertResult.error && isBookingSchemaError(insertResult.error)) {
+      placementPersistenceSkipped = true;
+      console.warn("placement fields unavailable on bookings; retrying /api/bookings without placement columns");
+      insertResult = await supabaseAdmin.from("bookings").insert(baseInsertRow).select("id").single();
+    }
+
+    const { data, error } = insertResult;
 
     if (error) {
       return NextResponse.json(
@@ -106,7 +156,20 @@ export async function POST(req: Request) {
       console.error("customer linkage failed for /api/bookings:", customerLinkError);
     }
 
-    return NextResponse.json({ ok: true, id: data.id });
+    try {
+      await attachReorderReference(supabaseAdmin, data.id, reordered_from_booking_id);
+    } catch (reorderReferenceError) {
+      console.error("reorder reference write failed for /api/bookings:", reorderReferenceError);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      id: data.id,
+      placementPersistenceSkipped,
+      warning: placementPersistenceSkipped
+        ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
+        : undefined,
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(

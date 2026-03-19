@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { bookingPlacementSchemaMessage, isBookingSchemaError } from "@/lib/booking-schema";
+import {
+  sanitizePlacementDetails,
+  validatePlacementDetails,
+} from "@/lib/placement";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type BookingStatus =
@@ -18,6 +23,10 @@ function asString(value: FormDataEntryValue | null) {
 function emptyToNull(value: string) {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+function redirectWithPlacementError(id: string, error: string) {
+  redirect(`/admin/bookings/${id}?placementError=${encodeURIComponent(error)}#placement-access`);
 }
 
 export async function updateNotesAction(formData: FormData) {
@@ -117,6 +126,59 @@ export async function updatePickupDetailsAction(formData: FormData) {
   revalidatePath("/admin");
 
   redirect(`/admin/bookings/${id}?saved=pickup-details#pickup`);
+}
+
+export async function updatePlacementDetailsAction(formData: FormData) {
+  const id = asString(formData.get("id"));
+
+  if (!id) throw new Error("Missing booking id");
+
+  const placement = sanitizePlacementDetails({
+    placementPreference: asString(formData.get("placement_preference")),
+    placementDetails: asString(formData.get("placement_details")),
+    accessIssues: formData.getAll("access_issues"),
+    gateInstructions: asString(formData.get("gate_instructions")),
+    deliveryPresence: asString(formData.get("delivery_presence")),
+    alternateContactName: asString(formData.get("alternate_contact_name")),
+    alternateContactPhone: asString(formData.get("alternate_contact_phone")),
+    placementPhotoUrl: asString(formData.get("placement_photo_url")),
+    specialDeliveryInstructions: asString(formData.get("special_delivery_instructions")),
+  });
+
+  const validationError = validatePlacementDetails(placement);
+  if (validationError) {
+    redirectWithPlacementError(id, validationError);
+  }
+
+  const { error } = await supabaseAdmin
+    .from("bookings")
+    .update({
+      placement_preference: placement.placementPreference,
+      placement_details: placement.placementDetails,
+      access_issues: placement.accessIssues,
+      gate_instructions: placement.gateInstructions,
+      delivery_presence: placement.deliveryPresence,
+      alternate_contact_name: placement.alternateContactName,
+      alternate_contact_phone: placement.alternateContactPhone,
+      placement_photo_url: placement.placementPhotoUrl,
+      special_delivery_instructions: placement.specialDeliveryInstructions,
+    })
+    .eq("id", id);
+
+  if (error) {
+    if (isBookingSchemaError(error)) {
+      redirectWithPlacementError(id, bookingPlacementSchemaMessage());
+    }
+
+    redirectWithPlacementError(id, error.message);
+  }
+
+  revalidatePath(`/admin/bookings/${id}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/schedule");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${id}?saved=placement#placement-access`);
 }
 
 

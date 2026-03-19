@@ -2,6 +2,11 @@
 "use client";
 
 import Link from "next/link";
+import {
+  getPlacementCompactSignals,
+  getPlacementDispatchSummary,
+  sanitizePlacementDetails,
+} from "@/lib/placement";
 
 type BookingRow = {
   id: string;
@@ -14,6 +19,15 @@ type BookingRow = {
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
   created_at: string | null;
   job_type: "delivery" | "pickup" | "swap" | null;
+  placement_preference: string | null;
+  placement_details: string | null;
+  access_issues: string[] | null;
+  gate_instructions: string | null;
+  delivery_presence: string | null;
+  alternate_contact_name: string | null;
+  alternate_contact_phone: string | null;
+  placement_photo_url: string | null;
+  special_delivery_instructions: string | null;
 };
 
 type DayData = {
@@ -116,6 +130,19 @@ function groupByZip(jobs: BookingRow[]) {
   return groups;
 }
 
+function placementSignalClasses(tone: "amber" | "blue" | "emerald" | "slate") {
+  switch (tone) {
+    case "amber":
+      return "bg-amber-50 text-amber-700 ring-amber-200";
+    case "blue":
+      return "bg-blue-50 text-blue-700 ring-blue-200";
+    case "emerald":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+    default:
+      return "bg-slate-100 text-slate-700 ring-slate-200";
+  }
+}
+
 function SectionEmpty({ label }: { label: string }) {
   return <div className="text-sm text-slate-400">{label}</div>;
 }
@@ -128,6 +155,19 @@ function JobCard({
   type: "delivery" | "pickup";
 }) {
   const attention = needsAttention(job);
+  const placement = sanitizePlacementDetails({
+    placementPreference: job.placement_preference,
+    placementDetails: job.placement_details,
+    accessIssues: job.access_issues ?? [],
+    gateInstructions: job.gate_instructions,
+    deliveryPresence: job.delivery_presence,
+    alternateContactName: job.alternate_contact_name,
+    alternateContactPhone: job.alternate_contact_phone,
+    placementPhotoUrl: job.placement_photo_url,
+    specialDeliveryInstructions: job.special_delivery_instructions,
+  });
+  const placementSignals = getPlacementCompactSignals(placement, 3);
+  const placementSummary = getPlacementDispatchSummary(placement);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
@@ -179,6 +219,25 @@ function JobCard({
           ZIP: <span className="font-semibold text-slate-900">{job.customer_zip || "—"}</span>
         </div>
       </div>
+
+      {placementSummary !== "No placement details collected" ? (
+        <div className="mt-3 rounded-xl bg-white px-3 py-2.5 text-xs ring-1 ring-slate-200">
+          <div className="font-semibold uppercase tracking-wide text-slate-500">Placement</div>
+          <div className="mt-1 text-sm text-slate-700">{placementSummary}</div>
+          {placementSignals.length ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {placementSignals.map((signal) => (
+                <span
+                  key={signal.key}
+                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${placementSignalClasses(signal.tone)}`}
+                >
+                  {signal.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {job.job_type === "swap" ? (
         <div className="mt-3 rounded-xl bg-purple-50 px-3 py-3 text-xs ring-1 ring-purple-200">
