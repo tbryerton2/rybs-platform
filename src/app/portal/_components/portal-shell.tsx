@@ -7,6 +7,7 @@ type PortalNavItem = {
 
 const navItems: PortalNavItem[] = [
   { href: "/portal", label: "Dashboard" },
+  { href: "/portal/rentals", label: "Rentals" },
   { href: "/portal/account", label: "Account" },
 ];
 

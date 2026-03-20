@@ -9,9 +9,11 @@ import {
 import { canReorderBooking } from "@/lib/reorder";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalRental, getPortalRequestSummary } from "@/lib/portal/data";
+import { getPortalRentalLabel } from "@/lib/portal/rental-number";
 import { formatUsdFromCents } from "@/lib/money";
 import { PortalShell } from "../../_components/portal-shell";
 import { PortalStatusBadge } from "../../_components/portal-status-badge";
+import { PortalSubpageHeader } from "../../_components/portal-subpage-header";
 import { RentalTimeline } from "../../_components/rental-timeline";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -144,24 +146,15 @@ export default async function PortalRentalDetailPage({
   return (
     <PortalShell pathname={`/portal/rentals/${booking.id}`}>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <Link href="/portal" className="text-sm font-medium text-slate-500 hover:text-slate-900">
-              ← Back to dashboard
-            </Link>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-              Rental #{booking.id.slice(0, 8)}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              {booking.customer_street || "Address pending"}
-              {booking.customer_city || booking.customer_zip
-                ? `, ${[booking.customer_city, booking.customer_zip].filter(Boolean).join(" ")}`
-                : ""}
-            </p>
-          </div>
-
-          <PortalStatusBadge stage={booking.portalStage} />
-        </div>
+        <PortalSubpageHeader
+          title={getPortalRentalLabel(booking.id)}
+          description={`${booking.customer_street || "Address pending"}${
+            booking.customer_city || booking.customer_zip
+              ? `, ${[booking.customer_city, booking.customer_zip].filter(Boolean).join(" ")}`
+              : ""
+          }`}
+          meta={<PortalStatusBadge stage={booking.portalStage} />}
+        />
 
         {submissionMessage ? (
           <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">

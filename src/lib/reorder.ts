@@ -90,17 +90,41 @@ export async function attachReorderReference(
   reorderedFromBookingId: string | null | undefined,
 ) {
   const sourceBookingId = String(reorderedFromBookingId ?? "").trim();
-  if (!sourceBookingId) return { skipped: false };
+  if (!sourceBookingId) {
+    return {
+      attempted: false,
+      skipped: false,
+      bookingId,
+      sourceBookingId: null,
+      persistedValue: null,
+    };
+  }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("bookings")
     .update({ reordered_from_booking_id: sourceBookingId })
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .select("id, reordered_from_booking_id")
+    .maybeSingle();
 
-  if (!error) return { skipped: false };
+  if (!error) {
+    return {
+      attempted: true,
+      skipped: false,
+      bookingId,
+      sourceBookingId,
+      persistedValue: data?.reordered_from_booking_id ?? null,
+    };
+  }
   if (isBookingSchemaError(error)) {
     console.warn("reorder reference column unavailable on bookings; skipping reordered_from_booking_id write");
-    return { skipped: true };
+    return {
+      attempted: true,
+      skipped: true,
+      bookingId,
+      sourceBookingId,
+      persistedValue: null,
+    };
   }
 
   throw new Error(error.message);

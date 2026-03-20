@@ -95,29 +95,17 @@ function withPortalRequestSummary(
   };
 }
 
-export async function getPortalDashboardData(customerId: string) {
-  const [{ data: bookings, error: bookingsError }, { data: locations, error: locationsError }] =
-    await Promise.all([
-      supabaseAdmin
-        .from("bookings")
-        .select(
-          "id, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
-        )
-        .eq("customer_id", customerId)
-        .order("delivery_date", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false }),
-      supabaseAdmin
-        .from("customer_locations")
-        .select("id, label, street, city, zip, delivery_notes, is_default")
-        .eq("customer_id", customerId)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: true }),
-    ]);
+async function getPortalBookingSummaries(customerId: string) {
+  const { data: bookings, error: bookingsError } = await supabaseAdmin
+    .from("bookings")
+    .select(
+      "id, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
+    )
+    .eq("customer_id", customerId)
+    .order("delivery_date", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
 
   if (bookingsError) throw new Error(bookingsError.message);
-  if (locationsError && !isPortalSchemaError(locationsError)) {
-    throw new Error(locationsError.message);
-  }
 
   const bookingRowsRaw = (bookings ?? []) as PortalBooking[];
   let requestRows: PortalBookingRequest[] = [];
@@ -138,7 +126,9 @@ export async function getPortalDashboardData(customerId: string) {
       throw new Error(requestLookup.error.message);
     }
 
-    requestRows = requestLookup.error ? [] : ((requestLookup.data ?? []) as (PortalBookingRequest & { booking_id: string })[]);
+    requestRows = requestLookup.error
+      ? []
+      : ((requestLookup.data ?? []) as (PortalBookingRequest & { booking_id: string })[]);
   }
 
   const requestsByBooking = new Map<string, PortalBookingRequest[]>();
@@ -148,9 +138,26 @@ export async function getPortalDashboardData(customerId: string) {
     requestsByBooking.set(request.booking_id, existing);
   }
 
-  const bookingRows = bookingRowsRaw.map((booking) =>
+  return bookingRowsRaw.map((booking) =>
     withPortalRequestSummary(booking, requestsByBooking.get(booking.id) ?? []),
   );
+}
+
+export async function getPortalDashboardData(customerId: string) {
+  const [{ data: locations, error: locationsError }, bookingRows] =
+    await Promise.all([
+      supabaseAdmin
+        .from("customer_locations")
+        .select("id, label, street, city, zip, delivery_notes, is_default")
+        .eq("customer_id", customerId)
+        .order("is_default", { ascending: false })
+        .order("created_at", { ascending: true }),
+      getPortalBookingSummaries(customerId),
+    ]);
+
+  if (locationsError && !isPortalSchemaError(locationsError)) {
+    throw new Error(locationsError.message);
+  }
   const activeRental =
     bookingRows.find((booking) => ACTIVE_STATUSES.has((booking.status ?? "").toLowerCase())) ?? null;
 
@@ -159,6 +166,10 @@ export async function getPortalDashboardData(customerId: string) {
     recentBookings: bookingRows.slice(0, 6),
     locations: locationsError ? [] : ((locations ?? []) as PortalLocation[]),
   };
+}
+
+export async function getPortalBookings(customerId: string) {
+  return getPortalBookingSummaries(customerId);
 }
 
 export async function getPortalRental(customerId: string, bookingId: string) {

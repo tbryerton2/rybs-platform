@@ -96,10 +96,15 @@ const BOOKING_LIST_SELECT_WITH_REORDER_ONLY =
 const BASE_BOOKING_LIST_SELECT =
   "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
 
-function withEmptyPlacementFields(rows: Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[]) {
+function withEmptyPlacementFields(
+  rows: Array<
+    Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS> & {
+      reordered_from_booking_id?: string | null;
+    }
+  >,
+) {
   return rows.map((row) => ({
     ...row,
-    reordered_from_booking_id: null,
     ...EMPTY_BOOKING_PLACEMENT_FIELDS,
   })) as BookingRow[];
 }

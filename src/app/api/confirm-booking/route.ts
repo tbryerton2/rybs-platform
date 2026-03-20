@@ -275,6 +275,8 @@ export async function POST(req: Request) {
       );
     }
 
+    const serverSupabase = supabaseServer();
+
     try {
       await attachCustomerToBooking(
         insertBooking.data.id,
@@ -286,23 +288,56 @@ export async function POST(req: Request) {
           city: customerCity,
           zip: customerZip,
         },
-        supabaseServer(),
+        serverSupabase,
       );
     } catch (customerLinkError) {
       console.error("customer linkage failed after confirm-booking:", customerLinkError);
     }
 
     let reorderReferenceSkipped = false;
+    let reorderReferencePersisted = false;
 
     try {
       const reorderReferenceResult = await attachReorderReference(
-        supabase,
+        serverSupabase,
         insertBooking.data.id,
         reorderSourceBookingId,
       );
       reorderReferenceSkipped = reorderReferenceResult.skipped;
+
+      console.info("[confirm-booking] reorder reference attempt", {
+        incomingReorderSourceBookingId: reorderSourceBookingId || null,
+        insertedBookingId: insertBooking.data.id,
+        clientType: "service_role",
+        result: reorderReferenceResult,
+      });
     } catch (reorderReferenceError) {
       console.error("reorder reference write failed after confirm-booking:", reorderReferenceError);
+    }
+
+    let persistedReorderReference: string | null = null;
+
+    try {
+      const verification = await serverSupabase
+        .from("bookings")
+        .select("id, reordered_from_booking_id")
+        .eq("id", insertBooking.data.id)
+        .maybeSingle();
+
+      if (verification.error) {
+        console.error("[confirm-booking] reorder reference verification failed:", verification.error);
+      } else {
+        persistedReorderReference = verification.data?.reordered_from_booking_id ?? null;
+        reorderReferencePersisted = !!persistedReorderReference;
+
+        console.info("[confirm-booking] reorder reference verification", {
+          incomingReorderSourceBookingId: reorderSourceBookingId || null,
+          insertedBookingId: insertBooking.data.id,
+          persistedReorderedFromBookingId: persistedReorderReference,
+        });
+      }
+    } catch (verificationError) {
+      console.error("[confirm-booking] reorder reference verification threw:", verificationError);
     }
 
     const ev = await supabase.from("booking_events").insert({
@@ -352,6 +387,7 @@ export async function POST(req: Request) {
       bookingId: insertBooking.data.id,
       placementPersistenceSkipped,
       reorderReferenceSkipped,
+      reorderReferencePersisted,
       warning: placementPersistenceSkipped
         ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
         : undefined,

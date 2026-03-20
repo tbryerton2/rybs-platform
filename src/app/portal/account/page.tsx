@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalDashboardData } from "@/lib/portal/data";
+import { getPortalRentalLabel } from "@/lib/portal/rental-number";
 import { canReorderBooking } from "@/lib/reorder";
 import { PortalShell } from "../_components/portal-shell";
+import { PortalSubpageHeader } from "../_components/portal-subpage-header";
 import { PortalStatusBadge } from "../_components/portal-status-badge";
 
 function formatDate(value: string | null) {
@@ -47,23 +49,10 @@ export default async function PortalAccountPage() {
     <PortalShell pathname="/portal/account">
       <div className="space-y-6">
         <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                Portal account
-              </div>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                {customer.name || "Your portal account"}
-              </h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-                Review your contact details, saved service locations, and recent rental activity.
-                Account settings stay read-only in v1.
-              </p>
-            </div>
-            <Link href="/portal" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
-              Back to dashboard
-            </Link>
-          </div>
+          <PortalSubpageHeader
+            title={customer.name || "Your portal account"}
+            description="Review your contact details, saved service locations, and recent rental activity. Account settings stay read-only in v1."
+          />
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <ContactCard label="Full name" value={formatContactValue(customer.name)} />
@@ -189,7 +178,9 @@ export default async function PortalAccountPage() {
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <div className="text-sm font-semibold text-slate-900">Rental #{booking.id.slice(0, 8)}</div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {getPortalRentalLabel(booking.id)}
+                          </div>
                           <div className="mt-1 text-sm leading-6 text-slate-500">
                             {booking.customer_street || "Address pending"}
                           </div>

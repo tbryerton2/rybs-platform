@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { requirePortalCustomer } from "@/lib/portal/auth";
-import { getPortalDashboardData, type PortalBookingSummary } from "@/lib/portal/data";
+import { getPortalDashboardData } from "@/lib/portal/data";
+import { getPortalRentalLabel } from "@/lib/portal/rental-number";
 import { formatUsdFromCents } from "@/lib/money";
-import { canReorderBooking } from "@/lib/reorder";
 import { PortalEmptyState } from "./_components/portal-empty-state";
+import { PortalBookingCard } from "./_components/portal-booking-card";
 import { PortalShell } from "./_components/portal-shell";
 import { PortalStatusBadge } from "./_components/portal-status-badge";
 
@@ -88,67 +89,6 @@ function RentalMetaCard({
   );
 }
 
-function RecentBookingCard({ booking }: { booking: PortalBookingSummary }) {
-  const reorderEligible = canReorderBooking(booking.status);
-
-  return (
-    <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="text-sm font-semibold text-slate-900">Rental #{booking.id.slice(0, 8)}</div>
-          <div className="mt-1 text-sm leading-6 text-slate-500">
-            {booking.customer_street || "Address pending"}
-            {booking.customer_city || booking.customer_zip
-              ? `, ${[booking.customer_city, booking.customer_zip].filter(Boolean).join(" ")}`
-              : ""}
-          </div>
-        </div>
-        <PortalStatusBadge stage={booking.portalStage} />
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="rounded-2xl bg-slate-50 px-3 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Delivery</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(booking.delivery_date)}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 px-3 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Next step</div>
-          <div className="mt-1 text-sm leading-6 text-slate-600">{booking.nextAction}</div>
-        </div>
-        <div className="rounded-2xl bg-slate-50 px-3 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Requests</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            {booking.requestCount} submitted
-          </div>
-        </div>
-      </div>
-
-      {booking.latestRequestSummary ? (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm leading-6 text-slate-600">
-          Latest request: {booking.latestRequestSummary}
-        </div>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Link
-          href={`/portal/rentals/${booking.id}`}
-          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          View rental
-        </Link>
-        {reorderEligible ? (
-          <Link
-            href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
-            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Book again
-          </Link>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 export default async function PortalHomePage() {
   const customer = await requirePortalCustomer();
   const { activeRental, recentBookings, locations } = await getPortalDashboardData(customer.id);
@@ -178,7 +118,7 @@ export default async function PortalHomePage() {
                   Active rental
                 </div>
                   <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                    Dumpster rental #{activeRental.id.slice(0, 8)}
+                    {getPortalRentalLabel(activeRental.id)}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     {activeRental.customer_street || "Address pending"}
@@ -284,9 +224,14 @@ export default async function PortalHomePage() {
                   each job.
                 </p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                {recentBookings.length} shown
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                  {recentBookings.length} shown
+                </span>
+                <Link href="/portal/rentals" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
+                  View all bookings
+                </Link>
+              </div>
             </div>
 
             <div className="mt-5 space-y-4">
@@ -296,7 +241,7 @@ export default async function PortalHomePage() {
                   your rental history and status updates will appear here.
                 </div>
               ) : (
-                recentBookings.map((booking) => <RecentBookingCard key={booking.id} booking={booking} />)
+                recentBookings.map((booking) => <PortalBookingCard key={booking.id} booking={booking} compact />)
               )}
             </div>
           </div>
