@@ -41,7 +41,7 @@ type BookingDraft = {
   maxDaysAllowed?: number; // integer
   limitedAck?: boolean; // checkbox on date page
   reorderSourceBookingId?: string;
-  reorderSourceBookingShortId?: string;
+  reorderSourceBookingRef?: string | null;
 };
 
 function isYMD(s: string) {
@@ -88,20 +88,6 @@ function formatDateLong(ymd: string) {
     day: "2-digit",
     year: "numeric",
   }).format(dt);
-}
-
-function getResetPickupDate() {
-  if (!isYMD(deliveryDate)) return "";
-
-  // default pickup based on rental length
-  const defaultDate = defaultPickupDate;
-
-  // if capped, clamp to max
-  if (maxPickupDate && defaultDate > maxPickupDate) {
-    return maxPickupDate;
-  }
-
-  return defaultDate;
 }
 
 function formatMMSS(totalSeconds: number) {
@@ -296,6 +282,16 @@ export default function ConfirmPage() {
     return addDaysYMD(deliveryDate, defaultRentalDays);
   }, [deliveryDate, defaultRentalDays]);
 
+  function getResetPickupDate() {
+    if (!isYMD(deliveryDate)) return "";
+
+    if (maxPickupDate && defaultPickupDate > maxPickupDate) {
+      return maxPickupDate;
+    }
+
+    return defaultPickupDate;
+  }
+
   function savePickupDraft(v: string) {
     persist({
       pickupDate: v || undefined,
@@ -476,7 +472,7 @@ export default function ConfirmPage() {
             {draft.reorderSourceBookingId ? (
               <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm leading-6 text-slate-700">
                 <div className="font-semibold text-slate-900">New booking based on a previous rental</div>
-                <div className="mt-1">{getReorderNotice(draft.reorderSourceBookingShortId)}</div>
+                <div className="mt-1">{getReorderNotice(draft.reorderSourceBookingRef)}</div>
               </div>
             ) : null}
 

@@ -1,185 +1,74 @@
-// src/app/admin/customers/page.tsx
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { formatUsd } from "@/lib/money";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type CustomerRow = {
   id: string;
-  identifier: string;
-  identifier_type: "email" | "phone";
+  created_at: string | null;
   name: string | null;
   email: string | null;
   phone: string | null;
   primary_city: string | null;
   primary_zip: string | null;
-  booking_count: number;
-  active_booking_count: number;
-  first_booking_at: string | null;
-  last_booking_at: string | null;
-  lifetime_revenue: number | null;
+  portal_status: string | null;
+  deactivated_at: string | null;
 };
 
-function sp(obj: SearchParams, key: string) {
-  const value = obj[key];
+type BookingSummaryRow = {
+  id: string;
+  booking_ref: string | null;
+  customer_id: string | null;
+  booking_contact_name: string | null;
+  booking_contact_email: string | null;
+  booking_contact_phone: string | null;
+  customer_street: string | null;
+  customer_city: string | null;
+  customer_zip: string | null;
+  delivery_date: string | null;
+  created_at: string | null;
+  status: string | null;
+  total_price_cents: number | null;
+};
+
+function readParam(params: SearchParams, key: string) {
+  const value = params[key];
   return Array.isArray(value) ? value[0] : value;
 }
 
-function clean(value: string | null | undefined) {
-  return value?.trim() || "";
-}
-
-
 function formatDate(value: string | null) {
   if (!value) return "—";
-
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "America/New_York",
   }).format(new Date(value));
 }
 
 function formatPhone(phone: string | null) {
   if (!phone) return "—";
-
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 10) {
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
-
   return phone;
 }
 
-function getLocationLabel(city: string | null, zip: string | null) {
-  const parts = [clean(city), clean(zip)].filter(Boolean);
-  return parts.length ? parts.join(", ") : "—";
+function formatUsd(cents: number | null) {
+  if (cents == null) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
 }
 
-
-async function getCustomers(search: string) {
-  let query = supabaseAdmin
-    .from("customer_rollups")
-    .select(
-      `
-      id,
-      identifier,
-      identifier_type,
-      name,
-      email,
-      phone,
-      primary_city,
-      primary_zip,
-      booking_count,
-      active_booking_count,
-      first_booking_at,
-      last_booking_at,
-      lifetime_revenue
-    `
-    )
-    .order("last_booking_at", { ascending: false, nullsFirst: false });
-
-  const term = search.trim();
-
-  if (term) {
-    query = query.or(
-      [
-        `name.ilike.%${term}%`,
-        `email.ilike.%${term}%`,
-        `phone.ilike.%${term}%`,
-        `primary_city.ilike.%${term}%`,
-        `primary_zip.ilike.%${term}%`,
-      ].join(",")
-    );
-  }
-
-  const { data, error } = await query;
-
-  if (error) throw new Error(error.message);
-
-  return (data ?? []) as CustomerRow[];
-}
-
-async function getStats() {
-  const { data, error } = await supabaseAdmin
-    .from("customer_rollups")
-    .select("id, booking_count");
-
-  if (error) throw new Error(error.message);
-
-  const rows =
-    (data as
-      | Array<{
-          id: string;
-          booking_count: number | null;
-        }>
-      | null) ?? [];
-
-  return {
-    totalUniqueCustomers: rows.length,
-    totalBookings: rows.reduce((sum, row) => sum + (row.booking_count ?? 0), 0),
-    repeatCustomers: rows.filter((row) => (row.booking_count ?? 0) > 1).length,
-  };
-}
-
-function StatCard({
-  label,
-  value,
-  icon,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  icon: string;
-  hint: string;
-}) {
-  return (
-    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-200/60">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-slate-500">{label}</div>
-          <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-            {value}
-          </div>
-          <div className="mt-2 text-xs text-slate-500">{hint}</div>
-        </div>
-
-        <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#F97316]/10 text-lg text-[#F97316]">
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      aria-hidden="true"
-      className="h-5 w-5 text-slate-400"
-    >
-      <path
-        d="M14.1667 14.1667L17.5 17.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <circle
-        cx="8.75"
-        cy="8.75"
-        r="5.83333"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
-    </svg>
-  );
+function includesTerm(value: string | null | undefined, search: string) {
+  return (value ?? "").toLowerCase().includes(search);
 }
 
 export default async function AdminCustomersPage({
@@ -187,289 +76,219 @@ export default async function AdminCustomersPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
-  const resolvedSearchParams = (await searchParams) ?? {};
-  const search = sp(resolvedSearchParams, "q")?.trim() ?? "";
+  const resolved = (await searchParams) ?? {};
+  const query = (readParam(resolved, "q") ?? "").trim().toLowerCase();
 
-  const [customers, stats] = await Promise.all([
-    getCustomers(search),
-    getStats(),
-  ]);
+  const [{ data: customersData, error: customersError }, { data: bookingsData, error: bookingsError }] =
+    await Promise.all([
+      supabaseAdmin
+        .from("customers")
+        .select("id, created_at, name, email, phone, primary_city, primary_zip, portal_status, deactivated_at")
+        .order("updated_at", { ascending: false }),
+      supabaseAdmin
+        .from("bookings")
+        .select("id, booking_ref, customer_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_street, customer_city, customer_zip, delivery_date, created_at, status, total_price_cents")
+        .not("customer_id", "is", null),
+    ]);
+
+  if (customersError) throw new Error(customersError.message);
+  if (bookingsError) throw new Error(bookingsError.message);
+
+  const bookings = (bookingsData ?? []) as BookingSummaryRow[];
+  const bookingsByCustomer = new Map<string, BookingSummaryRow[]>();
+  for (const booking of bookings) {
+    if (!booking.customer_id) continue;
+    const existing = bookingsByCustomer.get(booking.customer_id) ?? [];
+    existing.push(booking);
+    bookingsByCustomer.set(booking.customer_id, existing);
+  }
+
+  const customers = ((customersData ?? []) as CustomerRow[])
+    .map((customer) => {
+      const linkedBookings = (bookingsByCustomer.get(customer.id) ?? []).sort((left, right) =>
+        new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime(),
+      );
+      const activeBookingCount = linkedBookings.filter((booking) =>
+        ["confirmed", "scheduled", "delivered"].includes((booking.status ?? "").toLowerCase()),
+      ).length;
+      const lifetimeValue = linkedBookings.reduce((sum, booking) => sum + (booking.total_price_cents ?? 0), 0);
+      const latestBooking = linkedBookings[0] ?? null;
+
+      return {
+        ...customer,
+        linkedBookings,
+        activeBookingCount,
+        bookingCount: linkedBookings.length,
+        latestBooking,
+        lifetimeValue,
+      };
+    })
+    .filter((customer) => {
+      if (!query) return true;
+
+      return (
+        includesTerm(customer.id, query) ||
+        includesTerm(customer.name, query) ||
+        includesTerm(customer.email, query) ||
+        includesTerm(customer.phone, query) ||
+        includesTerm(customer.primary_city, query) ||
+        includesTerm(customer.primary_zip, query) ||
+        customer.linkedBookings.some((booking) =>
+          [
+            booking.id,
+            booking.booking_ref,
+            booking.booking_contact_name,
+            booking.booking_contact_email,
+            booking.booking_contact_phone,
+            booking.customer_street,
+            booking.customer_city,
+            booking.customer_zip,
+          ].some((value) => includesTerm(value, query)),
+        )
+      );
+    });
+
+  const repeatCustomers = customers.filter((customer) => customer.bookingCount > 1).length;
+  const totalBookings = customers.reduce((sum, customer) => sum + customer.bookingCount, 0);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 pt-10 pb-16">
+    <main className="mx-auto max-w-7xl px-6 pb-16 pt-10">
       <div className="mb-8">
         <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
           Admin
         </div>
-
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
           Customers
         </h1>
-
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          View and search customers who have booked dumpster rentals.
+          Search customers by email, internal UUID, booking reference, phone, or address.
         </p>
       </div>
 
       <section className="mb-8 grid gap-4 md:grid-cols-3">
-        <StatCard
-          label="Total unique customers"
-          value={stats.totalUniqueCustomers}
-          icon="👥"
-          hint="Derived from booking contact records"
-        />
-        <StatCard
-          label="Total bookings"
-          value={stats.totalBookings}
-          icon="🧾"
-          hint="All customer jobs currently on record"
-        />
-        <StatCard
-          label="Repeat customers"
-          value={stats.repeatCustomers}
-          icon="🔁"
-          hint="Customers with more than one booking"
-        />
+        {[
+          { label: "Customers", value: customers.length, hint: "Customer/account records" },
+          { label: "Linked bookings", value: totalBookings, hint: "Bookings attached to customer UUIDs" },
+          { label: "Repeat customers", value: repeatCustomers, hint: "Customers with more than one booking" },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-200/60">
+            <div className="text-sm font-medium text-slate-500">{stat.label}</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{stat.value}</div>
+            <div className="mt-2 text-xs text-slate-500">{stat.hint}</div>
+          </div>
+        ))}
       </section>
 
       <section className="mb-8 rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-              Search customers
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Search by customer name, phone, email, or ZIP code.
-            </p>
-          </div>
-        </div>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search customers</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Find a customer by email, UUID, booking ref, phone, or service address.
+        </p>
 
-        <form className="flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
-            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2">
-              <SearchIcon />
-            </span>
-
-            <input
-              id="q"
-              name="q"
-              defaultValue={search}
-              placeholder="Search by name, phone, email, or ZIP"
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-12 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+        <form className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <input
+            id="q"
+            name="q"
+            defaultValue={query}
+            placeholder="Email, booking ref, UUID, phone, address"
+            className="h-12 flex-1 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+          />
+          <button
+            type="submit"
+            className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+          >
+            Search
+          </button>
+          {query ? (
+            <Link
+              href="/admin/customers"
+              className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Search
-            </button>
-
-            {search ? (
-              <Link
-                href="/admin/customers"
-                className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Clear
-              </Link>
-            ) : null}
-          </div>
+              Clear
+            </Link>
+          ) : null}
         </form>
       </section>
 
       <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-                Customer list
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                A simple CRM view built from existing booking records.
-              </p>
-            </div>
-
-            <div className="text-sm text-slate-500">
-              <span className="font-semibold text-slate-900">{customers.length}</span>{" "}
-              {customers.length === 1 ? "customer" : "customers"}
-              {search ? (
-                <>
-                  {" "}
-                  matching{" "}
-                  <span className="font-medium text-slate-700">“{search}”</span>
-                </>
-              ) : null}
-            </div>
+          <div className="text-lg font-semibold tracking-tight text-slate-900">Customer list</div>
+          <div className="mt-1 text-sm text-slate-500">
+            {customers.length} {customers.length === 1 ? "customer" : "customers"}
+            {query ? <> matching “{query}”</> : null}
           </div>
         </div>
 
         {customers.length === 0 ? (
-          <div className="px-6 py-16 text-center sm:px-8">
-            <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-2xl">
-              👤
-            </div>
-            <h3 className="mt-4 text-base font-semibold text-slate-900">
-              No customers found
-            </h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Try a different customer name, phone number, email address, or ZIP code.
-            </p>
-          </div>
+          <div className="px-6 py-16 text-center text-sm text-slate-500">No customers found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full table-fixed">
               <thead className="bg-slate-50/80">
                 <tr className="text-left">
-                  <th className="w-[220px] px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sm:px-8">
-                    Customer
-                  </th>
-                  <th className="w-[260px] px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Contact
-                  </th>
-                  <th className="w-[190px] px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Location
-                  </th>
-                  <th className="w-[80px] px-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Bookings
-                  </th>
-                  <th className="w-[80px] px-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Open jobs
-                  </th>
-                  <th className="w-[110px] px-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Most recent
-                  </th>
-                  <th className="w-[110px] px-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Lifetime value
-                  </th>
-                  <th className="w-[120px] px-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Action
-                  </th>
+                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sm:px-8">Customer</th>
+                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Portal</th>
+                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Latest booking</th>
+                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Lifetime value</th>
+                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Action</th>
                 </tr>
               </thead>
-
               <tbody className="divide-y divide-slate-100">
-                {customers.map((customer) => {
-                  const isRepeat = customer.booking_count > 1;
-
-                  return (
-                    <tr
-                      key={customer.id}
-                      className="border-t border-slate-200 transition hover:bg-slate-50/70"
-                    >
-                      <td className="px-6 py-4 align-top sm:px-8">
-                        <div className="min-w-[180px]">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Link
-                                  href={`/admin/customers/${encodeURIComponent(customer.identifier)}`}
-                                  className="font-semibold text-slate-900 hover:text-[#F97316]"
-                                >
-                                  {customer.name}
-                                </Link>
-
-                              {isRepeat ? (
-                                <span className="inline-flex items-center rounded-full bg-[#F97316]/10 px-2.5 py-1 text-[11px] font-semibold text-[#F97316]">
-                                    Repeat customer · {customer.booking_count} bookings
-                                </span>
-                                ) : null}
-                            </div>
-
-                            <div className="mt-1 text-xs text-slate-500">
-                                {isRepeat ? "Repeat customer record derived from bookings" : "Customer record derived from bookings"}
-                            </div>
-                          </div>
+                {customers.map((customer) => (
+                  <tr key={customer.id} className="transition hover:bg-slate-50/70">
+                    <td className="px-6 py-4 align-top sm:px-8">
+                      <div className="font-semibold text-slate-900">{customer.name || "Unnamed customer"}</div>
+                      <div className="mt-1 text-sm text-slate-600">{customer.email || "No email"}</div>
+                      <div className="mt-1 text-sm text-slate-600">{formatPhone(customer.phone)}</div>
+                      <div className="mt-2 text-xs text-slate-500">UUID: <span className="font-mono">{customer.id}</span></div>
+                    </td>
+                    <td className="px-6 py-4 align-top">
+                      <div className="space-y-2">
+                        <span
+                          className={[
+                            "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
+                            customer.portal_status === "deactivated"
+                              ? "bg-rose-50 text-rose-700 ring-rose-200"
+                              : customer.portal_status === "active"
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                              : "bg-slate-100 text-slate-700 ring-slate-200",
+                          ].join(" ")}
+                        >
+                          {customer.portal_status ?? "invited"}
+                        </span>
+                        <div className="text-sm text-slate-600">
+                          {customer.bookingCount} booking{customer.bookingCount === 1 ? "" : "s"} • {customer.activeBookingCount} active
                         </div>
-                      </td>
-
-                        <td className="px-6 py-4 align-top">
-                            <div className="min-w-[220px] space-y-2">
-                                <div>
-                                <div className="text-sm text-slate-700">
-                                    <span className="font-medium text-slate-900">Phone:</span>{" "}
-                                    {formatPhone(customer.phone)}
-                                </div>
-
-                                {customer.phone ? (
-                                    <a
-                                    href={`tel:${customer.phone.replace(/\D/g, "")}`}
-                                    className="mt-1 inline-flex text-xs font-semibold text-[#F97316] hover:underline"
-                                    >
-                                    Call customer
-                                    </a>
-                                ) : null}
-                                </div>
-
-                                <div className="break-all text-sm text-slate-700">
-                                <span className="font-medium text-slate-900">Email:</span>{" "}
-                                {customer.email || "—"}
-                                </div>
-                            </div>
-                        </td>
-
-                      <td className="px-6 py-4 align-top">
-                        <div className="min-w-[140px] text-sm text-slate-700">
-                          {getLocationLabel(customer.primary_city, customer.primary_zip)}
-                        </div>
-                      </td>
-
-                        <td className="px-3 py-4 align-top text-center">
-                          <div
-                            className={
-                              isRepeat
-                                ? "inline-flex h-10 w-[56px] items-center justify-center rounded-2xl bg-[#F97316]/10 text-sm font-semibold text-[#F97316]"
-                                : "inline-flex h-10 w-[56px] items-center justify-center rounded-2xl bg-slate-100 text-sm font-semibold text-slate-900"
-                            }
-                          >
-                            {customer.booking_count}
-                          </div>
-                        </td>
-
-                        <td className="px-3 py-4 align-top text-center">
-                          <div
-                            className={
-                              customer.active_booking_count > 0
-                                ? "inline-flex h-10 w-[56px] items-center justify-center rounded-2xl bg-emerald-50 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200"
-                                : "inline-flex h-10 w-[56px] items-center justify-center rounded-2xl bg-slate-100 text-sm font-semibold text-slate-500"
-                            }
-                          >
-                            {customer.active_booking_count}
-                          </div>
-                        </td>
-
-                      <td className="px-3 py-4 align-top text-center text-sm text-slate-700">
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 align-top">
+                      {customer.latestBooking ? (
                         <div className="text-sm text-slate-700">
-                          {formatDate(customer.last_booking_at)}
+                          <div className="font-semibold text-slate-900">
+                            {getCustomerFacingBookingLabel(customer.latestBooking.booking_ref)}
+                          </div>
+                          <div className="mt-1">{formatDate(customer.latestBooking.delivery_date)}</div>
+                          <div className="mt-1 text-slate-500">
+                            {customer.latestBooking.customer_street || "Address pending"}
+                          </div>
                         </div>
-                      </td>
-
-                      <td className="px-3 py-4 align-top text-center text-sm font-semibold text-slate-900">
-                        <div className="text-sm font-semibold text-slate-900">
-                          {formatUsd(customer.lifetime_revenue)}
-                        </div>
-                      </td>
-
-                      <td className="px-3 py-4 align-top text-center">
-                        <div className="flex flex-col items-center gap-2">
-                          <Link
-                            href={`/admin/customers/${encodeURIComponent(customer.identifier)}`}
-                            className="inline-flex h-10 min-w-[120px] items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 whitespace-nowrap transition hover:bg-slate-50"
-                          >
-                            View
-                          </Link>
-
-                          <Link
-                            href={`/book?customer=${encodeURIComponent(customer.identifier)}`}
-                            className="inline-flex h-10 min-w-[120px] items-center justify-center rounded-2xl bg-[#F97316] px-4 text-sm font-semibold text-white whitespace-nowrap transition hover:bg-orange-600"
-                          >
-                            New booking
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      ) : (
+                        <span className="text-sm text-slate-500">No linked bookings</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 align-top text-sm font-semibold text-slate-900">
+                      {formatUsd(customer.lifetimeValue)}
+                    </td>
+                    <td className="px-6 py-4 align-top">
+                      <Link
+                        href={`/admin/customers/${customer.id}`}
+                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        View customer
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

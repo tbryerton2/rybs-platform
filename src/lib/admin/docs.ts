@@ -15,6 +15,52 @@ export type DocEntry = {
 
 export const docs: DocEntry[] = [
   {
+    slug: "customer-booking-identity",
+    title: "Customer + Booking Identity",
+    description:
+      "How customer accounts, booking references, and historical booking snapshots work together.",
+    sections: [
+      {
+        heading: "Core identity model",
+        bullets: [
+          "Customer-facing customer identity is the email address on the account.",
+          "Internal customer identity is a UUID.",
+          "Customer-facing booking identity is the booking reference, such as BK-482731.",
+          "Internal booking identity is still a UUID and should be used only for admin/support and integrations.",
+          "One customer can have many bookings.",
+        ],
+      },
+      {
+        heading: "Historical snapshot rule",
+        paragraphs: [
+          "Each booking stores its own contact and service-address snapshot at the time it was created. Updating the customer profile later does not rewrite historical booking records.",
+        ],
+        bullets: [
+          "Booking contact can differ from the account owner.",
+          "Service address can differ across bookings for the same customer.",
+          "Support should always verify both the customer account and the booking snapshot when something looks inconsistent.",
+        ],
+      },
+      {
+        heading: "How staff should search",
+        bullets: [
+          "If a customer calls in with a booking reference, search the booking by booking_ref first.",
+          "If they only know their email, search the customer/account by email and then review linked bookings.",
+          "If the account owner and booking contact differ, use the booking record as the operational source of truth for that job.",
+        ],
+      },
+      {
+        heading: "Examples",
+        bullets: [
+          "Same customer, different addresses: one customer UUID can have bookings for many service locations.",
+          "Same email, different booking contact name: the customer account email stays constant, while each booking keeps its own contact snapshot.",
+          "Customer updates email: the customer UUID stays the same, old bookings keep their historical booking_contact_email, and the admin history shows the email change.",
+          "Deactivated portal access: portal login is disabled, but the customer and booking history remain intact.",
+        ],
+      },
+    ],
+  },
+  {
     slug: "how-booking-works",
     title: "How Booking Works",
     description:

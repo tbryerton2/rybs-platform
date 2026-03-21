@@ -27,7 +27,7 @@ export function PortalBookingCard({
     <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-900">{getPortalRentalLabel(booking.id)}</div>
+          <div className="text-sm font-semibold text-slate-900">{getPortalRentalLabel(booking.booking_ref)}</div>
           <div className="mt-1 text-sm leading-6 text-slate-500">
             {booking.customer_street || "Address pending"}
             {booking.customer_city || booking.customer_zip

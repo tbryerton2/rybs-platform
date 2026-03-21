@@ -1,7 +1,5 @@
-export function getPortalRentalShortId(bookingId: string) {
-  return bookingId.slice(0, 8);
-}
+import { getCustomerFacingBookingLabel } from "@/lib/identity";
 
-export function getPortalRentalLabel(bookingId: string) {
-  return `Rental #${getPortalRentalShortId(bookingId)}`;
+export function getPortalRentalLabel(bookingRef: string | null | undefined) {
+  return `Rental ${getCustomerFacingBookingLabel(bookingRef)}`;
 }

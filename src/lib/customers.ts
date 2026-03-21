@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordEntityHistory } from "@/lib/entity-history";
+import { isValidEmail, normalizeEmail } from "@/lib/identity";
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -21,6 +23,7 @@ type CustomerRow = {
   primary_city: string | null;
   primary_zip: string | null;
   normalized_email?: string | null;
+  portal_status?: string | null;
 };
 
 function clean(value: string | null | undefined) {
@@ -28,18 +31,49 @@ function clean(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
-export function normalizeEmail(value: string | null | undefined) {
-  const cleaned = clean(value);
-  return cleaned ? cleaned.toLowerCase() : null;
-}
-
 export function normalizePhone(value: string | null | undefined) {
   const digits = (value ?? "").replace(/\D/g, "");
   return digits ? digits : null;
 }
 
+export { normalizeEmail, isValidEmail };
+
 function sameNormalizedName(a: string | null | undefined, b: string | null | undefined) {
   return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+}
+
+function isCustomerLocationForeignKeyError(errorLike: { message?: string | null } | string | null | undefined) {
+  const message =
+    typeof errorLike === "string" ? errorLike : typeof errorLike?.message === "string" ? errorLike.message : "";
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("customer_locations_customer_id_fkey") ||
+    (normalized.includes("customer_locations") && normalized.includes("foreign key"))
+  );
+}
+
+function getLegacyCustomerIdentifier(input: CustomerContactInput) {
+  const normalizedEmail = normalizeEmail(input.email);
+  if (normalizedEmail) {
+    return {
+      identifier: normalizedEmail,
+      identifier_type: "email" as const,
+    };
+  }
+
+  const normalizedPhone = normalizePhone(input.phone);
+  if (normalizedPhone) {
+    return {
+      identifier: normalizedPhone,
+      identifier_type: "phone" as const,
+    };
+  }
+
+  return {
+    identifier: null,
+    identifier_type: null,
+  };
 }
 
 async function findMatchingCustomer(
@@ -53,7 +87,7 @@ async function findMatchingCustomer(
     const emailLookup = await supabase
       .from("customers")
       .select(
-        "id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email",
+        "id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status",
       )
       .eq("normalized_email", normalizedEmail)
       .maybeSingle();
@@ -65,7 +99,7 @@ async function findMatchingCustomer(
 
     const fallbackEmailLookup = await supabase
       .from("customers")
-      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email")
+      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
       .ilike("email", normalizedEmail)
       .limit(1);
 
@@ -79,7 +113,7 @@ async function findMatchingCustomer(
   if (normalizedPhone && fullName) {
     const { data, error } = await supabase
       .from("customers")
-      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email")
+      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
       .not("phone", "is", null);
 
     if (error) throw new Error(error.message);
@@ -148,9 +182,69 @@ async function ensureCustomerLocation(
   });
 
   if (insertError) {
+    if (isCustomerLocationForeignKeyError(insertError)) {
+      console.warn("[customers] skipping customer_locations write after customer lookup/create", {
+        customerId,
+        message: insertError.message,
+      });
+      return;
+    }
     if (isPortalSchemaError(insertError)) return;
     throw new Error(insertError.message);
   }
+}
+
+async function resolvePersistedCustomerId(
+  supabase: SupabaseClient,
+  customer: CustomerRow | null,
+  input: CustomerContactInput,
+) {
+  if (customer?.id) {
+    const byId = await supabase.from("customers").select("id").eq("id", customer.id).maybeSingle();
+    if (byId.error && !isPortalSchemaError(byId.error)) {
+      throw new Error(byId.error.message);
+    }
+    if (byId.data?.id) {
+      return byId.data.id as string;
+    }
+  }
+
+  const normalizedEmail = normalizeEmail(input.email);
+  if (normalizedEmail) {
+    const byEmail = await supabase
+      .from("customers")
+      .select("id")
+      .eq("normalized_email", normalizedEmail)
+      .maybeSingle();
+
+    if (byEmail.error && !isPortalSchemaError(byEmail.error)) {
+      throw new Error(byEmail.error.message);
+    }
+    if (byEmail.data?.id) {
+      return byEmail.data.id as string;
+    }
+  }
+
+  const normalizedPhone = normalizePhone(input.phone);
+  const fullName = clean(input.fullName);
+  if (normalizedPhone && fullName) {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, name, phone")
+      .not("phone", "is", null);
+
+    if (error) throw new Error(error.message);
+
+    const exactPhoneMatch = (data ?? []).find(
+      (row) =>
+        normalizePhone(row.phone) === normalizedPhone &&
+        sameNormalizedName(row.name, fullName),
+    );
+
+    if (exactPhoneMatch?.id) return exactPhoneMatch.id as string;
+  }
+
+  throw new Error("Customer record could not be verified after lookup/create.");
 }
 
 export async function findOrCreateCustomerRecord(
@@ -164,44 +258,57 @@ export async function findOrCreateCustomerRecord(
   const city = clean(input.city);
   const zip = clean(input.zip);
 
+  if (email && !isValidEmail(email)) {
+    throw new Error("Please enter a valid email address.");
+  }
+
   if (!normalizeEmail(email) && !(normalizePhone(phone) && fullName)) {
     return null;
   }
 
   let customer = await findMatchingCustomer(supabase, input);
+  let customerCreated = false;
 
   if (!customer) {
+    const legacyIdentifier = getLegacyCustomerIdentifier(input);
+    const insertPayload = {
+      name: fullName,
+      email,
+      phone,
+      primary_street: street,
+      primary_city: city,
+      primary_zip: zip,
+      portal_status: "invited",
+      identifier: legacyIdentifier.identifier,
+      identifier_type: legacyIdentifier.identifier_type,
+    };
+
     let inserted = await supabase
       .from("customers")
-      .insert({
+      .insert(insertPayload)
+      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
+      .single();
+
+    if (inserted.error && isPortalSchemaError(inserted.error)) {
+      const fallbackPayload = {
         name: fullName,
         email,
         phone,
         primary_street: street,
         primary_city: city,
         primary_zip: zip,
-        portal_status: "invited",
-      })
-      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email")
-      .single();
+      };
 
-    if (inserted.error && isPortalSchemaError(inserted.error)) {
       inserted = await supabase
         .from("customers")
-        .insert({
-          name: fullName,
-          email,
-          phone,
-          primary_street: street,
-          primary_city: city,
-          primary_zip: zip,
-        })
-        .select("id, name, email, phone, primary_street, primary_city, primary_zip")
+        .insert(fallbackPayload)
+        .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
         .single();
     }
 
     if (inserted.error) throw new Error(inserted.error.message);
     customer = inserted.data as CustomerRow;
+    customerCreated = true;
   } else {
     const updates: Record<string, string> = {};
 
@@ -218,8 +325,24 @@ export async function findOrCreateCustomerRecord(
     }
   }
 
-  await ensureCustomerLocation(supabase, customer.id, input);
-  return customer.id;
+  const persistedCustomerId = await resolvePersistedCustomerId(supabase, customer, input);
+
+  await ensureCustomerLocation(supabase, persistedCustomerId, input);
+
+  if (customerCreated) {
+    await recordEntityHistory(supabase, [
+      {
+        entityType: "customer",
+        entityId: persistedCustomerId,
+        fieldName: "customer_created",
+        newValue: customer.email ?? customer.phone ?? customer.id,
+        changedByType: "system",
+        changeReason: "Customer record created from booking flow",
+      },
+    ]);
+  }
+
+  return persistedCustomerId;
 }
 
 export async function attachCustomerToBooking(

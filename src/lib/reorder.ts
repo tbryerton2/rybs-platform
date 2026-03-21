@@ -23,11 +23,12 @@ export type ReorderDraft = {
   placementPhotoUrl?: string | null;
   specialDeliveryInstructions?: string | null;
   reorderSourceBookingId?: string;
-  reorderSourceBookingShortId?: string;
+  reorderSourceBookingRef?: string | null;
 };
 
 export type ReorderSourceBookingRow = {
   id: string;
+  booking_ref?: string | null;
   customer_id: string | null;
   customer_name: string | null;
   customer_email: string | null;
@@ -74,13 +75,13 @@ export function buildReorderDraft(source: ReorderSourceBookingRow): ReorderDraft
     placementPhotoUrl: source.placement_photo_url,
     specialDeliveryInstructions: source.special_delivery_instructions,
     reorderSourceBookingId: source.id,
-    reorderSourceBookingShortId: source.id.slice(0, 8),
+    reorderSourceBookingRef: source.booking_ref ?? null,
   };
 }
 
-export function getReorderNotice(sourceBookingShortId: string | null | undefined) {
-  return sourceBookingShortId
-    ? `Based on your previous rental #${sourceBookingShortId}, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.`
+export function getReorderNotice(sourceBookingRef: string | null | undefined) {
+  return sourceBookingRef
+    ? `Based on ${sourceBookingRef}, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.`
     : "Based on your previous rental, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.";
 }
 

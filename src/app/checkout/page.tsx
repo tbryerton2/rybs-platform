@@ -46,7 +46,7 @@ type BookingDraft = {
   pickupMode?: "unspecified" | "date";
   pickupDate?: string; // YYYY-MM-DD (optional)
   reorderSourceBookingId?: string;
-  reorderSourceBookingShortId?: string;
+  reorderSourceBookingRef?: string | null;
 };
 
 function isYMD(s: string) {
@@ -264,8 +264,15 @@ export default function CheckoutPage() {
       }
 
       // 🚀 Redirect to success page
-      const bookingId = confirmJson.bookingId || draft.holdId; // fallback until bookingId exists
-      router.push(`/success?bookingId=${encodeURIComponent(bookingId)}`);
+      const bookingId = confirmJson.bookingId || draft.holdId;
+      const bookingRef = String(confirmJson.bookingRef ?? "").trim();
+      const bookingEmail = String(confirmJson.customerEmail ?? draft.customerEmail ?? "").trim();
+      const nextParams = new URLSearchParams({
+        bookingId: String(bookingId),
+        ...(bookingRef ? { bookingRef } : {}),
+        ...(bookingEmail ? { email: bookingEmail } : {}),
+      });
+      router.push(`/success?${nextParams.toString()}`);
     } catch {
       setError("Payment failed. Please try again.");
     } finally {
@@ -343,7 +350,7 @@ export default function CheckoutPage() {
                   <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm leading-6 text-slate-700">
                     <div className="font-semibold text-slate-900">New booking based on a previous rental</div>
                     <div className="mt-1">
-                      {getReorderNotice(draft.reorderSourceBookingShortId)}
+                      {getReorderNotice(draft.reorderSourceBookingRef)}
                     </div>
                   </div>
                 ) : null}

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { recordEntityHistory } from "@/lib/entity-history";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizeEmail } from "@/lib/customers";
 import { isPortalSchemaError } from "./schema";
@@ -17,8 +18,10 @@ type PortalCustomer = {
   primary_street: string | null;
   primary_city: string | null;
   primary_zip: string | null;
-  portal_status: "invited" | "active" | "disabled";
+  portal_status: "invited" | "active" | "deactivated";
   last_login_at: string | null;
+  deactivated_at?: string | null;
+  deactivation_reason?: string | null;
 };
 
 type PortalCustomerRow = PortalCustomer & {
@@ -27,7 +30,7 @@ type PortalCustomerRow = PortalCustomer & {
 };
 
 const PORTAL_CUSTOMER_SELECT =
-  "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email";
+  "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email, deactivated_at, deactivation_reason";
 const PORTAL_CUSTOMER_FALLBACK_SELECT = "id, name, email, phone, primary_street, primary_city, primary_zip";
 
 export function createPortalAuthClient() {
@@ -156,7 +159,7 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
   }
 
   if (!customer) return null;
-  if ((customer.portal_status ?? "active") === "disabled") return null;
+  if ((customer.portal_status ?? "active") === "deactivated") return null;
 
   return {
     id: customer.id,
@@ -169,6 +172,35 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
     portal_status: customer.portal_status ?? "active",
     last_login_at: customer.last_login_at ?? null,
   };
+}
+
+export async function deactivatePortalAccess(
+  customerId: string,
+  reason = "Customer requested portal deactivation",
+) {
+  const now = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from("customers")
+    .update({
+      portal_status: "deactivated",
+      deactivated_at: now,
+      deactivation_reason: reason,
+    })
+    .eq("id", customerId);
+
+  if (error) throw new Error(error.message);
+
+  await recordEntityHistory(supabaseAdmin, [
+    {
+      entityType: "customer",
+      entityId: customerId,
+      fieldName: "portal_status",
+      oldValue: "active",
+      newValue: "deactivated",
+      changedByType: "customer",
+      changeReason: reason,
+    },
+  ]);
 }
 
 export async function requirePortalCustomer() {

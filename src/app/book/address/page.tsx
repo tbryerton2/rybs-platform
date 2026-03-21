@@ -16,7 +16,7 @@ type BookingDraft = {
   customerCity?: string;
   customerZip?: string;
   reorderSourceBookingId?: string;
-  reorderSourceBookingShortId?: string;
+  reorderSourceBookingRef?: string | null;
 };
 
 type ZipStatus =
@@ -117,8 +117,8 @@ export default function AddressStepPage() {
       if (existing.customerPhone) setPhone(formatPhoneUS(existing.customerPhone));
       if (existing.customerStreet) setStreet(existing.customerStreet);
       if (existing.customerCity) setCity(existing.customerCity);
-      if (existing.reorderSourceBookingShortId) {
-        setReorderNotice(getReorderNotice(existing.reorderSourceBookingShortId));
+      if (existing.reorderSourceBookingRef) {
+        setReorderNotice(getReorderNotice(existing.reorderSourceBookingRef));
       }
 
       if (existing.reorderSourceBookingId) {
@@ -140,7 +140,7 @@ export default function AddressStepPage() {
 
       if (existing.reorderSourceBookingId === reorderFromQuery) {
         setReorderError(null);
-        setReorderNotice(getReorderNotice(existing.reorderSourceBookingShortId));
+        setReorderNotice(getReorderNotice(existing.reorderSourceBookingRef));
         return;
       }
     } catch {
@@ -179,7 +179,7 @@ export default function AddressStepPage() {
         setZip(nextZip);
         setZipStatus({ state: "idle" });
         setReorderError(null);
-        setReorderNotice(getReorderNotice(nextDraft.reorderSourceBookingShortId));
+        setReorderNotice(getReorderNotice(nextDraft.reorderSourceBookingRef));
       } catch {
         if (cancelled) return;
         setReorderError("We couldn’t reuse that past rental. You can still book manually.");

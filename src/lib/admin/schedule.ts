@@ -53,7 +53,7 @@ export async function getScheduleJobs(weekStartISO: string, weekEndISO: string) 
     }
 
     return (fallback.data ?? []).map((row) => ({
-      ...row,
+      ...((row as unknown as Record<string, unknown>) ?? {}),
       ...EMPTY_BOOKING_PLACEMENT_FIELDS,
     }));
   }

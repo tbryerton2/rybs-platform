@@ -1,9 +1,10 @@
 // src/app/api/confirm-booking/route.ts
 import { NextResponse } from "next/server";
-import { isBookingSchemaError } from "@/lib/booking-schema";
+import { createBookingRecord } from "@/lib/booking-records";
+import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabase } from "@/lib/supabase";
 import { getDefaultRentalDays } from "@/lib/config";
-import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
+import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -80,6 +81,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const serverSupabase = supabaseServer();
     const body = (await req.json().catch(() => ({}))) as ConfirmBody;
 
     const holdId = (body.holdId || "").trim();
@@ -222,46 +224,37 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Create booking row (confirmed)
-    // IMPORTANT: don't write pickup_mode yet (it is failing your DB check constraint)
-    const baseInsertRow = {
-      delivery_date: deliveryDate,
-      pickup_date: effectivePickup || null,
-      status: "confirmed" as const,
-      total_price_cents: normalizedTotalPriceCents,
-      customer_name: customerName || null,
-      customer_email: customerEmail || null,
-      customer_phone: customerPhone,
-      customer_street: customerStreet || null,
-      customer_city: customerCity || null,
-      customer_zip: customerZip || null,
-    };
-
-    const insertWithPlacementRow = {
-      ...baseInsertRow,
-      placement_preference: placement.placementPreference,
-      placement_details: placement.placementDetails,
-      access_issues: placement.accessIssues,
-      gate_instructions: placement.gateInstructions,
-      delivery_presence: placement.deliveryPresence,
-      alternate_contact_name: placement.alternateContactName,
-      alternate_contact_phone: placement.alternateContactPhone,
-      placement_photo_url: placement.placementPhotoUrl,
-      special_delivery_instructions: placement.specialDeliveryInstructions,
-    };
-
-    let placementPersistenceSkipped = false;
-
-    let insertBooking = await supabase.from("bookings").insert(insertWithPlacementRow).select("id").single();
-
-    if (insertBooking.error && isBookingSchemaError(insertBooking.error)) {
-      placementPersistenceSkipped = true;
-      console.warn("placement fields unavailable on bookings; retrying confirm-booking without placement columns");
-      insertBooking = await supabase.from("bookings").insert(baseInsertRow).select("id").single();
-    }
-
-
-    if (insertBooking.error) {
+    let createdBooking;
+    try {
+      createdBooking = await createBookingRecord({
+        supabase: serverSupabase,
+        booking: {
+          delivery_date: deliveryDate,
+          pickup_date: effectivePickup || null,
+          status: "confirmed",
+          total_price_cents: normalizedTotalPriceCents,
+        },
+        identity: {
+          customerName,
+          customerEmail,
+          customerPhone,
+          customerStreet,
+          customerCity,
+          customerZip,
+        },
+        placement: {
+          placement_preference: placement.placementPreference,
+          placement_details: placement.placementDetails,
+          access_issues: placement.accessIssues,
+          gate_instructions: placement.gateInstructions,
+          delivery_presence: placement.deliveryPresence,
+          alternate_contact_name: placement.alternateContactName,
+          alternate_contact_phone: placement.alternateContactPhone,
+          placement_photo_url: placement.placementPhotoUrl,
+          special_delivery_instructions: placement.specialDeliveryInstructions,
+        },
+      });
+    } catch (insertError) {
       // If booking insert fails, try to revert hold back to active (best-effort)
       await supabase
         .from("booking_holds")
@@ -270,28 +263,9 @@ export async function POST(req: Request) {
         .eq("status", "converting");
 
       return NextResponse.json(
-        { ok: false, error: insertBooking.error.message || "Booking creation failed." },
+        { ok: false, error: insertError instanceof Error ? insertError.message : "Booking creation failed." },
         { status: 500 }
       );
-    }
-
-    const serverSupabase = supabaseServer();
-
-    try {
-      await attachCustomerToBooking(
-        insertBooking.data.id,
-        {
-          fullName: customerName,
-          email: customerEmail,
-          phone: customerPhone,
-          street: customerStreet,
-          city: customerCity,
-          zip: customerZip,
-        },
-        serverSupabase,
-      );
-    } catch (customerLinkError) {
-      console.error("customer linkage failed after confirm-booking:", customerLinkError);
     }
 
     let reorderReferenceSkipped = false;
@@ -300,14 +274,14 @@ export async function POST(req: Request) {
     try {
       const reorderReferenceResult = await attachReorderReference(
         serverSupabase,
-        insertBooking.data.id,
+        createdBooking.bookingId,
         reorderSourceBookingId,
       );
       reorderReferenceSkipped = reorderReferenceResult.skipped;
 
       console.info("[confirm-booking] reorder reference attempt", {
         incomingReorderSourceBookingId: reorderSourceBookingId || null,
-        insertedBookingId: insertBooking.data.id,
+        insertedBookingId: createdBooking.bookingId,
         clientType: "service_role",
         result: reorderReferenceResult,
       });
@@ -321,7 +295,7 @@ export async function POST(req: Request) {
       const verification = await serverSupabase
         .from("bookings")
         .select("id, reordered_from_booking_id")
-        .eq("id", insertBooking.data.id)
+        .eq("id", createdBooking.bookingId)
         .maybeSingle();
 
       if (verification.error) {
@@ -332,7 +306,7 @@ export async function POST(req: Request) {
 
         console.info("[confirm-booking] reorder reference verification", {
           incomingReorderSourceBookingId: reorderSourceBookingId || null,
-          insertedBookingId: insertBooking.data.id,
+          insertedBookingId: createdBooking.bookingId,
           persistedReorderedFromBookingId: persistedReorderReference,
         });
       }
@@ -340,8 +314,8 @@ export async function POST(req: Request) {
       console.error("[confirm-booking] reorder reference verification threw:", verificationError);
     }
 
-    const ev = await supabase.from("booking_events").insert({
-      booking_id: insertBooking.data.id,
+    const ev = await serverSupabase.from("booking_events").insert({
+      booking_id: createdBooking.bookingId,
       type: "status_change",
       old_status: "pending",
       new_status: "confirmed",
@@ -351,13 +325,13 @@ export async function POST(req: Request) {
     if (ev.error) console.error("booking_events insert failed:", ev.error);
 
     const msg = await supabase.from("booking_messages").insert({
-      booking_id: insertBooking.data.id,
+      booking_id: createdBooking.bookingId,
       channel: "email",
       direction: "outbound",
       template: "booking_confirmed",
       to: customerEmail || null,
       subject: "Your dumpster rental is confirmed",
-      body: `Booking confirmed for ${deliveryDate}. Booking ID: ${insertBooking.data.id}`,
+      body: `Booking confirmed for ${deliveryDate}. Booking reference: ${getCustomerFacingBookingLabel(createdBooking.bookingRef)}.`,
       provider: "resend",
       status: "queued",
     }).select("id").single();
@@ -375,7 +349,9 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           ok: true,
-          bookingId: insertBooking.data.id,
+          bookingId: createdBooking.bookingId,
+          bookingRef: createdBooking.bookingRef,
+          customerEmail: customerEmail || null,
           warning: "Booking created, but hold status failed to finalize.",
         },
         { status: 200 }
@@ -384,11 +360,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      bookingId: insertBooking.data.id,
-      placementPersistenceSkipped,
+      bookingId: createdBooking.bookingId,
+      bookingRef: createdBooking.bookingRef,
+      customerEmail: customerEmail || null,
+      placementPersistenceSkipped: createdBooking.placementPersistenceSkipped,
       reorderReferenceSkipped,
       reorderReferencePersisted,
-      warning: placementPersistenceSkipped
+      warning: createdBooking.placementPersistenceSkipped
         ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
         : undefined,
     });

@@ -3,6 +3,7 @@ import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalDashboardData } from "@/lib/portal/data";
 import { getPortalRentalLabel } from "@/lib/portal/rental-number";
 import { canReorderBooking } from "@/lib/reorder";
+import { deactivatePortalAccountAction } from "./actions";
 import { PortalShell } from "../_components/portal-shell";
 import { PortalSubpageHeader } from "../_components/portal-subpage-header";
 import { PortalStatusBadge } from "../_components/portal-status-badge";
@@ -73,6 +74,14 @@ export default async function PortalAccountPage() {
               Portal account settings are read-only for now. Contact Tan Can Man if you need to
               update your default contact details.
             </div>
+            <form action={deactivatePortalAccountAction} className="mt-4">
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Deactivate account
+              </button>
+            </form>
           </div>
         </section>
 
@@ -179,7 +188,7 @@ export default async function PortalAccountPage() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                           <div className="text-sm font-semibold text-slate-900">
-                            {getPortalRentalLabel(booking.id)}
+                            {getPortalRentalLabel(booking.booking_ref)}
                           </div>
                           <div className="mt-1 text-sm leading-6 text-slate-500">
                             {booking.customer_street || "Address pending"}

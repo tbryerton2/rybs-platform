@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { isBookingSchemaError } from "@/lib/booking-schema";
+import { createBookingRecord } from "@/lib/booking-records";
+import { isValidEmail } from "@/lib/identity";
 import { supabaseServer } from "@/lib/supabase/server";
-import { attachCustomerToBooking, normalizePhone } from "@/lib/customers";
+import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
     if (!/^\d{5}$/.test(body.customer_zip ?? "")) {
       return NextResponse.json({ ok: false, error: "Invalid customer_zip" }, { status: 400 });
     }
+    if (!body.customer_email?.trim() || !isValidEmail(body.customer_email)) {
+      return NextResponse.json({ ok: false, error: "A valid customer_email is required" }, { status: 400 });
+    }
 
     const supabase = supabaseServer();
     const customerPhone = normalizePhone(body.customer_phone);
@@ -67,65 +71,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: placementError }, { status: 400 });
     }
 
-    const baseInsertRow = {
-      customer_name: body.customer_name.trim(),
-      customer_street: body.customer_street.trim(),
-      customer_city: body.customer_city?.trim() ?? null,
-      customer_zip: body.customer_zip,
-
-      service_county: body.service_county?.trim() ?? null,
-      service_town: body.service_town?.trim() ?? null,
-
-      delivery_date: body.delivery_date ?? null,
-      pickup_mode: body.pickup_mode ?? "request",
-      pickup_date: body.pickup_date ?? null,
-
-      total_price_cents: typeof body.total_price_cents === "number" ? body.total_price_cents : null,
-      customer_phone: customerPhone,
-      customer_email: body.customer_email?.trim() ?? null,
-      status: "draft" as const,
-    };
-
-    const insertWithPlacementRow = {
-      ...baseInsertRow,
-      placement_preference: placement.placementPreference,
-      placement_details: placement.placementDetails,
-      access_issues: placement.accessIssues,
-      gate_instructions: placement.gateInstructions,
-      delivery_presence: placement.deliveryPresence,
-      alternate_contact_name: placement.alternateContactName,
-      alternate_contact_phone: placement.alternateContactPhone,
-      placement_photo_url: placement.placementPhotoUrl,
-      special_delivery_instructions: placement.specialDeliveryInstructions,
-    };
-
-    let placementPersistenceSkipped = false;
-
-    let insertResult = await supabase.from("bookings").insert(insertWithPlacementRow).select("id").single();
-
-    if (insertResult.error && isBookingSchemaError(insertResult.error)) {
-      placementPersistenceSkipped = true;
-      console.warn("placement fields unavailable on bookings; retrying /api/bookings/create without placement columns");
-      insertResult = await supabase.from("bookings").insert(baseInsertRow).select("id").single();
-    }
-
-    const { data, error } = insertResult;
-
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    }
-
+    let createdBooking;
     try {
-      await attachCustomerToBooking(data.id, {
-        fullName: baseInsertRow.customer_name,
-        email: baseInsertRow.customer_email,
-        phone: baseInsertRow.customer_phone,
-        street: baseInsertRow.customer_street,
-        city: baseInsertRow.customer_city,
-        zip: baseInsertRow.customer_zip,
-      }, supabase);
-    } catch (customerLinkError) {
-      console.error("customer linkage failed for /api/bookings/create:", customerLinkError);
+      createdBooking = await createBookingRecord({
+        supabase,
+        booking: {
+          delivery_date: body.delivery_date ?? null,
+          pickup_mode: body.pickup_mode ?? "request",
+          pickup_date: body.pickup_date ?? null,
+          status: "draft",
+          total_price_cents: typeof body.total_price_cents === "number" ? body.total_price_cents : null,
+          service_county: body.service_county?.trim() ?? null,
+          service_town: body.service_town?.trim() ?? null,
+        },
+        identity: {
+          customerName: body.customer_name.trim(),
+          customerEmail: body.customer_email?.trim() ?? null,
+          customerPhone: customerPhone,
+          customerStreet: body.customer_street.trim(),
+          customerCity: body.customer_city?.trim() ?? null,
+          customerZip: body.customer_zip,
+        },
+        placement: {
+          placement_preference: placement.placementPreference,
+          placement_details: placement.placementDetails,
+          access_issues: placement.accessIssues,
+          gate_instructions: placement.gateInstructions,
+          delivery_presence: placement.deliveryPresence,
+          alternate_contact_name: placement.alternateContactName,
+          alternate_contact_phone: placement.alternateContactPhone,
+          placement_photo_url: placement.placementPhotoUrl,
+          special_delivery_instructions: placement.specialDeliveryInstructions,
+        },
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { ok: false, error: error instanceof Error ? error.message : "Booking creation failed" },
+        { status: 500 }
+      );
     }
 
     let reorderReferenceSkipped = false;
@@ -133,7 +116,7 @@ export async function POST(req: Request) {
     try {
       const reorderReferenceResult = await attachReorderReference(
         supabase,
-        data.id,
+        createdBooking.bookingId,
         body.reordered_from_booking_id,
       );
       reorderReferenceSkipped = reorderReferenceResult.skipped;
@@ -143,10 +126,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      booking_id: data.id,
-      placementPersistenceSkipped,
+      booking_id: createdBooking.bookingId,
+      booking_ref: createdBooking.bookingRef,
+      placementPersistenceSkipped: createdBooking.placementPersistenceSkipped,
       reorderReferenceSkipped,
-      warning: placementPersistenceSkipped
+      warning: createdBooking.placementPersistenceSkipped
         ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
         : undefined,
     });

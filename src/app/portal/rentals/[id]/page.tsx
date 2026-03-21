@@ -10,6 +10,7 @@ import { canReorderBooking } from "@/lib/reorder";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalRental, getPortalRequestSummary } from "@/lib/portal/data";
 import { getPortalRentalLabel } from "@/lib/portal/rental-number";
+import type { PortalBookingRequest } from "@/lib/portal/data";
 import { formatUsdFromCents } from "@/lib/money";
 import { PortalShell } from "../../_components/portal-shell";
 import { PortalStatusBadge } from "../../_components/portal-status-badge";
@@ -92,7 +93,7 @@ function ActionCard({
 function RequestHistoryCard({
   request,
 }: {
-  request: Awaited<ReturnType<typeof getPortalRental>>["requests"][number];
+  request: PortalBookingRequest;
 }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4">
@@ -147,7 +148,7 @@ export default async function PortalRentalDetailPage({
     <PortalShell pathname={`/portal/rentals/${booking.id}`}>
       <div className="space-y-6">
         <PortalSubpageHeader
-          title={getPortalRentalLabel(booking.id)}
+          title={getPortalRentalLabel(booking.booking_ref)}
           description={`${booking.customer_street || "Address pending"}${
             booking.customer_city || booking.customer_zip
               ? `, ${[booking.customer_city, booking.customer_zip].filter(Boolean).join(" ")}`

@@ -8,7 +8,9 @@ function isUuid(v: string) {
   );
 }
 
-export async function PATCH(req: Request, ctx: any) {
+type RouteContext = { params?: Promise<{ id?: string }> | { id?: string } };
+
+export async function PATCH(req: Request, ctx: RouteContext) {
   try {
     // ✅ Robust params handling
     const p = await Promise.resolve(ctx?.params ?? {});
@@ -41,7 +43,7 @@ export async function PATCH(req: Request, ctx: any) {
     // 0) Load current booking (need old status + email/phone)
     const { data: existing, error: getErr } = await supabaseAdmin
       .from("bookings")
-      .select("id,status,customer_email,customer_phone")
+      .select("id,status,booking_ref,customer_email,customer_phone")
       .eq("id", id)
       .single();
 
@@ -77,6 +79,7 @@ export async function PATCH(req: Request, ctx: any) {
 const shouldNotify = ["scheduled", "confirmed", "cancelled"].includes(nextStatus);
 const toEmail = (existing.customer_email ?? "").trim();
 
+const bookingRef = existing.booking_ref ?? id;
 let queued = false;
 
 if (shouldNotify && toEmail) {
@@ -87,9 +90,9 @@ if (shouldNotify && toEmail) {
   };
 
   const bodyByStatus: Record<string, string> = {
-    confirmed: `Your booking is confirmed. Booking ID: ${id}`,
-    scheduled: `Your delivery is scheduled. Booking ID: ${id}`,
-    cancelled: `Your booking has been cancelled. Booking ID: ${id}`,
+    confirmed: `Your booking is confirmed. Booking reference: ${bookingRef}`,
+    scheduled: `Your delivery is scheduled. Booking reference: ${bookingRef}`,
+    cancelled: `Your booking has been cancelled. Booking reference: ${bookingRef}`,
   };
 
   const { error: msgErr } = await supabaseAdmin.from("booking_messages").insert({
@@ -99,7 +102,7 @@ if (shouldNotify && toEmail) {
     template: `status_${nextStatus}`,
     to: toEmail,
     subject: subjectByStatus[nextStatus] ?? "Tin Can Man — Update",
-    body: bodyByStatus[nextStatus] ?? `Status updated to ${nextStatus}. Booking ID: ${id}`,
+    body: bodyByStatus[nextStatus] ?? `Status updated to ${nextStatus}. Booking reference: ${bookingRef}`,
     provider: null,
     provider_message_id: null,
     status: "queued",
@@ -118,9 +121,9 @@ if (shouldNotify && toEmail) {
 }
 
 return NextResponse.json({ ok: true, queued, toEmail, shouldNotify });
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
+      { ok: false, error: e instanceof Error ? e.message : "Unknown error" },
       { status: 500 }
     );
   }

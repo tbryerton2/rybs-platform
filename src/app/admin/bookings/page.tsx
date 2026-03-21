@@ -12,6 +12,7 @@ import {
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
+import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import {
   getPlacementCompactSignals,
   getPlacementDispatchSummary,
@@ -27,10 +28,14 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 type SearchParams = Record<string, string | string[] | undefined>;
 type BookingRow = {
   id: string;
+  booking_ref: string | null;
   created_at: string | null;
   status: string | null;
   reordered_from_booking_id: string | null;
   customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
   delivery_date: string | null;
@@ -90,11 +95,11 @@ function cardShell(extra = "") {
 const BOOKING_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
 
-const BOOKING_LIST_SELECT = `id, created_at, status, reordered_from_booking_id, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, ${BOOKING_PLACEMENT_SELECT}`;
+const BOOKING_LIST_SELECT = `id, booking_ref, created_at, status, reordered_from_booking_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, ${BOOKING_PLACEMENT_SELECT}`;
 const BOOKING_LIST_SELECT_WITH_REORDER_ONLY =
-  "id, created_at, status, reordered_from_booking_id, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
+  "id, booking_ref, created_at, status, reordered_from_booking_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
 const BASE_BOOKING_LIST_SELECT =
-  "id, created_at, status, customer_name, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
+  "id, booking_ref, created_at, status, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
 
 function withEmptyPlacementFields(
   rows: Array<
@@ -110,7 +115,10 @@ function withEmptyPlacementFields(
 }
 
 async function runBookingQuery(
-  build: (selectClause: string) => Promise<{ data: BookingRow[] | null; error: { message?: string | null } | null }>,
+  build: (selectClause: string) => PromiseLike<{
+    data: unknown[] | null;
+    error: { message?: string | null } | null;
+  }>,
 ) {
   const { data, error } = await build(BOOKING_LIST_SELECT);
 
@@ -119,7 +127,10 @@ async function runBookingQuery(
 
     if (!reorderFallback.error) {
       return withEmptyPlacementFields(
-        (reorderFallback.data ?? []) as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[],
+        (reorderFallback.data ?? []) as unknown as Omit<
+          BookingRow,
+          keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS
+        >[],
       );
     }
 
@@ -131,7 +142,10 @@ async function runBookingQuery(
       }
 
       return withEmptyPlacementFields(
-        (fallback.data ?? []) as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[],
+        (fallback.data ?? []) as unknown as Omit<
+          BookingRow,
+          keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS
+        >[],
       );
     }
 
@@ -234,6 +248,10 @@ function formatDateLabel(iso?: string | null) {
   }).format(new Date(y, m - 1, d));
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function startOfDayLocal(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -272,6 +290,7 @@ async function getBookings(filters: {
   dateFrom?: string;
   dateTo?: string;
   pickup?: string;
+  q?: string;
 }) {
   const today = todayISO();
 
@@ -289,6 +308,24 @@ async function getBookings(filters: {
     if (filters.zip) q = q.eq("customer_zip", filters.zip);
     if (filters.dateFrom) q = q.gte("delivery_date", filters.dateFrom);
     if (filters.dateTo) q = q.lte("delivery_date", filters.dateTo);
+    if (filters.q) {
+      const term = filters.q.replace(/,/g, " ").trim();
+      if (term) {
+        const clauses = [
+          `booking_ref.ilike.%${term}%`,
+          `customer_email.ilike.%${term}%`,
+          `customer_name.ilike.%${term}%`,
+          `customer_phone.ilike.%${term}%`,
+          `customer_street.ilike.%${term}%`,
+          `customer_city.ilike.%${term}%`,
+          `customer_zip.ilike.%${term}%`,
+        ];
+        if (isUuid(term)) clauses.push(`id.eq.${term}`);
+        q = q.or(
+          clauses.join(","),
+        );
+      }
+    }
 
     return q;
   });
@@ -375,7 +412,7 @@ function isHoldExpired(expires_at: string | null | undefined) {
 export default async function AdminBookingsPage({
   searchParams,
 }: {
-  searchParams?: SearchParams | Promise<SearchParams>;
+  searchParams?: Promise<SearchParams>;
 }) {
   const spObj = await Promise.resolve(searchParams ?? {});
 
@@ -385,6 +422,7 @@ export default async function AdminBookingsPage({
   const whenParam = sp(spObj, "when") || "";
   const statusParam = sp(spObj, "status") || "";
   const pickupParam = sp(spObj, "pickup") || "";
+  const q = (sp(spObj, "q") || "").trim();
   const zipRaw = sp(spObj, "zip") || "";
   const fromParam = sp(spObj, "from") || "";
   const toParam = sp(spObj, "to") || "";
@@ -446,6 +484,7 @@ export default async function AdminBookingsPage({
   if (when) baseQs.set("when", when);
   if (status) baseQs.set("status", status);
   if (pickup) baseQs.set("pickup", pickup);
+  if (q) baseQs.set("q", q);
   if (zip) baseQs.set("zip", zip);
   if (dateFrom) baseQs.set("from", dateFrom);
   if (dateTo) baseQs.set("to", dateTo);
@@ -460,7 +499,7 @@ export default async function AdminBookingsPage({
   const holdsExpiredHref = `/admin/bookings?${expiredQs.toString()}#holds`;
 
   const hasFilters =
-    when !== "current" || status !== "all" || Boolean(zip) || Boolean(dateFrom) || Boolean(dateTo);
+    when !== "current" || status !== "all" || Boolean(q) || Boolean(zip) || Boolean(dateFrom) || Boolean(dateTo);
 
   const isDefaultView = !hasFilters;
   const today = todayISO();
@@ -473,6 +512,7 @@ export default async function AdminBookingsPage({
           when,
           status,
           pickup,
+          q: q || undefined,
           zip: zip || undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
@@ -657,7 +697,7 @@ export default async function AdminBookingsPage({
                     <div className="min-w-0">
                       <div className="text-base font-semibold leading-5 text-slate-900">Filters</div>
                       <div className="mt-1 text-sm text-slate-500">
-                        Narrow bookings by date, status, pickup mode, and ZIP.
+                        Search by booking ref, UUID, email, phone, or address, then narrow by date, status, pickup mode, and ZIP.
                       </div>
                     </div>
                   </div>
@@ -693,6 +733,17 @@ export default async function AdminBookingsPage({
               <div className="border-t border-slate-200 bg-slate-50/70 px-6 py-6">
                 <form action="/admin/bookings" method="GET" className="grid gap-4">
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
+                    <div>
+                      <label className={labelClass}>Search</label>
+                      <div className="relative">
+                        <input
+                          name="q"
+                          defaultValue={q}
+                          placeholder="Booking ref, UUID, email, phone, address"
+                          className={controlClass}
+                        />
+                      </div>
+                    </div>
                     <div>
                       <label className={labelClass}>When</label>
                       <div className="relative">
@@ -888,6 +939,9 @@ export default async function AdminBookingsPage({
                             <>
                         {/* Row 1: Title + pills */}
                         <div className="flex flex-wrap items-center gap-2">
+                          <span className={pillBase("bg-slate-100 text-slate-700 ring-slate-200")}>
+                            {getCustomerFacingBookingLabel(b.booking_ref)}
+                          </span>
                           <div className="text-base font-semibold text-slate-900">
                             {b.customer_name ?? "—"}
                           </div>
@@ -958,7 +1012,7 @@ export default async function AdminBookingsPage({
 
                           {/* ID row */}
                           <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                            <span className="text-slate-500">ID:</span>
+                            <span className="text-slate-500">UUID:</span>
                             <span className="font-mono break-all">{b.id}</span>
 
                             {/* optional “copy” affordance (visual only, since this is server component) */}
@@ -968,12 +1022,7 @@ export default async function AdminBookingsPage({
                           </div>
 
                           {b.reordered_from_booking_id ? (
-                            <div className="mt-2 text-xs text-slate-500">
-                              Based on prior rental{" "}
-                              <span className="font-mono text-slate-700">
-                                {b.reordered_from_booking_id.slice(0, 8)}
-                              </span>
-                            </div>
+                            <div className="mt-2 text-xs text-slate-500">Based on prior rental</div>
                           ) : null}
 
                           {placementView.summary !== "No placement details collected" ? (

@@ -5,6 +5,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
+import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { formatUsdFromCents } from "@/lib/money";
 import {
@@ -63,6 +64,7 @@ type PickupMode = "request" | "schedule" | null;
 
 type Booking = {
   id: string;
+  booking_ref: string | null;
   customer_id: string | null;
   reordered_from_booking_id: string | null;
   created_at: string | null;
@@ -96,12 +98,23 @@ type Booking = {
 
 type BookingRelationshipSummary = {
   id: string;
+  booking_ref: string | null;
   customer_name: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
   delivery_date: string | null;
   created_at: string | null;
+};
+
+type BookingHistoryEntry = {
+  id: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by_type: string | null;
+  change_reason: string | null;
+  created_at: string;
 };
 
 function formatDate(value: string | null) {
@@ -309,6 +322,7 @@ export default async function AdminBookingDetailPage({
 
     const bookingSelect = `
       id,
+      booking_ref,
       customer_id,
       reordered_from_booking_id,
       created_at,
@@ -342,6 +356,7 @@ export default async function AdminBookingDetailPage({
 
     const baseBookingSelect = `
       id,
+      booking_ref,
       customer_id,
       reordered_from_booking_id,
       created_at,
@@ -366,6 +381,7 @@ export default async function AdminBookingDetailPage({
 
     const legacyBookingSelect = `
       id,
+      booking_ref,
       created_at,
       customer_name,
       customer_email,
@@ -407,12 +423,13 @@ export default async function AdminBookingDetailPage({
         .from("bookings")
         .select(legacyBookingSelect)
         .eq("id", id)
-        .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS | "customer_id" | "reordered_from_booking_id">>();
+        .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS | "customer_id" | "reordered_from_booking_id" | "booking_ref">>();
 
       booking = legacyFallback.data
         ? ({
             customer_id: null,
             reordered_from_booking_id: null,
+            booking_ref: null,
             ...legacyFallback.data,
             ...EMPTY_BOOKING_PLACEMENT_FIELDS,
           } as Booking)
@@ -442,11 +459,12 @@ export default async function AdminBookingDetailPage({
     priorCustomerBookingsResult,
     priorAddressBookingsResult,
     derivedFromThisBookingResult,
+    historyResult,
   ] = await Promise.all([
     booking.reordered_from_booking_id
       ? supabaseAdmin
           .from("bookings")
-          .select("id, customer_name, customer_street, customer_city, customer_zip, delivery_date, created_at")
+          .select("id, booking_ref, customer_name, customer_street, customer_city, customer_zip, delivery_date, created_at")
           .eq("id", booking.reordered_from_booking_id)
           .maybeSingle<BookingRelationshipSummary>()
       : Promise.resolve({ data: null, error: null }),
@@ -468,10 +486,17 @@ export default async function AdminBookingDetailPage({
       : Promise.resolve({ count: null, error: null }),
     supabaseAdmin
       .from("bookings")
-      .select("id, customer_name, delivery_date, created_at", { count: "exact" })
+      .select("id, booking_ref, customer_name, delivery_date, created_at", { count: "exact" })
       .eq("reordered_from_booking_id", booking.id)
       .order("created_at", { ascending: false })
       .limit(1),
+    supabaseAdmin
+      .from("entity_history")
+      .select("id, field_name, old_value, new_value, changed_by_type, change_reason, created_at")
+      .eq("entity_type", "booking")
+      .eq("entity_id", booking.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   if (sourceBookingResult.error && !isBookingSchemaError(sourceBookingResult.error)) {
@@ -485,6 +510,9 @@ export default async function AdminBookingDetailPage({
   }
   if (derivedFromThisBookingResult.error && !isBookingSchemaError(derivedFromThisBookingResult.error)) {
     throw new Error(derivedFromThisBookingResult.error.message);
+  }
+  if (historyResult.error && !isBookingSchemaError(historyResult.error)) {
+    throw new Error(historyResult.error.message);
   }
 
   const sourceBooking = isBookingSchemaError(sourceBookingResult.error)
@@ -502,9 +530,10 @@ export default async function AdminBookingDetailPage({
   const latestDerivedBooking = isBookingSchemaError(derivedFromThisBookingResult.error)
     ? null
     : ((derivedFromThisBookingResult.data ?? [])[0] as
-        | Pick<BookingRelationshipSummary, "id" | "customer_name" | "delivery_date" | "created_at">
+        | Pick<BookingRelationshipSummary, "id" | "booking_ref" | "customer_name" | "delivery_date" | "created_at">
         | undefined
         | null);
+  const bookingHistory = isBookingSchemaError(historyResult.error) ? [] : (historyResult.data ?? []);
 
   const futureDependencyDatesResult = await supabaseAdmin
     .from("bookings")
@@ -588,7 +617,7 @@ export default async function AdminBookingDetailPage({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Booking
+                {getCustomerFacingBookingLabel(booking.booking_ref)}
               </h1>
               <span
                 className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${statusClasses(
@@ -604,8 +633,8 @@ export default async function AdminBookingDetailPage({
               ) : null}
             </div>
 
-            <div className="mt-2 break-all text-sm text-slate-500">
-              {booking.id}
+            <div className="mt-2 text-sm text-slate-500">
+              Internal UUID: <span className="font-mono break-all">{booking.id}</span>
             </div>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -701,7 +730,7 @@ export default async function AdminBookingDetailPage({
                     </div>
                     <div className="mt-2 text-sm font-semibold text-slate-900">
                       <Link href={`/admin/bookings/${sourceBooking.id}`} className="hover:underline">
-                        Booking #{sourceBooking.id.slice(0, 8)}
+                        {getCustomerFacingBookingLabel(sourceBooking.booking_ref)}
                       </Link>
                     </div>
                     <div className="mt-1 text-sm text-slate-600">
@@ -733,7 +762,7 @@ export default async function AdminBookingDetailPage({
                     <div className="mt-2 text-sm text-slate-600">
                       Latest:{" "}
                       <Link href={`/admin/bookings/${latestDerivedBooking.id}`} className="font-medium text-slate-900 hover:underline">
-                        Booking #{latestDerivedBooking.id.slice(0, 8)}
+                        {getCustomerFacingBookingLabel(latestDerivedBooking.booking_ref)}
                       </Link>
                       {latestDerivedBooking.delivery_date
                         ? ` • Delivery ${formatDate(latestDerivedBooking.delivery_date)}`
@@ -1351,6 +1380,32 @@ export default async function AdminBookingDetailPage({
           <Section title="Financial" icon={<CurrencyDollarIcon className="h-4 w-4" />}>
             <div className="grid gap-4">
               <Field label="Price" value={formatUsdFromCents(booking.total_price_cents)} />
+            </div>
+          </Section>
+
+          <Section title="History" icon={<ClipboardDocumentListIcon className="h-4 w-4" />}>
+            <div className="space-y-3">
+              {bookingHistory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+                  No booking history recorded yet.
+                </div>
+              ) : (
+                (bookingHistory as BookingHistoryEntry[]).map((entry) => (
+                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <div className="text-sm font-semibold text-slate-900">
+                      {String(entry.field_name).replaceAll("_", " ")}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {entry.old_value ? `${entry.old_value} → ` : ""}
+                      {entry.new_value || "—"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {formatDateTime(entry.created_at)} • {entry.changed_by_type || "system"}
+                      {entry.change_reason ? ` • ${entry.change_reason}` : ""}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </Section>
 

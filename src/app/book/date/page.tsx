@@ -18,7 +18,7 @@ type BookingDraft = {
   customerCity?: string;
   customerZip?: string;
   reorderSourceBookingId?: string;
-  reorderSourceBookingShortId?: string;
+  reorderSourceBookingRef?: string | null;
 
   deliveryDate?: string;
 

@@ -118,7 +118,7 @@ export default async function PortalHomePage() {
                   Active rental
                 </div>
                   <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                    {getPortalRentalLabel(activeRental.id)}
+                    {getPortalRentalLabel(activeRental.booking_ref)}
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     {activeRental.customer_street || "Address pending"}

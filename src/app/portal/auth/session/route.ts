@@ -45,14 +45,16 @@ export async function POST(req: Request) {
         type: body.type as "email" | "magiclink" | "signup" | "recovery" | "invite",
       });
 
-      if (error || !data.session || !data.user.email) {
+      const verifiedUser = data.user;
+
+      if (error || !data.session || !verifiedUser?.email) {
         return badRequest("This sign-in link is invalid or expired.", 401);
       }
 
       accessToken = data.session.access_token;
       refreshToken = data.session.refresh_token;
-      userEmail = data.user.email;
-      userId = data.user.id;
+      userEmail = verifiedUser.email;
+      userId = verifiedUser.id;
     } else if (accessToken) {
       devPortalLog("callback_access_token_attempt", {
         hasAccessToken: true,
@@ -61,12 +63,14 @@ export async function POST(req: Request) {
       });
       const { data, error } = await authClient.auth.getUser(accessToken);
 
-      if (error || !data.user?.email) {
+      const authUser = data.user;
+
+      if (error || !authUser?.email) {
         return badRequest("We could not validate your portal session token.", 401);
       }
 
-      userEmail = data.user.email;
-      userId = data.user.id;
+      userEmail = authUser.email;
+      userId = authUser.id;
     } else {
       return badRequest("Portal callback did not include usable session data.");
     }

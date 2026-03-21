@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { bookingPlacementSchemaMessage, isBookingSchemaError } from "@/lib/booking-schema";
+import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
 import {
   sanitizePlacementDetails,
   validatePlacementDetails,
@@ -57,6 +58,14 @@ export async function updateBookingStatusAction(formData: FormData) {
   if (!id) throw new Error("Missing booking id");
   if (!status) throw new Error("Missing status");
 
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
   const updates: Record<string, unknown> = { status };
 
   // Sensible ops defaults
@@ -70,6 +79,14 @@ export async function updateBookingStatusAction(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await recordEntityHistory(
+    supabaseAdmin,
+    diffEntityFields("booking", id, current.data, { status }, ["status"], {
+      changedByType: "admin",
+      changeReason: "Updated booking status",
+    }),
+  );
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -85,12 +102,32 @@ export async function updateDeliveryDateAction(formData: FormData) {
 
   if (!id) throw new Error("Missing booking id");
 
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("delivery_date")
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
   const { error } = await supabaseAdmin
     .from("bookings")
     .update({ delivery_date })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await recordEntityHistory(
+    supabaseAdmin,
+    diffEntityFields(
+      "booking",
+      id,
+      current.data,
+      { delivery_date },
+      ["delivery_date"],
+      { changedByType: "admin", changeReason: "Updated delivery date" },
+    ),
+  );
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -108,6 +145,14 @@ export async function updatePickupDetailsAction(formData: FormData) {
   if (!id) throw new Error("Missing booking id");
   if (!pickup_mode) throw new Error("Missing pickup mode");
 
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("pickup_mode, pickup_date")
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
   const updates: Record<string, unknown> = {
     pickup_mode,
     pickup_date: pickup_mode === "request" ? null : pickup_date,
@@ -119,6 +164,18 @@ export async function updatePickupDetailsAction(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await recordEntityHistory(
+    supabaseAdmin,
+    diffEntityFields(
+      "booking",
+      id,
+      current.data,
+      { pickup_mode, pickup_date: pickup_mode === "request" ? null : pickup_date },
+      ["pickup_mode", "pickup_date"],
+      { changedByType: "admin", changeReason: "Updated pickup details" },
+    ),
+  );
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -186,6 +243,14 @@ export async function quickMarkDeliveredAction(formData: FormData) {
   const id = asString(formData.get("id"));
   if (!id) throw new Error("Missing booking id");
 
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
   const { error } = await supabaseAdmin
     .from("bookings")
     .update({
@@ -195,6 +260,18 @@ export async function quickMarkDeliveredAction(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await recordEntityHistory(supabaseAdmin, [
+    {
+      entityType: "booking",
+      entityId: id,
+      fieldName: "status",
+      oldValue: current.data.status,
+      newValue: "delivered",
+      changedByType: "admin",
+      changeReason: "Quick mark delivered",
+    },
+  ]);
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -206,6 +283,14 @@ export async function quickMarkPickedUpAction(formData: FormData) {
   const id = asString(formData.get("id"));
   if (!id) throw new Error("Missing booking id");
 
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
   const { error } = await supabaseAdmin
     .from("bookings")
     .update({
@@ -215,6 +300,18 @@ export async function quickMarkPickedUpAction(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await recordEntityHistory(supabaseAdmin, [
+    {
+      entityType: "booking",
+      entityId: id,
+      fieldName: "status",
+      oldValue: current.data.status,
+      newValue: "picked_up",
+      changedByType: "admin",
+      changeReason: "Quick mark picked up",
+    },
+  ]);
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -226,12 +323,32 @@ export async function quickCancelBookingAction(formData: FormData) {
   const id = asString(formData.get("id"));
   if (!id) throw new Error("Missing booking id");
 
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("status")
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
   const { error } = await supabaseAdmin
     .from("bookings")
     .update({ status: "cancelled" })
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+
+  await recordEntityHistory(supabaseAdmin, [
+    {
+      entityType: "booking",
+      entityId: id,
+      fieldName: "status",
+      oldValue: current.data.status,
+      newValue: "cancelled",
+      changedByType: "admin",
+      changeReason: "Quick cancel booking",
+    },
+  ]);
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");

@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useMemo, useState } from "react";
 import type { PortalBookingSummary } from "@/lib/portal/data";
-import { getPortalRentalLabel, getPortalRentalShortId } from "@/lib/portal/rental-number";
+import { getPortalRentalLabel } from "@/lib/portal/rental-number";
 import { PortalBookingCard } from "../_components/portal-booking-card";
 
 type SortOption = "newest" | "oldest";
@@ -20,8 +20,8 @@ function matchesBookingSearch(booking: PortalBookingSummary, query: string) {
   if (!normalizedQuery) return true;
 
   const haystack = [
-    getPortalRentalLabel(booking.id),
-    getPortalRentalShortId(booking.id),
+    getPortalRentalLabel(booking.booking_ref),
+    booking.booking_ref,
     booking.customer_street,
     booking.customer_city,
     booking.customer_zip,
