@@ -2,7 +2,11 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { ensureCustomerForEmail, normalizeEmail } from "@/lib/customers";
+import {
+  ensureCustomerForEmail,
+  normalizeEmail,
+  PORTAL_ACCESS_DEACTIVATED_ERROR,
+} from "@/lib/customers";
 import {
   createPortalAuthClient,
   devPortalLog,
@@ -44,6 +48,9 @@ export async function sendPortalLoginLinkAction(formData: FormData) {
   try {
     customerId = await ensureCustomerForEmail(email);
   } catch (error) {
+    if (error instanceof Error && error.message === PORTAL_ACCESS_DEACTIVATED_ERROR) {
+      redirect(`/portal/login?error=deactivated&email=${encodeURIComponent(email)}`);
+    }
     devPortalLog("login_lookup_failed", {
       email,
       message: error instanceof Error ? error.message : "unknown",

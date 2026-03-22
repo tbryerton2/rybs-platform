@@ -109,17 +109,17 @@ export function PortalAuthCallbackClient() {
   return (
     <div className="w-full rounded-[32px] border border-slate-200 bg-white px-6 py-10 text-center shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
       <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
-        Portal sign-in
+        Portal access
       </div>
 
       {state.status === "processing" ? (
         <>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-            Finishing sign-in
+            Finishing portal access
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-500">
             We are validating your secure link and setting up your portal session. If this is
-            your first portal sign-in, we are also activating your access now.
+            your first time here, we are also activating access for your booking email now.
           </p>
         </>
       ) : (
@@ -133,7 +133,7 @@ export function PortalAuthCallbackClient() {
               href="/portal/login"
               className="inline-flex items-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Back to portal login
+              Back to portal access
             </Link>
           </div>
         </>

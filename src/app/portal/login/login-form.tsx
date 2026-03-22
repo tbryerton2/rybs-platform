@@ -24,10 +24,12 @@ export function PortalLoginForm({
   action,
   initialEmail,
   initialCooldownSeconds,
+  blocked,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   initialEmail?: string;
   initialCooldownSeconds?: number;
+  blocked?: boolean;
 }) {
   const [email, setEmail] = useState(initialEmail ?? "");
   const [cooldownUntil] = useState(() => {
@@ -57,13 +59,18 @@ export function PortalLoginForm({
   }, [cooldownUntil]);
 
   const inCooldown = secondsRemaining > 0;
+  const isDisabled = blocked || inCooldown;
   const helperText = useMemo(() => {
+    if (blocked) {
+      return "Portal access is disabled for this account, so a secure access link cannot be sent.";
+    }
+
     if (!inCooldown) {
       return "Use the same email you booked with. We will send a one-tap magic link for portal access.";
     }
 
     return `To prevent spam and Supabase rate-limit issues, you can request another link in ${secondsRemaining}s.`;
-  }, [inCooldown, secondsRemaining]);
+  }, [blocked, inCooldown, secondsRemaining]);
 
   return (
     <form action={action} className="mt-8 space-y-5">
@@ -86,15 +93,15 @@ export function PortalLoginForm({
 
       <button
         type="submit"
-        disabled={inCooldown}
+        disabled={isDisabled}
         className={[
           "inline-flex w-full items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold text-white transition",
-          inCooldown
+          isDisabled
             ? "cursor-not-allowed bg-slate-300"
             : "bg-[#F97316] hover:bg-orange-600",
         ].join(" ")}
       >
-        {inCooldown ? `Try again in ${secondsRemaining}s` : "Send secure sign-in link"}
+        {blocked ? "Portal access disabled" : inCooldown ? `Try again in ${secondsRemaining}s` : "Send secure sign-in link"}
       </button>
     </form>
   );

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureCustomerForEmail } from "@/lib/customers";
+import { ensureCustomerForEmail, PORTAL_ACCESS_DEACTIVATED_ERROR } from "@/lib/customers";
 import {
   createPortalAuthClient,
   devPortalLog,
@@ -75,7 +75,15 @@ export async function POST(req: Request) {
       return badRequest("Portal callback did not include usable session data.");
     }
 
-    const customerId = await ensureCustomerForEmail(userEmail);
+    let customerId: string | null = null;
+    try {
+      customerId = await ensureCustomerForEmail(userEmail);
+    } catch (error) {
+      if (error instanceof Error && error.message === PORTAL_ACCESS_DEACTIVATED_ERROR) {
+        return badRequest("Portal access for this account is currently disabled. Please contact support if you need help.", 403);
+      }
+      throw error;
+    }
     if (!customerId) {
       devPortalLog("callback_customer_not_found", {
         email: userEmail,

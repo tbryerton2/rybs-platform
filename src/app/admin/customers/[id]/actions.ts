@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
+import { recordEntityHistory } from "@/lib/entity-history";
 import { isValidEmail } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -34,20 +34,47 @@ export async function updateCustomerIdentityAction(formData: FormData) {
     phone: phone || null,
   };
 
+  const historyEntries = [
+    current.data.email !== updates.email
+      ? {
+          entityType: "customer" as const,
+          entityId: id,
+          fieldName: "email",
+          oldValue: current.data.email,
+          newValue: updates.email,
+          changedByType: "admin" as const,
+          changeReason: "Updated customer account email",
+        }
+      : null,
+    current.data.name !== updates.name
+      ? {
+          entityType: "customer" as const,
+          entityId: id,
+          fieldName: "name",
+          oldValue: current.data.name,
+          newValue: updates.name,
+          changedByType: "admin" as const,
+          changeReason: "Updated customer account details",
+        }
+      : null,
+    current.data.phone !== updates.phone
+      ? {
+          entityType: "customer" as const,
+          entityId: id,
+          fieldName: "phone",
+          oldValue: current.data.phone,
+          newValue: updates.phone,
+          changedByType: "admin" as const,
+          changeReason: "Updated customer account details",
+        }
+      : null,
+  ].filter(Boolean);
+
   const { error } = await supabaseAdmin.from("customers").update(updates).eq("id", id);
   if (error) throw new Error(error.message);
 
-  const history = diffEntityFields(
-    "customer",
-    id,
-    current.data,
-    updates,
-    ["email", "name", "phone"],
-    { changedByType: "admin", changeReason: "Updated customer account details" },
-  );
-
-  if (history.length > 0) {
-    await recordEntityHistory(supabaseAdmin, history);
+  if (historyEntries.length > 0) {
+    await recordEntityHistory(supabaseAdmin, historyEntries);
   }
 
   revalidatePath("/admin/customers");

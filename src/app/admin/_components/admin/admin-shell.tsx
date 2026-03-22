@@ -85,7 +85,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             sidebarCollapsed ? "lg:pl-[110px]" : "lg:pl-[318px]",
           ].join(" ")}
         >
-          <div className="min-w-0">
+          <div className="min-w-0 px-4 sm:px-6 lg:px-8">
             <div className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 lg:rounded-[28px] lg:border lg:px-8 lg:py-5">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -96,9 +96,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                     {activeItem?.label ?? "Admin"}
                   </p>
                 </div>
-                <p className="hidden text-sm text-slate-500 md:block">
-                  Shared navigation shell for the operations workspace.
-                </p>
               </div>
             </div>
 

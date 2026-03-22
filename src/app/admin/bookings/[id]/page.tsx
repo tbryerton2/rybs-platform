@@ -34,6 +34,7 @@ import {
   updateNotesAction,
 } from "./actions";
 import PickupDetailsForm from "./pickup-details-form";
+import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 
 import {
   PhoneIcon,
@@ -45,7 +46,6 @@ import {
   ArrowUturnLeftIcon,
   ClipboardDocumentListIcon,
   ClockIcon,
-  CurrencyDollarIcon,
   FlagIcon,
   PencilSquareIcon,
   TruckIcon,
@@ -108,6 +108,24 @@ type BookingRelationshipSummary = {
 };
 
 type BookingHistoryEntry = {
+  id: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by_type: string | null;
+  change_reason: string | null;
+  created_at: string;
+};
+
+type LinkedCustomer = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  portal_status: string | null;
+};
+
+type CustomerHistoryEntry = {
   id: string;
   field_name: string;
   old_value: string | null;
@@ -291,9 +309,9 @@ function TimelineItem({
   isLast?: boolean;
 }) {
   return (
-    <div className="relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+    <div className="relative grid grid-cols-[auto_minmax(0,1fr)_minmax(180px,0.8fr)] items-start gap-x-4 gap-y-1">
       {!isLast && (
-        <div className="absolute left-[6px] top-3 bottom-[-12px] w-px bg-slate-200" />
+        <div className="absolute left-[6px] top-3 bottom-[-16px] w-px bg-slate-200" />
       )}
       <span
         className={`relative z-10 inline-flex h-3 w-3 rounded-full ring-4 ${timelineDotClasses(
@@ -302,12 +320,31 @@ function TimelineItem({
         )}`}
         aria-hidden="true"
       />
-      <div className={`min-w-0 text-sm font-medium ${active ? "text-slate-900" : "text-slate-700"}`}>
-        {label}
+      <div className="min-w-0">
+        <div className={`text-sm font-medium ${active ? "text-slate-900" : "text-slate-700"}`}>
+          {label}
+        </div>
       </div>
-      <div className="text-sm text-slate-500">{value}</div>
+      <div className="text-right text-sm text-slate-500">{value}</div>
     </div>
   );
+}
+
+function getSavedMessage(saved: string | undefined) {
+  switch (saved) {
+    case "notes":
+      return "Admin notes saved.";
+    case "status":
+      return "Booking status saved.";
+    case "delivery-date":
+      return "Delivery date saved.";
+    case "pickup-details":
+      return "Pickup details saved.";
+    case "placement":
+      return "Placement details saved.";
+    default:
+      return null;
+  }
 }
 
 export default async function AdminBookingDetailPage({
@@ -460,6 +497,8 @@ export default async function AdminBookingDetailPage({
     priorAddressBookingsResult,
     derivedFromThisBookingResult,
     historyResult,
+    linkedCustomerResult,
+    linkedCustomerHistoryResult,
   ] = await Promise.all([
     booking.reordered_from_booking_id
       ? supabaseAdmin
@@ -497,6 +536,23 @@ export default async function AdminBookingDetailPage({
       .eq("entity_id", booking.id)
       .order("created_at", { ascending: false })
       .limit(20),
+    booking.customer_id
+      ? supabaseAdmin
+          .from("customers")
+          .select("id, name, email, phone, portal_status")
+          .eq("id", booking.customer_id)
+          .maybeSingle<LinkedCustomer>()
+      : Promise.resolve({ data: null, error: null }),
+    booking.customer_id
+      ? supabaseAdmin
+          .from("entity_history")
+          .select("id, field_name, old_value, new_value, changed_by_type, change_reason, created_at")
+          .eq("entity_type", "customer")
+          .eq("entity_id", booking.customer_id)
+          .in("field_name", ["email", "name", "phone", "portal_status"])
+          .order("created_at", { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (sourceBookingResult.error && !isBookingSchemaError(sourceBookingResult.error)) {
@@ -513,6 +569,12 @@ export default async function AdminBookingDetailPage({
   }
   if (historyResult.error && !isBookingSchemaError(historyResult.error)) {
     throw new Error(historyResult.error.message);
+  }
+  if (linkedCustomerResult.error && !isBookingSchemaError(linkedCustomerResult.error)) {
+    throw new Error(linkedCustomerResult.error.message);
+  }
+  if (linkedCustomerHistoryResult.error && !isBookingSchemaError(linkedCustomerHistoryResult.error)) {
+    throw new Error(linkedCustomerHistoryResult.error.message);
   }
 
   const sourceBooking = isBookingSchemaError(sourceBookingResult.error)
@@ -534,6 +596,24 @@ export default async function AdminBookingDetailPage({
         | undefined
         | null);
   const bookingHistory = isBookingSchemaError(historyResult.error) ? [] : (historyResult.data ?? []);
+  const linkedCustomer = isBookingSchemaError(linkedCustomerResult.error)
+    ? null
+    : ((linkedCustomerResult.data ?? null) as LinkedCustomer | null);
+  const linkedCustomerHistory = isBookingSchemaError(linkedCustomerHistoryResult.error)
+    ? []
+    : ((linkedCustomerHistoryResult.data ?? []) as CustomerHistoryEntry[]);
+  const accountEmailDiffers =
+    !!linkedCustomer?.email &&
+    !!booking.customer_email &&
+    linkedCustomer.email.trim().toLowerCase() !== booking.customer_email.trim().toLowerCase();
+  const accountNameDiffers =
+    !!linkedCustomer?.name &&
+    !!booking.customer_name &&
+    linkedCustomer.name.trim() !== booking.customer_name.trim();
+  const accountPhoneDiffers =
+    !!linkedCustomer?.phone &&
+    !!booking.customer_phone &&
+    linkedCustomer.phone.trim() !== booking.customer_phone.trim();
 
   const futureDependencyDatesResult = await supabaseAdmin
     .from("bookings")
@@ -600,10 +680,62 @@ export default async function AdminBookingDetailPage({
     ? getPlacementDispatchSummary(placement)
     : "Placement fields unavailable in this environment";
   const hasPlacementData = placementSchemaAvailable && hasCollectedPlacementDetails(placement);
+  const savedMessage = getSavedMessage(saved);
+  const currentOperationalState = onSite
+    ? pickupPlanning.pickupStatus === "scheduled" && pickupPlanning.scheduledPickupDate
+      ? `On site • pickup scheduled ${formatDate(pickupPlanning.scheduledPickupDate)}`
+      : pickupPlanning.pickupStatus === "requested"
+        ? "On site • pickup requested"
+        : "On site • awaiting pickup request"
+    : deliveryPending
+      ? booking.delivery_date
+        ? `Awaiting delivery on ${formatDate(booking.delivery_date)}`
+        : "Awaiting delivery scheduling"
+      : booking.status === "picked_up"
+        ? booking.picked_up_at
+          ? `Completed • picked up ${formatDateTime(booking.picked_up_at)}`
+          : "Completed"
+        : booking.status === "cancelled"
+          ? "Cancelled"
+          : booking.status.replace("_", " ");
+  const nextActionLabel = canMarkDelivered
+    ? "Mark delivery complete"
+    : canSchedulePickup
+      ? "Schedule pickup"
+      : canMarkPickedUp
+        ? "Mark pickup complete"
+        : booking.status === "picked_up"
+          ? "No further operational action"
+        : booking.status === "cancelled"
+          ? "No further operational action"
+          : "Review booking status";
+  const nextActionNote =
+    canMarkDelivered
+      ? "Confirm delivery completion once the dumpster is on site."
+      : canSchedulePickup
+        ? "Set the real pickup date once the customer is ready."
+        : canMarkPickedUp
+          ? "Close the job once the dumpster has physically returned."
+          : booking.status === "picked_up"
+            ? "This booking is complete and now primarily serves as historical record."
+            : booking.status === "cancelled"
+              ? "This booking is closed unless staff need to document follow-up."
+              : "No immediate action is blocked, but staff can update the booking if needed.";
+  const operationalFocusNote =
+    pickupPlanning.riskMessage ??
+    (booking.status === "delivered" && pickupPlanning.pickupStatus === "requested"
+      ? "Customer requested pickup. Office needs to confirm the actual pickup date."
+      : deliveryPending
+        ? "Confirm delivery timing and keep the customer updated."
+        : booking.status === "picked_up"
+          ? "Historical record only unless follow-up is needed."
+          : "Booking is progressing normally.");
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8">
-      <div className="mb-6">
+    <div className="w-full space-y-6 py-8">
+      <AdminToastTrigger success={savedMessage} trigger={saved} clearParam="saved" />
+
+      <div>
         <Link
           href="/admin/bookings"
           className="text-sm font-medium text-slate-600 hover:text-slate-900"
@@ -612,10 +744,13 @@ export default async function AdminBookingDetailPage({
         </Link>
       </div>
 
-      <div className="mb-6 rounded-[32px] bg-white px-6 py-6 shadow-xl ring-1 ring-slate-200/70 sm:px-8">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+      <div className="rounded-[32px] bg-white px-6 py-6 shadow-xl ring-1 ring-slate-200/70 sm:px-8">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Booking command view
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
                 {getCustomerFacingBookingLabel(booking.booking_ref)}
               </h1>
@@ -637,23 +772,52 @@ export default async function AdminBookingDetailPage({
               Internal UUID: <span className="font-mono break-all">{booking.id}</span>
             </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <Field label="Delivery date" value={formatDate(booking.delivery_date)} />
-              <Field label="Created" value={formatDateTime(booking.created_at)} />
-              <Field
-                label="Pickup status"
-                value={
-                  pickupPlanning.pickupStatus === "scheduled"
-                    ? pickupPlanning.scheduledPickupDate
-                      ? `Scheduled for ${formatDate(pickupPlanning.scheduledPickupDate)}`
-                      : "Scheduled"
-                    : pickupPlanning.pickupStatusLabel
-                }
-              />
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+              <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Current state
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{currentOperationalState}</div>
+                <div className="mt-2 text-sm leading-6 text-slate-600">{operationalFocusNote}</div>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Next likely action
+                </div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{nextActionLabel}</div>
+                <div className="mt-2 text-sm text-slate-600">{nextActionNote}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="min-w-0 border-b border-slate-200/80 pb-3 sm:border-b-0 sm:pb-0 sm:pr-4 xl:border-r">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Delivery date</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">{formatDate(booking.delivery_date)}</div>
+                </div>
+                <div className="min-w-0 border-b border-slate-200/80 pb-3 sm:border-b-0 sm:pb-0 sm:pr-4 xl:border-r">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Created</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(booking.created_at)}</div>
+                </div>
+                <div className="min-w-0 xl:border-r xl:pr-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Pickup status</div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {pickupPlanning.pickupStatus === "scheduled"
+                      ? pickupPlanning.scheduledPickupDate
+                        ? `Scheduled for ${formatDate(pickupPlanning.scheduledPickupDate)}`
+                        : "Scheduled"
+                      : pickupPlanning.pickupStatusLabel}
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Booked with</div>
+                  <div className="mt-1 truncate text-sm font-medium text-slate-900">{booking.customer_email || "—"}</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row xl:flex-col">
+          <div className="flex flex-col gap-2 sm:flex-row xl:min-w-[220px] xl:self-center xl:flex-col xl:justify-center">
             {canMarkDelivered ? (
               <form action={quickMarkDeliveredAction}>
                 <input type="hidden" name="id" value={booking.id} />
@@ -703,7 +867,7 @@ export default async function AdminBookingDetailPage({
       </div>
 
       {booking.reordered_from_booking_id || derivedFromThisBookingCount > 0 ? (
-        <div className="mb-6 rounded-[32px] bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200/70 sm:px-8">
+        <div className="rounded-[32px] bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200/70 sm:px-8">
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)]">
             <div>
               <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
@@ -776,22 +940,22 @@ export default async function AdminBookingDetailPage({
         </div>
       ) : null}
 
-      <div className="mb-6 rounded-[32px] bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200/70 sm:px-8">
+      <div className="rounded-[32px] bg-white px-6 py-6 shadow-sm ring-1 ring-slate-200/70 sm:px-8">
         <div className="mb-6 border-b border-slate-200 pb-4">
           <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2.5 gap-y-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
               <ClockIcon className="h-4 w-4" />
             </span>
 
-            <h2 className="text-base font-semibold text-slate-900">Job timeline</h2>
+          <h2 className="text-base font-semibold text-slate-900">Booking timeline</h2>
 
-            <p className="col-start-2 text-sm text-slate-500">
-              Operational view of where this booking is in the lifecycle.
+          <p className="col-start-2 text-sm text-slate-500">
+              Historical record of lifecycle milestones already recorded on this booking.
             </p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <TimelineItem
             label="Booking created"
             value={formatDateTime(booking.created_at)}
@@ -841,7 +1005,7 @@ export default async function AdminBookingDetailPage({
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <div className="min-w-0 space-y-6">
-          <Section title="Customer" description="Contact and service location" icon={<UserIcon className="h-4 w-4" />}>
+          <Section title="Customer & service identity" description="Historical booking contact, current linked account, and service location" icon={<UserIcon className="h-4 w-4" />}>
             {priorCustomerBookingCount > 0 || priorAddressBookingCount > 0 ? (
               <div className="mb-6 flex flex-wrap gap-2">
                 {priorCustomerBookingCount > 0 ? (
@@ -857,85 +1021,162 @@ export default async function AdminBookingDetailPage({
               </div>
             ) : null}
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Customer name" value={booking.customer_name} />
-              <Field
-                label="Phone"
-                value={
-                  booking.customer_phone ? (
-                    <a
-                      href={toTelHref(booking.customer_phone)}
-                      className="font-medium text-slate-900 hover:underline"
+            <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-5 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Contact detail mapping
+                </div>
+                <div className="mt-2 text-sm text-slate-600">
+                  Compare the original booked-with contact snapshot against the currently linked customer account.
+                </div>
+              </div>
+
+              <div className="px-5 py-5">
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70">
+                  <div className="grid grid-cols-[minmax(120px,0.8fr)_minmax(0,1fr)] gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400 sm:grid-cols-[140px_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div>Field</div>
+                    <div>Booked-with snapshot</div>
+                    <div className="hidden sm:block">Current linked account</div>
+                  </div>
+
+                  {[
+                    {
+                      label: "Name",
+                      snapshot: booking.customer_name || "—",
+                      current: linkedCustomer?.name || "—",
+                    },
+                    {
+                      label: "Email",
+                      snapshot: booking.customer_email ? (
+                        <a href={`mailto:${booking.customer_email}`} className="font-medium text-slate-900 hover:underline">
+                          {booking.customer_email}
+                        </a>
+                      ) : (
+                        "—"
+                      ),
+                      current: linkedCustomer?.email ? (
+                        <a href={`mailto:${linkedCustomer.email}`} className="font-medium text-slate-900 hover:underline">
+                          {linkedCustomer.email}
+                        </a>
+                      ) : (
+                        "—"
+                      ),
+                    },
+                    {
+                      label: "Phone",
+                      snapshot: booking.customer_phone ? (
+                        <a href={toTelHref(booking.customer_phone)} className="font-medium text-slate-900 hover:underline">
+                          {booking.customer_phone}
+                        </a>
+                      ) : (
+                        "—"
+                      ),
+                      current: linkedCustomer?.phone ? (
+                        <a href={toTelHref(linkedCustomer.phone)} className="font-medium text-slate-900 hover:underline">
+                          {linkedCustomer.phone}
+                        </a>
+                      ) : (
+                        "—"
+                      ),
+                    },
+                  ].map((row, index) => (
+                    <div
+                      key={row.label}
+                      className={`grid grid-cols-[minmax(120px,0.8fr)_minmax(0,1fr)] gap-3 px-4 py-3 text-sm sm:grid-cols-[140px_minmax(0,1fr)_minmax(0,1fr)] ${
+                        index === 2 ? "" : "border-b border-slate-200"
+                      }`}
                     >
-                      {booking.customer_phone}
-                    </a>
+                      <div className="font-medium text-slate-500">{row.label}</div>
+                      <div className="min-w-0 text-slate-900">{row.snapshot}</div>
+                      <div className="min-w-0 text-slate-900 max-sm:col-start-2">
+                        <div className="sm:hidden text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 mb-1">
+                          Current linked account
+                        </div>
+                        {linkedCustomer ? row.current : <span className="text-slate-500">No linked account</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                    Linked account details
+                  </div>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <Field label="Portal status" value={linkedCustomer?.portal_status ?? "invited"} />
+                    <Field label="Linked customer ID" value={linkedCustomer?.id ?? "No linked account"} />
+                    <Field label="Account state" value={linkedCustomer ? "Customer account linked" : "No linked account"} />
+                  </div>
+                </div>
+
+                <div
+                  className={`mt-4 rounded-2xl px-4 py-3 text-sm leading-6 ring-1 ${
+                    linkedCustomer && !(accountEmailDiffers || accountNameDiffers || accountPhoneDiffers)
+                      ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
+                      : linkedCustomer
+                        ? "bg-amber-50 text-amber-900 ring-amber-200"
+                        : "bg-slate-50 text-slate-600 ring-slate-200"
+                  }`}
+                >
+                  {linkedCustomer ? (
+                    accountEmailDiffers || accountNameDiffers || accountPhoneDiffers ? (
+                      "This booking keeps its original booked-with snapshot. The linked customer account now differs from the original booking identity."
+                    ) : (
+                      "The linked customer account currently matches the original booking identity."
+                    )
                   ) : (
-                    "—"
-                  )
-                }
-              />
-              <Field
-                label="Email"
-                value={
-                  booking.customer_email ? (
-                    <a
-                      href={`mailto:${booking.customer_email}`}
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      {booking.customer_email}
-                    </a>
-                  ) : (
-                    "—"
-                  )
-                }
-              />
+                    "No linked customer account is attached to this booking yet."
+                  )}
+                </div>
+              </div>
             </div>
 
             {booking.customer_phone || booking.customer_email ? (
-  <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-200 pt-6">
-    {booking.customer_phone ? (
-      <>
-        <a
-          href={toTelHref(booking.customer_phone)}
-          className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          <PhoneIcon className="h-4 w-4" />
-          Call customer
-        </a>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Customer communication
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  {booking.customer_phone ? (
+                    <>
+                      <a
+                        href={toTelHref(booking.customer_phone)}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                      >
+                        <PhoneIcon className="h-4 w-4" />
+                        Call customer
+                      </a>
 
-        <a
-          href={toSmsHref(booking.customer_phone)}
-          className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-        >
-          <ChatBubbleLeftRightIcon className="h-4 w-4" />
-          Text customer
-        </a>
-      </>
-    ) : null}
+                      <a
+                        href={toSmsHref(booking.customer_phone)}
+                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <ChatBubbleLeftRightIcon className="h-4 w-4" />
+                        Text customer
+                      </a>
+                    </>
+                  ) : null}
 
-    {booking.customer_email ? (
-      <a
-        href={`mailto:${booking.customer_email}`}
-        className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-      >
-        <EnvelopeIcon className="h-4 w-4" />
-        Email customer
-      </a>
-    ) : null}
-  </div>
-) : null}
+                  {booking.customer_email ? (
+                    <a
+                      href={`mailto:${booking.customer_email}`}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <EnvelopeIcon className="h-4 w-4" />
+                      Email customer
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
-            <div className="mt-6 border-t border-slate-200 pt-6">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Service address
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Service location
               </div>
               <div className="mt-2 text-sm leading-6 text-slate-900">
                 <div>{booking.customer_street || "—"}</div>
-                <div>
-                  {[booking.customer_city, booking.customer_zip]
-                    .filter(Boolean)
-                    .join(", ") || "—"}
-                </div>
+                <div>{[booking.customer_city, booking.customer_zip].filter(Boolean).join(", ") || "—"}</div>
               </div>
               <div className="mt-6 grid gap-5 border-t border-slate-200 pt-6 sm:grid-cols-2">
                 <Field label="Service town" value={booking.service_town} />
@@ -945,14 +1186,8 @@ export default async function AdminBookingDetailPage({
           </Section>
 
           <div id="delivery">
-            <Section title="Delivery details" description="Control delivery timing and state" icon={<TruckIcon className="h-4 w-4" />}>
+            <Section title="Delivery details" description="Current delivery configuration and editable operational controls" icon={<TruckIcon className="h-4 w-4" />}>
               <div className="max-w-[820px] space-y-5">
-                {saved === "delivery-date" ? (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                    Delivery date saved.
-                  </div>
-                ) : null}
-
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-semibold text-slate-900">Delivery state:</span>
@@ -995,14 +1230,8 @@ export default async function AdminBookingDetailPage({
           </div>
 
           <div id="pickup">
-            <Section title="Pickup details" description="Handle pickup requests and scheduling" icon={<ArrowUturnLeftIcon className="h-4 w-4" />}>
+            <Section title="Pickup details" description="Current pickup state, scheduling risk, and editable pickup controls" icon={<ArrowUturnLeftIcon className="h-4 w-4" />}>
               <div className="max-w-[820px] space-y-5">
-                {saved === "pickup-details" ? (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                    Pickup details saved.
-                  </div>
-                ) : null}
-
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
@@ -1079,12 +1308,6 @@ export default async function AdminBookingDetailPage({
                   </div>
                 ) : null}
 
-                {saved === "placement" ? (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                    Placement details saved.
-                  </div>
-                ) : null}
-
                 {placementError ? (
                   <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
                     {placementError}
@@ -1157,7 +1380,7 @@ export default async function AdminBookingDetailPage({
                 ) : null}
 
                 {placementSchemaAvailable ? (
-                  <details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white" open={saved === "placement" || Boolean(placementError)}>
+                  <details className="group overflow-hidden rounded-2xl border border-slate-200 bg-white" open={Boolean(placementError)}>
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
                       <div>
                         <div className="text-sm font-semibold text-slate-900">Edit placement details</div>
@@ -1327,6 +1550,7 @@ export default async function AdminBookingDetailPage({
                   {booking.status === "picked_up" && "Completed"}
                   {booking.status === "cancelled" && "Cancelled"}
                 </div>
+                <div className="mt-2 text-sm leading-6 text-slate-600">{nextActionLabel}</div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <Field label="Job type" value={booking.job_type} />
@@ -1369,53 +1593,31 @@ export default async function AdminBookingDetailPage({
                 </div>
               </div>
               <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Delivered at" value={formatDateTime(booking.delivered_at)} />
-                <Field label="Picked up at" value={formatDateTime(booking.picked_up_at)} />
-              </div>
-            </div>
-            </div>
-          </Section>
-
-          <Section title="Financial" icon={<CurrencyDollarIcon className="h-4 w-4" />}>
-            <div className="grid gap-4">
-              <Field label="Price" value={formatUsdFromCents(booking.total_price_cents)} />
-            </div>
-          </Section>
-
-          <Section title="History" icon={<ClipboardDocumentListIcon className="h-4 w-4" />}>
-            <div className="space-y-3">
-              {bookingHistory.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
-                  No booking history recorded yet.
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Lifecycle timestamps
                 </div>
-              ) : (
-                (bookingHistory as BookingHistoryEntry[]).map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-                    <div className="text-sm font-semibold text-slate-900">
-                      {String(entry.field_name).replaceAll("_", " ")}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      {entry.old_value ? `${entry.old_value} → ` : ""}
-                      {entry.new_value || "—"}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {formatDateTime(entry.created_at)} • {entry.changed_by_type || "system"}
-                      {entry.change_reason ? ` • ${entry.change_reason}` : ""}
-                    </div>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <Field label="Delivered at" value={formatDateTime(booking.delivered_at)} />
+                  <Field label="Picked up at" value={formatDateTime(booking.picked_up_at)} />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Financial</div>
+                    <div className="mt-1 text-sm text-slate-500">Compact commercial context for this booking.</div>
                   </div>
-                ))
-              )}
+                </div>
+                <div className="mt-3">
+                  <Field label="Price" value={formatUsdFromCents(booking.total_price_cents)} />
+                </div>
+              </div>
             </div>
           </Section>
 
           <div id="status">
-            <Section title="Status" icon={<FlagIcon className="h-4 w-4" />}>
-              {saved === "status" ? (
-                <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                  Status saved.
-                </div>
-              ) : null}
+            <Section title="Status controls" description="Editable current-state controls for office staff." icon={<FlagIcon className="h-4 w-4" />}>
               <form action={updateBookingStatusAction} className="space-y-3">
                 <input type="hidden" name="id" value={booking.id} />
 
@@ -1447,13 +1649,7 @@ export default async function AdminBookingDetailPage({
           </div>
 
           <div id="notes">
-            <Section title="Admin notes" icon={<PencilSquareIcon className="h-4 w-4" />}>
-              {saved === "notes" ? (
-                <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-                  Notes saved.
-                </div>
-              ) : null}
-
+            <Section title="Admin notes" description="Freeform internal context that supports, but does not replace, structured operational data." icon={<PencilSquareIcon className="h-4 w-4" />}>
               <form action={updateNotesAction} className="space-y-4">
                 <input type="hidden" name="id" value={booking.id} />
 
@@ -1479,6 +1675,57 @@ export default async function AdminBookingDetailPage({
               </form>
             </Section>
           </div>
+
+          <Section title="History" description="Historical audit trail for booking changes and linked customer-account updates." icon={<ClipboardDocumentListIcon className="h-4 w-4" />}>
+            <div className="space-y-3">
+              {bookingHistory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+                  No booking history recorded yet.
+                </div>
+              ) : (
+                (bookingHistory as BookingHistoryEntry[]).map((entry) => (
+                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <div className="text-sm font-semibold text-slate-900">
+                      {String(entry.field_name).replaceAll("_", " ")}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {entry.old_value ? `${entry.old_value} → ` : ""}
+                      {entry.new_value || "—"}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {formatDateTime(entry.created_at)} • {entry.changed_by_type || "system"}
+                      {entry.change_reason ? ` • ${entry.change_reason}` : ""}
+                    </div>
+                  </div>
+                ))
+              )}
+
+              {linkedCustomerHistory.length > 0 ? (
+                <div className="pt-3">
+                  <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Linked customer account changes
+                  </div>
+                  <div className="space-y-3">
+                    {linkedCustomerHistory.map((entry) => (
+                      <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div className="text-sm font-semibold text-slate-900">
+                          Customer {String(entry.field_name).replaceAll("_", " ")}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          {entry.old_value ? `${entry.old_value} → ` : ""}
+                          {entry.new_value || "—"}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {formatDateTime(entry.created_at)} • {entry.changed_by_type || "system"}
+                          {entry.change_reason ? ` • ${entry.change_reason}` : ""}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </Section>
 
   
         </div>

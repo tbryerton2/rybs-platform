@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getOptionalPortalCustomer } from "@/lib/portal/auth";
 import { redirect } from "next/navigation";
 import { sendPortalLoginLinkAction } from "./actions";
@@ -20,8 +19,8 @@ function getMessage(searchParams: SearchParams) {
     return {
       tone: "success",
       text: email
-        ? `We sent a secure sign-in link to ${email}.`
-        : "We sent a secure sign-in link to your email.",
+        ? `We sent a secure access link to ${email}.`
+        : "We sent a secure access link to your email.",
     } as const;
   }
 
@@ -31,27 +30,32 @@ function getMessage(searchParams: SearchParams) {
     case "not-found":
       return {
         tone: "error",
-        text: "We could not find a portal-ready customer record for that email yet.",
+        text: "We could not find a portal account for that email yet. Use the email you booked with.",
       } as const;
     case "send-failed":
       return {
         tone: "error",
-        text: "We could not send your sign-in link right now. Please try again.",
+        text: "We could not send your access link right now. Please try again.",
       } as const;
     case "rate-limited":
       return {
         tone: "error",
-        text: "You requested too many sign-in emails too quickly. Please wait a minute before trying again.",
+        text: "You requested too many access emails too quickly. Please wait a minute before trying again.",
       } as const;
     case "lookup-failed":
       return {
         tone: "error",
-        text: "We hit a customer lookup problem before sending the sign-in email.",
+        text: "We hit a problem finding your portal account before sending the access email.",
+      } as const;
+    case "deactivated":
+      return {
+        tone: "error",
+        text: "Portal access for this account is currently disabled. Please contact support if you need help.",
       } as const;
     case "invalid-link":
       return {
         tone: "error",
-        text: "That sign-in link is invalid or expired. Request a new one below.",
+        text: "That access link is invalid or expired. Request a new one below.",
       } as const;
     default:
       return null;
@@ -70,28 +74,29 @@ export default async function PortalLoginPage({
   const message = getMessage(resolvedSearchParams);
   const email = readValue(resolvedSearchParams, "email") ?? "";
   const cooldown = Number(readValue(resolvedSearchParams, "cooldown") ?? "0");
-  const isRateLimited = readValue(resolvedSearchParams, "error") === "rate-limited";
+  const error = readValue(resolvedSearchParams, "error");
+  const isRateLimited = error === "rate-limited";
+  const isDeactivated = error === "deactivated";
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-10rem)] max-w-6xl items-center px-4 py-12 sm:px-6 lg:px-8">
       <div className="grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-[36px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 px-6 py-8 text-white shadow-[0_30px_80px_rgba(15,23,42,0.2)] sm:px-8 sm:py-10">
           <div className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-orange-200">
-            Tan Can Man Portal
+            Customer portal
           </div>
           <h1 className="mt-6 max-w-lg text-4xl font-semibold tracking-tight sm:text-5xl">
-            Track your dumpster rental like a premium service appointment.
+            Access your bookings with the same email you used to book.
           </h1>
           <p className="mt-4 max-w-xl text-sm leading-7 text-slate-300 sm:text-base">
-            See what is happening now, what comes next, and request pickup or help without
-            waiting on the phone.
+            Manage current rentals, review past bookings, and start a new order with your previous setup already filled in.
           </p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {[
-              ["Live status", "Know exactly where your rental stands."],
-              ["Next step", "Clear guidance for delivery, pickup, and timing."],
-              ["Self-service", "Request pickup or help in a few taps."],
+              ["Track bookings", "See the latest status, timing, and next steps."],
+              ["Manage online", "Request pickup, more time, or help in a few taps."],
+              ["Book again", "Reuse a previous setup without starting from scratch."],
             ].map(([title, copy]) => (
               <div key={title} className="rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="text-sm font-semibold text-white">{title}</div>
@@ -103,14 +108,16 @@ export default async function PortalLoginPage({
 
         <section className="rounded-[32px] border border-slate-200 bg-white px-6 py-8 shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:px-8">
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
-            Sign in
+            Portal access
           </div>
           <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            Email me a secure access link
+            Access your portal
           </h2>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            Use the same email you booked with. We will send a one-tap magic link for portal
-            access. First-time portal access is expected to activate your secure login automatically.
+            Use the same email you booked with. We will send a secure access link so you can open your portal and manage your bookings.
+          </p>
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            New here? Your booking email is enough to get started. Returning? Use that same email to get back into your portal securely.
           </p>
 
           {message ? (
@@ -129,6 +136,7 @@ export default async function PortalLoginPage({
             action={sendPortalLoginLinkAction}
             initialEmail={email}
             initialCooldownSeconds={cooldown > 0 ? cooldown : undefined}
+            blocked={isDeactivated}
           />
 
           {process.env.NODE_ENV === "development" && isRateLimited ? (
@@ -138,8 +146,8 @@ export default async function PortalLoginPage({
             </div>
           ) : null}
 
-          <div className="mt-6 text-sm text-slate-500">
-            Need help? <Link href="tel:+1-315-555-0123" className="font-medium text-slate-900">Call or text Tan Can Man</Link>.
+          <div className="mt-6 text-sm leading-6 text-slate-500">
+            We will keep the experience secure and simple today, while leaving room for stronger account sign-in options later.
           </div>
         </section>
       </div>

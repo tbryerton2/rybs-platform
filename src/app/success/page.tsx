@@ -52,14 +52,14 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
                 href="/portal"
                 className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-6 font-semibold text-white shadow-sm transition hover:bg-[#EA580C]"
               >
-                Go to portal
+                Go to my portal
               </Link>
             ) : (
               <Link
                 href={portalHref}
                 className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-6 font-semibold text-white shadow-sm transition hover:bg-[#EA580C]"
               >
-                Access your portal
+                Access my portal
               </Link>
             )}
             <Link

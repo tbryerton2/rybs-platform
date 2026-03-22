@@ -26,9 +26,17 @@ type CustomerRow = {
   portal_status?: string | null;
 };
 
+export const PORTAL_ACCESS_DEACTIVATED_ERROR = "PORTAL_ACCESS_DEACTIVATED";
+
 function clean(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function assertPortalAccessEnabled(customer: Pick<CustomerRow, "portal_status"> | null) {
+  if ((customer?.portal_status ?? "active") === "deactivated") {
+    throw new Error(PORTAL_ACCESS_DEACTIVATED_ERROR);
+  }
 }
 
 export function normalizePhone(value: string | null | undefined) {
@@ -310,6 +318,7 @@ export async function findOrCreateCustomerRecord(
     customer = inserted.data as CustomerRow;
     customerCreated = true;
   } else {
+    assertPortalAccessEnabled(customer);
     const updates: Record<string, string> = {};
 
     if (!customer.name && fullName) updates.name = fullName;
@@ -326,6 +335,8 @@ export async function findOrCreateCustomerRecord(
   }
 
   const persistedCustomerId = await resolvePersistedCustomerId(supabase, customer, input);
+
+  assertPortalAccessEnabled(customer);
 
   await ensureCustomerLocation(supabase, persistedCustomerId, input);
 
@@ -374,20 +385,27 @@ export async function ensureCustomerForEmail(
 
   const { data: existing, error: existingError } = await supabase
     .from("customers")
-    .select("id")
+    .select("id, portal_status")
     .eq("normalized_email", normalizedEmail)
     .maybeSingle();
 
-  if (!existingError && existing?.id) return existing.id as string;
+  if (!existingError && existing?.id) {
+    assertPortalAccessEnabled(existing as CustomerRow);
+    return existing.id as string;
+  }
 
   const emailFallback = await supabase
     .from("customers")
-    .select("id")
+    .select("id, portal_status")
     .ilike("email", normalizedEmail)
     .limit(1);
 
   if (emailFallback.error) throw new Error(emailFallback.error.message);
-  if ((emailFallback.data ?? []).length > 0) return emailFallback.data?.[0]?.id as string;
+  if ((emailFallback.data ?? []).length > 0) {
+    const fallbackCustomer = emailFallback.data?.[0] as CustomerRow;
+    assertPortalAccessEnabled(fallbackCustomer);
+    return fallbackCustomer.id as string;
+  }
 
   if (existingError && !isPortalSchemaError(existingError)) {
     throw new Error(existingError.message);
@@ -420,6 +438,20 @@ export async function ensureCustomerForEmail(
   );
 
   if (!customerId) return null;
+
+  const { data: finalCustomer, error: finalCustomerError } = await supabase
+    .from("customers")
+    .select("id, portal_status")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (finalCustomerError && !isPortalSchemaError(finalCustomerError)) {
+    throw new Error(finalCustomerError.message);
+  }
+
+  if (finalCustomer?.id) {
+    assertPortalAccessEnabled(finalCustomer as CustomerRow);
+  }
 
   const matchingBookingIds = rows
     .filter((row) => normalizeEmail(row.customer_email) === normalizedEmail)
