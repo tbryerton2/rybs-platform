@@ -126,7 +126,7 @@ export function getNextPortalAction(stage: PortalStage) {
     case "completed":
       return "This rental is complete. You can review past jobs anytime.";
     case "cancelled":
-      return "This rental was cancelled. Contact Tan Can Man if you need help rebooking.";
+      return "This rental was cancelled. Contact support if you need help rebooking.";
     default:
       return "Check your rental details for the latest update.";
   }

@@ -16,7 +16,8 @@ import {
 import Link from "next/link";
 import { CopyBookingRefButton } from "@/app/admin/bookings/CopyBookingRefButton";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
-import { getCustomerFacingBookingLabel } from "@/lib/identity";
+import { getCustomerFacingBookingLabel, normalizeEmail } from "@/lib/identity";
+import { isPortalSchemaError } from "@/lib/portal/schema";
 import {
   getPlacementCompactSignals,
   getPlacementDispatchSummary,
@@ -173,6 +174,24 @@ function cardShell(extra = "") {
   return `rounded-[28px] border border-slate-200/80 bg-white shadow-sm ${extra}`;
 }
 
+function logAdminBookingsError(context: string, error: unknown) {
+  if (error && typeof error === "object") {
+    const errorObject = error as Record<string, unknown>;
+    console.error(`ADMIN BOOKINGS ERROR [${context}]:`, {
+      message: typeof errorObject.message === "string" ? errorObject.message : null,
+      details: errorObject,
+    });
+    return;
+  }
+
+  console.error(`ADMIN BOOKINGS ERROR [${context}]:`, error);
+}
+
+function devAdminBookingsLog(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV !== "development") return;
+  console.info("[admin-bookings]", { event, ...details });
+}
+
 function filtersSummaryClasses() {
   return `
     [data-filters] .filters-chevron { transition: transform 200ms ease; }
@@ -243,6 +262,10 @@ function normalizePhone(value: string | null | undefined) {
 
 function normalizeSearchTerm(value: string) {
   return value.trim().toLowerCase();
+}
+
+function escapeIlikeTerm(value: string) {
+  return value.replace(/[%_,]/g, " ").trim();
 }
 
 function isUuid(value: string) {
@@ -352,7 +375,7 @@ async function runBookingQuery(
       if (isBookingSchemaError(fallback.error)) {
         const legacyFallback = await build(LEGACY_BOOKING_LIST_SELECT);
         if (legacyFallback.error) {
-          console.error("ADMIN BOOKINGS ERROR:", legacyFallback.error);
+          logAdminBookingsError("legacy-fallback", legacyFallback.error);
           return [];
         }
 
@@ -375,16 +398,16 @@ async function runBookingQuery(
         );
       }
 
-      console.error("ADMIN BOOKINGS ERROR:", fallback.error);
+      logAdminBookingsError("base-fallback", fallback.error);
       return [];
     }
 
-    console.error("ADMIN BOOKINGS ERROR:", reorderFallback.error);
+    logAdminBookingsError("reorder-fallback", reorderFallback.error);
     return [];
   }
 
   if (error) {
-    console.error("ADMIN BOOKINGS ERROR:", error);
+    logAdminBookingsError("primary-query", error);
     return [];
   }
 
@@ -467,6 +490,169 @@ async function getBookings(limit = 1000) {
   return runBookingQuery((selectClause) =>
     supabaseAdmin.from("bookings").select(selectClause).order("created_at", { ascending: false }).limit(limit),
   );
+}
+
+function mergeBookingRows(...groups: BookingRow[][]) {
+  const merged = new Map<string, BookingRow>();
+  for (const group of groups) {
+    for (const row of group) {
+      const existing = merged.get(row.id);
+      if (!existing) {
+        merged.set(row.id, row);
+        continue;
+      }
+
+      const nextRow = { ...existing } as BookingRow;
+      for (const [key, value] of Object.entries(row) as Array<[keyof BookingRow, BookingRow[keyof BookingRow]]>) {
+        if (value !== null && value !== undefined && value !== "") {
+          nextRow[key] = value;
+        }
+      }
+
+      merged.set(row.id, nextRow);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+async function getSearchSupplementalBookings(query: string) {
+  const term = escapeIlikeTerm(query);
+  if (!term) return [] as BookingRow[];
+
+  const phoneDigits = normalizePhone(query);
+  const exactUuid = isUuid(query.trim()) ? query.trim() : null;
+  const normalizedEmailQuery = normalizeEmail(query);
+
+  const [snapshotMatches, exactIdMatches, customerNormalizedEmailMatches, customerLiteralEmailMatches, customerNameMatches, customerPhoneRows] = await Promise.all([
+    runBookingQuery((selectClause) =>
+      supabaseAdmin
+        .from("bookings")
+        .select(selectClause)
+        .or(
+          [
+            `booking_ref.ilike.%${term}%`,
+            `booking_contact_name.ilike.%${term}%`,
+            `booking_contact_email.ilike.%${term}%`,
+            `customer_name.ilike.%${term}%`,
+            `customer_email.ilike.%${term}%`,
+            `customer_street.ilike.%${term}%`,
+            `customer_city.ilike.%${term}%`,
+            `customer_zip.ilike.%${term}%`,
+          ].join(","),
+        )
+        .order("created_at", { ascending: false })
+        .limit(250),
+    ),
+    exactUuid
+      ? runBookingQuery((selectClause) =>
+          supabaseAdmin.from("bookings").select(selectClause).eq("id", exactUuid).limit(1),
+        )
+      : Promise.resolve([] as BookingRow[]),
+    normalizedEmailQuery
+      ? supabaseAdmin
+          .from("customers")
+          .select("id, email")
+          .eq("normalized_email", normalizedEmailQuery)
+          .limit(50)
+      : Promise.resolve({ data: [], error: null }),
+    normalizedEmailQuery
+      ? supabaseAdmin
+          .from("customers")
+          .select("id, email")
+          .ilike("email", normalizedEmailQuery)
+          .limit(50)
+      : Promise.resolve({ data: [], error: null }),
+    supabaseAdmin
+      .from("customers")
+      .select("id, name")
+      .ilike("name", `%${term}%`)
+      .limit(200),
+    phoneDigits
+      ? supabaseAdmin.from("customers").select("id, phone").not("phone", "is", null).limit(500)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (customerNormalizedEmailMatches.error && !isPortalSchemaError(customerNormalizedEmailMatches.error)) {
+    logAdminBookingsError("search-customers-normalized-email", customerNormalizedEmailMatches.error);
+  }
+
+  if (customerLiteralEmailMatches.error && !isPortalSchemaError(customerLiteralEmailMatches.error)) {
+    logAdminBookingsError("search-customers-literal-email", customerLiteralEmailMatches.error);
+  }
+
+  if (customerNameMatches.error) {
+    logAdminBookingsError("search-customers-name", customerNameMatches.error);
+  }
+
+  if (customerPhoneRows.error) {
+    logAdminBookingsError("search-customer-phones", customerPhoneRows.error);
+  }
+
+  const matchedCustomerIds = new Set<string>([
+    ...((customerNormalizedEmailMatches.data ?? []).map((row) => row.id as string)),
+    ...((customerLiteralEmailMatches.data ?? []).map((row) => row.id as string)),
+    ...((customerNameMatches.data ?? []).map((row) => row.id as string)),
+  ]);
+
+  if (phoneDigits) {
+    for (const row of (customerPhoneRows.data ?? []) as Array<{ id: string; phone: string | null }>) {
+      if (normalizePhone(row.phone).includes(phoneDigits)) {
+        matchedCustomerIds.add(row.id);
+      }
+    }
+  }
+
+  let linkedCustomerBookings: BookingRow[] = [];
+  if (matchedCustomerIds.size > 0) {
+    const linkedBookingIdentityRows = await supabaseAdmin
+      .from("bookings")
+      .select("id, customer_id")
+      .in("customer_id", Array.from(matchedCustomerIds))
+      .order("created_at", { ascending: false })
+      .limit(250);
+
+    if (linkedBookingIdentityRows.error) {
+      logAdminBookingsError("search-linked-booking-identities", linkedBookingIdentityRows.error);
+    } else {
+      const detailedLinkedBookings = await runBookingQuery((selectClause) =>
+        supabaseAdmin
+          .from("bookings")
+          .select(selectClause)
+          .in(
+            "id",
+            (linkedBookingIdentityRows.data ?? []).map((row) => row.id as string),
+          )
+          .order("created_at", { ascending: false })
+          .limit(250),
+      );
+
+      const customerIdsByBookingId = new Map(
+        (linkedBookingIdentityRows.data ?? []).map((row) => [row.id as string, row.customer_id as string | null]),
+      );
+
+      linkedCustomerBookings = detailedLinkedBookings.map((row) => ({
+        ...row,
+        customer_id: customerIdsByBookingId.get(row.id) ?? row.customer_id,
+      }));
+    }
+  }
+
+  devAdminBookingsLog("search_supplemental", {
+    query,
+    normalizedEmailQuery,
+    customerNormalizedEmailMatches:
+      (customerNormalizedEmailMatches.data ?? []).map((row) => ({ id: row.id, email: row.email })).slice(0, 10),
+    customerLiteralEmailMatches:
+      (customerLiteralEmailMatches.data ?? []).map((row) => ({ id: row.id, email: row.email })).slice(0, 10),
+    customerNameMatches: (customerNameMatches.data ?? []).map((row) => ({ id: row.id, name: row.name })).slice(0, 10),
+    snapshotMatches: snapshotMatches.length,
+    exactIdMatches: exactIdMatches.length,
+    matchedCustomerIds: Array.from(matchedCustomerIds),
+    linkedCustomerBookings: linkedCustomerBookings.length,
+    linkedCustomerBookingIds: linkedCustomerBookings.map((row) => ({ id: row.id, customer_id: row.customer_id })).slice(0, 20),
+  });
+
+  return mergeBookingRows(snapshotMatches, exactIdMatches, linkedCustomerBookings);
 }
 
 async function getLinkedCustomers(customerIds: string[]) {
@@ -938,8 +1124,9 @@ export default async function AdminBookingsPage({
   };
   const page = Math.max(1, Number.parseInt(clean(sp(spObj, "page")) || "1", 10) || 1);
 
-  const [bookings, activeHolds, futureDeliveries] = await Promise.all([
+  const [baseBookings, supplementalSearchBookings, activeHolds, futureDeliveries] = await Promise.all([
     getBookings(),
+    filters.q ? getSearchSupplementalBookings(filters.q) : Promise.resolve([] as BookingRow[]),
     getActiveHolds(),
     supabaseAdmin
       .from("bookings")
@@ -949,6 +1136,7 @@ export default async function AdminBookingsPage({
       .order("delivery_date", { ascending: true })
       .limit(500),
   ]);
+  const bookings = mergeBookingRows(baseBookings, supplementalSearchBookings);
 
   const customerIds = Array.from(new Set(bookings.map((booking) => booking.customer_id).filter(Boolean) as string[]));
   const linkedCustomers = await getLinkedCustomers(customerIds);
@@ -966,6 +1154,28 @@ export default async function AdminBookingsPage({
     ),
   );
 
+  devAdminBookingsLog("search_pipeline_before_filters", {
+    query: filters.q,
+    baseBookings: baseBookings.length,
+    supplementalBookings: supplementalSearchBookings.length,
+    mergedBookings: bookings.length,
+    bookingsWithCustomerId: bookings.filter((booking) => Boolean(booking.customer_id)).length,
+    linkedCustomersLoaded: linkedCustomers.size,
+    currentEmailMatchesInViewModels: allViewModels
+      .filter((vm) => {
+        if (!filters.q) return false;
+        return normalizeSearchTerm(vm.currentAccountEmail ?? "") === normalizeSearchTerm(filters.q);
+      })
+      .map((vm) => ({
+        bookingId: vm.booking.id,
+        bookingRef: vm.booking.booking_ref,
+        customerId: vm.booking.customer_id,
+        currentAccountEmail: vm.currentAccountEmail,
+        bookedWithEmail: vm.bookedWithEmail,
+      }))
+      .slice(0, 20),
+  });
+
   let filteredResults = allViewModels.filter((vm) => {
     if (!filterByQuickView(vm, filters.quickView)) return false;
     if (filters.status !== "all" && (vm.booking.status ?? "") !== filters.status) return false;
@@ -976,13 +1186,44 @@ export default async function AdminBookingsPage({
     return true;
   });
 
+  devAdminBookingsLog("search_pipeline_after_filters", {
+    query: filters.q,
+    filteredBeforeRanking: filteredResults.length,
+    matchingBookingIdsBeforeRanking: filteredResults.map((vm) => vm.booking.id).slice(0, 20),
+  });
+
   const searchQuery = filters.q;
   if (searchQuery) {
-    filteredResults = filteredResults
+    const rankedRows = filteredResults
       .map((vm) => ({ vm, score: scoreBooking(vm, searchQuery) }))
+      .map((row) => ({
+        ...row,
+        debug: {
+          bookingId: row.vm.booking.id,
+          bookingRef: row.vm.booking.booking_ref,
+          bookedWithEmail: row.vm.bookedWithEmail,
+          currentAccountEmail: row.vm.currentAccountEmail,
+        },
+      }));
+
+    devAdminBookingsLog("search_pipeline_scores", {
+      query: searchQuery,
+      scoredRows: rankedRows.slice(0, 20).map((row) => ({
+        ...row.debug,
+        score: row.score,
+      })),
+    });
+
+    filteredResults = rankedRows
       .filter((row) => row.score > 0)
       .sort((a, b) => b.score - a.score || compareNullable(a.vm.sortUpdatedAt, b.vm.sortUpdatedAt, "desc"))
       .map((row) => row.vm);
+
+    devAdminBookingsLog("search_pipeline_after_ranking", {
+      query: searchQuery,
+      rankedResults: filteredResults.length,
+      rankedBookingIds: filteredResults.map((vm) => vm.booking.id).slice(0, 20),
+    });
   }
 
   const { from: holdFrom, to: holdTo } = getExplicitDateRange(filters.datePreset, filters.customFrom, filters.customTo);
@@ -1551,15 +1792,6 @@ export default async function AdminBookingsPage({
                           <span className={pillBase("bg-rose-50 text-rose-700 ring-rose-200")}>Needs attention</span>
                         ) : null}
                       </div>
-                      <details className="mt-3">
-                        <summary className="cursor-pointer list-none text-[11px] font-semibold text-slate-400 hover:text-slate-500">
-                          Internal UUID
-                        </summary>
-                        <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
-                          <span className="font-mono text-slate-500" title={booking.id}>{booking.id}</span>
-                          <CopyBookingRefButton value={booking.id} label="Copy booking UUID" />
-                        </div>
-                      </details>
                       {booking.status === "picked_up" && booking.pickup_date ? (
                         <div className="mt-2 text-xs font-medium text-emerald-700">Completed on {formatDateLabel(booking.pickup_date)}</div>
                       ) : null}

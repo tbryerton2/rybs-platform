@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { ensureCustomerForEmail, PORTAL_ACCESS_DEACTIVATED_ERROR } from "@/lib/customers";
 import {
+  attachPortalAuthUserToCustomer,
   createPortalAuthClient,
   devPortalLog,
   PORTAL_ACCESS_TOKEN_COOKIE,
   PORTAL_REFRESH_TOKEN_COOKIE,
 } from "@/lib/portal/auth";
-import { isPortalSchemaError } from "@/lib/portal/schema";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type SessionPayload = {
   tokenHash?: string;
@@ -97,25 +96,11 @@ export async function POST(req: Request) {
       authUserId: userId,
     });
 
-    const { error: updateError } = await supabaseAdmin
-      .from("customers")
-      .update({
-        auth_user_id: userId,
-        portal_status: "active",
-        last_login_at: new Date().toISOString(),
-      })
-      .eq("id", customerId);
-
-    if (updateError && !isPortalSchemaError(updateError)) {
-      return badRequest(`Portal customer session could not be attached: ${updateError.message}`, 500);
-    }
-
-    if (updateError) {
-      devPortalLog("callback_customer_attach_degraded", {
-        email: userEmail,
-        customerId,
-        message: updateError.message,
-      });
+    try {
+      await attachPortalAuthUserToCustomer(customerId, userId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown auth attachment failure.";
+      return badRequest(`Portal customer session could not be attached: ${message}`, 500);
     }
 
     devPortalLog("callback_session_established", {

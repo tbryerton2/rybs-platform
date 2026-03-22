@@ -54,6 +54,77 @@ export function devPortalLog(event: string, details: Record<string, unknown>) {
   });
 }
 
+export async function attachPortalAuthUserToCustomer(customerId: string, userId: string) {
+  const now = new Date().toISOString();
+
+  const targetLookup = await supabaseAdmin
+    .from("customers")
+    .select("id, auth_user_id")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (targetLookup.error && !isPortalSchemaError(targetLookup.error)) {
+    throw new Error(targetLookup.error.message);
+  }
+
+  const targetCustomer = targetLookup.data as { id: string; auth_user_id: string | null } | null;
+  if (!targetCustomer?.id) {
+    throw new Error("Portal customer could not be found for auth attachment.");
+  }
+
+  const existingLinkLookup = await supabaseAdmin
+    .from("customers")
+    .select("id, auth_user_id")
+    .eq("auth_user_id", userId)
+    .maybeSingle();
+
+  if (existingLinkLookup.error && !isPortalSchemaError(existingLinkLookup.error)) {
+    throw new Error(existingLinkLookup.error.message);
+  }
+
+  const existingLinkedCustomer = existingLinkLookup.data as { id: string; auth_user_id: string | null } | null;
+
+  if (existingLinkedCustomer?.id && existingLinkedCustomer.id !== customerId) {
+    const { error: clearError } = await supabaseAdmin
+      .from("customers")
+      .update({ auth_user_id: null })
+      .eq("id", existingLinkedCustomer.id);
+
+    if (clearError && !isPortalSchemaError(clearError)) {
+      throw new Error(clearError.message);
+    }
+  }
+
+  if (targetCustomer.auth_user_id === userId) {
+    const { error: refreshError } = await supabaseAdmin
+      .from("customers")
+      .update({
+        portal_status: "active",
+        last_login_at: now,
+      })
+      .eq("id", customerId);
+
+    if (refreshError && !isPortalSchemaError(refreshError)) {
+      throw new Error(refreshError.message);
+    }
+
+    return;
+  }
+
+  const { error: attachError } = await supabaseAdmin
+    .from("customers")
+    .update({
+      auth_user_id: userId,
+      portal_status: "active",
+      last_login_at: now,
+    })
+    .eq("id", customerId);
+
+  if (attachError && !isPortalSchemaError(attachError)) {
+    throw new Error(attachError.message);
+  }
+}
+
 export async function clearPortalSessionCookies() {
   const cookieStore = await cookies();
   cookieStore.set(PORTAL_ACCESS_TOKEN_COOKIE, "", {
@@ -141,20 +212,10 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
     customer = (lookup.data as PortalCustomerRow | null) ?? null;
 
     if (customer?.id && !customer.auth_user_id) {
-      const { error: attachError } = await supabaseAdmin
-        .from("customers")
-        .update({ auth_user_id: user.id, portal_status: "active", last_login_at: new Date().toISOString() })
-        .eq("id", customer.id);
-
-      if (attachError && !isPortalSchemaError(attachError)) {
-        throw new Error(attachError.message);
-      }
-
-      if (!attachError) {
-        customer.auth_user_id = user.id;
-        customer.portal_status = "active";
-        customer.last_login_at = new Date().toISOString();
-      }
+      await attachPortalAuthUserToCustomer(customer.id, user.id);
+      customer.auth_user_id = user.id;
+      customer.portal_status = "active";
+      customer.last_login_at = new Date().toISOString();
     }
   }
 

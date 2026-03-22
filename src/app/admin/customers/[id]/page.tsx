@@ -3,6 +3,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { setCustomerPortalStatusAction, updateCustomerIdentityAction } from "./actions";
@@ -57,9 +58,21 @@ function formatUsd(cents: number | null) {
   }).format(cents / 100);
 }
 
+function getSavedMessage(saved: string | undefined) {
+  switch (saved) {
+    case "identity":
+      return "Customer details saved.";
+    case "portal":
+      return "Portal access updated.";
+    default:
+      return null;
+  }
+}
+
 export default async function CustomerDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { saved } = (await searchParams) ?? {};
+  const savedMessage = getSavedMessage(saved);
 
   const [{ data: customer, error: customerError }, { data: bookingsData, error: bookingsError }, { data: historyData, error: historyError }] =
     await Promise.all([
@@ -96,6 +109,8 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
+      <AdminToastTrigger success={savedMessage} trigger={saved} clearParam="saved" />
+
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <div className="text-sm font-medium text-slate-500">Customers</div>
@@ -142,13 +157,6 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 Portal identity is tied to this email address, while bookings retain their own historical snapshots.
               </p>
             </div>
-
-            {saved === "identity" ? (
-              <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Customer details saved.
-              </div>
-            ) : null}
-
             <form action={updateCustomerIdentityAction} className="grid gap-4 md:grid-cols-2">
               <input type="hidden" name="id" value={customer.id} />
               <label className="block">
@@ -231,13 +239,6 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
             <p className="mt-1 text-sm text-slate-500">
               Deactivating portal access is soft-only. It does not delete customers or bookings.
             </p>
-
-            {saved === "portal" ? (
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Portal access updated.
-              </div>
-            ) : null}
-
             <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">{customer.portal_status ?? "invited"}</div>

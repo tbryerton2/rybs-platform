@@ -102,7 +102,7 @@ export default async function PortalHomePage() {
               Portal home
             </div>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-              {customer.name || "Your Tan Can Man portal"}
+              {customer.name || "Your customer portal"}
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
               Track your rental, see what happens next, and request service updates without leaving
@@ -304,8 +304,7 @@ export default async function PortalHomePage() {
             <div className="mt-5 space-y-3">
               {locations.length === 0 ? (
                 <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
-                  We will save job sites here as you book with Tan Can Man, so future rentals are
-                  faster to review.
+                  We will save service locations here as you book, so future rentals are faster to review.
                 </div>
               ) : (
                 locations.slice(0, 3).map((location) => (

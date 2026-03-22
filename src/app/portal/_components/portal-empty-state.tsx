@@ -5,8 +5,8 @@ export function PortalEmptyState() {
     <div className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
       <h2 className="text-xl font-semibold text-slate-900">No active rental right now</h2>
       <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
-        When you book with Tan Can Man, your live rental status, next step, and self-service
-        actions will appear here.
+        When you make a booking, your live rental status, next step, and self-service actions will
+        appear here.
       </p>
       <div className="mt-6">
         <Link

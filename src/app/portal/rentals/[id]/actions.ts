@@ -118,7 +118,7 @@ export async function submitPortalPickupRequestAction(formData: FormData) {
     if (isPortalSchemaError(insertError)) {
       redirect(
         `/portal/rentals/${bookingId}/pickup-request?${toSearchParams({
-          error: "Portal requests are temporarily unavailable. Please contact Tan Can Man directly.",
+          error: "Portal requests are temporarily unavailable. Please contact support directly.",
         })}`,
       );
     }
@@ -204,7 +204,7 @@ export async function submitPortalExtensionRequestAction(formData: FormData) {
     if (isPortalSchemaError(insertError)) {
       redirect(
         `/portal/rentals/${bookingId}/extension-request?${toSearchParams({
-          error: "Portal requests are temporarily unavailable. Please contact Tan Can Man directly.",
+          error: "Portal requests are temporarily unavailable. Please contact support directly.",
         })}`,
       );
     }
@@ -290,7 +290,7 @@ export async function submitPortalIssueReportAction(formData: FormData) {
     if (isPortalSchemaError(insertError)) {
       redirect(
         `/portal/rentals/${bookingId}/issue-report?${toSearchParams({
-          error: "Portal requests are temporarily unavailable. Please contact Tan Can Man directly.",
+          error: "Portal requests are temporarily unavailable. Please contact support directly.",
         })}`,
       );
     }

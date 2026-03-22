@@ -38,6 +38,14 @@ function formatServiceArea(town: string | null, county: string | null) {
   return [town, county].filter(Boolean).join(", ");
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function normalizePhone(value: string | null | undefined) {
+  return (value ?? "").replace(/\D/g, "");
+}
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -143,6 +151,10 @@ export default async function PortalRentalDetailPage({
   const { booking, requests, pickupEligibility, extensionEligibility, issueReportEligibility } = rental;
   const submissionMessage = getSubmissionMessage(resolvedSearchParams);
   const reorderEligible = canReorderBooking(booking.status);
+  const bookingContactDiffers =
+    normalizeText(booking.customer_name) !== normalizeText(customer.name) ||
+    normalizeText(booking.customer_email) !== normalizeText(customer.email) ||
+    normalizePhone(booking.customer_phone) !== normalizePhone(customer.phone);
 
   return (
     <PortalShell pathname={`/portal/rentals/${booking.id}`}>
@@ -214,6 +226,37 @@ export default async function PortalRentalDetailPage({
                 <div className="mt-1 text-sm leading-6 text-slate-600">{booking.nextAction}</div>
               </div>
             </div>
+
+            {bookingContactDiffers ? (
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Booking contact</h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      This booking was submitted with contact details that differ from your current account profile.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                    Booked with snapshot
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Name</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{booking.customer_name || "—"}</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{booking.customer_email || "—"}</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Phone</div>
+                    <div className="mt-2 text-sm font-semibold text-slate-900">{booking.customer_phone || "—"}</div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-slate-900">Rental timeline</h3>
@@ -319,7 +362,7 @@ export default async function PortalRentalDetailPage({
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Rental requests</h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Track what you submitted and the latest response from Tan Can Man.
+                    Track what you submitted and the latest response from our team.
                   </p>
                 </div>
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">

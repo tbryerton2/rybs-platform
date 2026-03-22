@@ -71,7 +71,7 @@ export default async function PortalAccountPage() {
           <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-4">
             <div className="text-sm font-semibold text-slate-900">Account access</div>
             <div className="mt-1 text-sm leading-6 text-slate-600">
-              Portal account settings are read-only for now. Contact Tan Can Man if you need to
+              Portal account settings are read-only for now. Contact support if you need to
               update your default contact details.
             </div>
             <form action={deactivatePortalAccountAction} className="mt-4">
@@ -91,7 +91,7 @@ export default async function PortalAccountPage() {
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Saved service locations</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Job sites Tan Can Man can reuse for future rentals and deliveries.
+                  Service locations we can reuse for future rentals and deliveries.
                 </p>
               </div>
               <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
@@ -102,8 +102,8 @@ export default async function PortalAccountPage() {
             <div className="mt-5 space-y-3">
               {locations.length === 0 ? (
                 <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-6 text-slate-500">
-                  No saved service locations yet. As you book with Tan Can Man, job sites will
-                  appear here to make future rentals faster to review.
+                  No saved service locations yet. As you book, locations will appear here to make
+                  future rentals faster to review.
                 </div>
               ) : (
                 locations.map((location) => (
