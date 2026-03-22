@@ -172,21 +172,20 @@ export default async function AdminDashboardPage() {
     }
 
     return (
-        <div className="mx-auto max-w-6xl px-6 pb-16 pt-10">
-            <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="mx-auto max-w-6xl px-6 pb-16 pt-6">
+            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
                 <div>
-                <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-                <p className="mt-1 text-sm text-slate-600">Dispatch view for {todayStr}</p>
+                <div className="text-sm font-medium text-slate-500">Dashboard</div>
+                <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Dispatch and operations view for {todayStr}.</p>
                 </div>
 
-                <div className="flex gap-2">
                 <Link
                     href="/admin/bookings"
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                    className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
-                    Operations
+                    Open operations
                 </Link>
-                </div>
             </div>
 
 

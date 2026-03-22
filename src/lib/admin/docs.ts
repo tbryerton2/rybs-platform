@@ -1,64 +1,380 @@
 // src/lib/admin/docs.ts
 
 export type DocSection = {
+  id?: string;
   heading: string;
+  lead?: string;
   paragraphs?: string[];
   bullets?: string[];
+  callout?: {
+    tone?: "info" | "warning" | "success";
+    title: string;
+    body: string;
+  };
+};
+
+export type DocSummaryCard = {
+  label: string;
+  value: string;
+  description: string;
+};
+
+export type DocComparisonTable = {
+  columns: string[];
+  rows: Array<{
+    label: string;
+    values: string[];
+  }>;
+};
+
+export type DocScenario = {
+  title: string;
+  summary: string;
+  guidance: string;
+};
+
+export type DocFaqItem = {
+  question: string;
+  answer: string;
+};
+
+export type DocChecklist = {
+  title: string;
+  items: string[];
+};
+
+export type DocHighlightCallout = {
+  label: string;
+  title: string;
+  body: string;
 };
 
 export type DocEntry = {
   slug: string;
   title: string;
   description: string;
+  badge?: string;
+  lastReviewed?: string;
+  featured?: boolean;
+  quickAnswer?: DocHighlightCallout;
+  summaryCards?: DocSummaryCard[];
+  comparisonTable?: DocComparisonTable;
+  relationshipDiagram?: {
+    customerAccount: string;
+    bookingRelationship: string;
+    bookingDetails: string[];
+  };
+  scenarios?: DocScenario[];
+  faq?: DocFaqItem[];
+  checklist?: DocChecklist;
   sections: DocSection[];
 };
 
 export const docs: DocEntry[] = [
   {
     slug: "customer-booking-identity",
-    title: "Customer + Booking Identity",
+    title: "Identity Model & Portal Access",
     description:
-      "How customer accounts, booking references, and historical booking snapshots work together.",
+      "Operational guide for how customer accounts, booking references, historical snapshots, portal access, and staff search work together.",
+    badge: "Operations Manual",
+    lastReviewed: "2026-03-22",
+    featured: true,
+    quickAnswer: {
+      label: "Quick answer",
+      title: "Why does a booking show an old email while the customer account shows a new one?",
+      body:
+        "The booking preserves the historical details entered at the time of booking. The customer account shows the current linked account information. This is expected behavior, not a bug.",
+    },
+    summaryCards: [
+      {
+        label: "Customer identity",
+        value: "Email + UUID",
+        description:
+          "Staff and customers recognize the account by email, while the platform keeps a stable internal customer UUID behind the scenes.",
+      },
+      {
+        label: "Booking identity",
+        value: "BK-###### + UUID",
+        description:
+          "Customers should use the booking reference. Internal UUIDs exist for system integrity, staff workflows, and integrations.",
+      },
+      {
+        label: "Historical snapshots vs current account",
+        value: "Old + new details can both appear",
+        description:
+          "Bookings keep the contact details entered at the time of booking, while the linked customer account can show newer information later.",
+      },
+      {
+        label: "How staff should search",
+        value: "Booking reference, email, phone, or address",
+        description:
+          "Use the booking ref first when you have it. If account details changed, older booking details and service address can still help find the right record.",
+      },
+    ],
+    relationshipDiagram: {
+      customerAccount: "One customer account",
+      bookingRelationship: "can be linked to many bookings",
+      bookingDetails: [
+        "Customer-facing booking ref",
+        "Internal booking UUID",
+        "Booked-with snapshot fields",
+        "Service location for that job",
+      ],
+    },
+    comparisonTable: {
+      columns: ["Used by staff/customers as", "Stable over time?", "What it is for"],
+      rows: [
+        {
+          label: "Customer account",
+          values: [
+            "Email for day-to-day account recognition, UUID internally",
+            "UUID stays stable even if email changes",
+            "Represents the single portal account and links all bookings for that customer",
+          ],
+        },
+        {
+          label: "Booking",
+          values: [
+            "BK-###### for customer-facing reference, UUID internally",
+            "Yes",
+            "Identifies one rental/job without exposing internal system IDs to customers",
+          ],
+        },
+        {
+          label: "Booked-with snapshot",
+          values: [
+            "Historical name, email, and phone captured at booking time",
+            "Yes, by design",
+            "Preserves what was originally entered when the booking was created",
+          ],
+        },
+        {
+          label: "Portal access",
+          values: [
+            "Current customer account email and portal status",
+            "Email can change; access status can change",
+            "Controls sign-in and access links without changing operational records",
+          ],
+        },
+      ],
+    },
     sections: [
       {
-        heading: "Core identity model",
+        id: "why-this-matters",
+        heading: "Why this matters",
+        paragraphs: [
+          "When staff understand the identity model, it becomes much easier to explain what a customer is seeing, confirm the right record quickly, and avoid treating expected system behavior like a data issue.",
+          "This guide explains how the platform separates customer identity, booking identity, historical booking snapshots, and portal access so support and operations can work confidently from the admin system.",
+        ],
+      },
+      {
+        id: "identity-model-at-a-glance",
+        heading: "Identity model at a glance",
         bullets: [
           "Customer-facing customer identity is the email address on the account.",
-          "Internal customer identity is a UUID.",
-          "Customer-facing booking identity is the booking reference, such as BK-482731.",
-          "Internal booking identity is still a UUID and should be used only for admin/support and integrations.",
+          "Internal customer identity is a UUID that does not change when the customer email changes later.",
+          "One portal account maps to one customer.",
           "One customer can have many bookings.",
+          "Customer-facing booking identity is the booking reference, such as BK-482731.",
+          "Internal booking identity is a UUID and should stay internal to staff workflows, data integrity, and integrations.",
         ],
+        callout: {
+          tone: "info",
+          title: "Plain-language rule",
+          body: "Customers should recognize themselves by account email and booking reference. Staff may see UUIDs in the admin system, but UUIDs are not the customer-facing identifiers.",
+        },
       },
       {
-        heading: "Historical snapshot rule",
+        id: "customer-identity-model",
+        heading: "Customer identity model",
         paragraphs: [
-          "Each booking stores its own contact and service-address snapshot at the time it was created. Updating the customer profile later does not rewrite historical booking records.",
+          "A customer account is the long-lived identity record for a person or company in the system. That account can own many bookings over time.",
+          "From a business and support perspective, the customer is recognized by their current account email. Internally, the platform uses a UUID so the same customer record can remain stable even if contact details are updated later.",
         ],
         bullets: [
-          "Booking contact can differ from the account owner.",
-          "Service address can differ across bookings for the same customer.",
-          "Support should always verify both the customer account and the booking snapshot when something looks inconsistent.",
+          "One portal account = one customer record.",
+          "A customer can have many bookings tied to the same internal customer UUID.",
+          "Changing a customer email updates the account identity used for portal access, but it does not create a brand-new customer.",
+          "The admin customer record is the place to review the current linked account identity.",
         ],
       },
       {
+        id: "booking-identity-model",
+        heading: "Booking identity model",
+        paragraphs: [
+          "Each booking represents one rental/job. Customers should identify a booking by the booking reference, not by any internal database ID.",
+        ],
+        bullets: [
+          "Customer-facing booking identity = booking ref in the BK-###### format.",
+          "Internal booking identity = UUID.",
+          "Use the booking ref when speaking with customers, confirming a job, or asking a customer to locate a rental.",
+          "Use internal UUIDs only inside the admin/product context where system-level precision is needed.",
+          "Booking refs are easier for customers to read back on the phone and safer to expose in emails or portal views than raw UUIDs.",
+        ],
+      },
+      {
+        id: "snapshot-vs-current-account-identity",
+        heading: "Snapshot vs current account identity",
+        paragraphs: [
+          "Bookings keep historical details from the moment they were created. This includes booked-with fields such as name, email, and phone.",
+          "The linked customer account can change later. Because of that, a booking detail page may correctly show both the original booked-with snapshot and the current linked customer/account identity.",
+        ],
+        bullets: [
+          "Booked-with snapshot identity answers: what details were entered when the booking was made?",
+          "Current linked customer/account identity answers: what account is this booking linked to now?",
+          "Service location answers: where is this job being performed?",
+          "If the booked-with email and current account email differ, that is expected when account details changed after booking.",
+        ],
+        callout: {
+          tone: "success",
+          title: "Expected behavior",
+          body: "If a booking shows an older email while the customer account shows a newer email, treat that as historical accuracy, not as a bug.",
+        },
+      },
+      {
+        id: "customer-email-changes",
+        heading: "Customer email changes",
+        paragraphs: [
+          "Updating a customer's email does not create a new customer record. The same internal customer UUID remains in place, and linked bookings stay attached to that customer.",
+          "This lets the business maintain continuity for reporting, repeat business, and portal access while still preserving historical booking snapshots from earlier transactions.",
+        ],
+        bullets: [
+          "Same customer stays linked to the same internal UUID.",
+          "Existing bookings remain attached to that customer.",
+          "Entity history records the account change.",
+          "Older bookings can continue to show their original snapshot email and phone from the time of booking.",
+        ],
+      },
+      {
+        id: "portal-access-and-deactivation",
+        heading: "Portal access and deactivation",
+        paragraphs: [
+          "Portal access is tied to the customer account and current account email. It is not tied to an individual booking.",
+          "If access needs to be blocked, staff can deactivate portal access without deleting customers or bookings.",
+        ],
+        bullets: [
+          "Deactivation is soft only.",
+          "Deactivation blocks sign-in and access links.",
+          "Deactivation does not remove bookings, customer records, or operational history.",
+          "Staff may deactivate access when a customer requests it, when access was granted to the wrong email, or when the business needs to pause portal usage while keeping records intact.",
+        ],
+      },
+      {
+        id: "how-staff-should-search",
         heading: "How staff should search",
+        lead: "Use the admin bookings search based on what the customer actually knows.",
         bullets: [
-          "If a customer calls in with a booking reference, search the booking by booking_ref first.",
-          "If they only know their email, search the customer/account by email and then review linked bookings.",
-          "If the account owner and booking contact differ, use the booking record as the operational source of truth for that job.",
+          "Booking ref: best option when the customer can read back BK-######.",
+          "Current account email: use when the customer is referring to their active portal/account login.",
+          "Booked-with email or contact name: use when the current account changed after booking or someone else placed the order.",
+          "Phone: helpful when the customer only has the phone number used on the job.",
+          "Service address: useful for repeat customers with multiple bookings at different sites.",
         ],
+        callout: {
+          tone: "warning",
+          title: "Support workflow",
+          body: "If a search by current account email does not immediately explain the booking, check the booked-with snapshot and service address next. Older booking details may not match the latest account identity exactly.",
+        },
       },
       {
-        heading: "Examples",
+        id: "key-rules-to-remember",
+        heading: "Key rules to remember",
         bullets: [
-          "Same customer, different addresses: one customer UUID can have bookings for many service locations.",
-          "Same email, different booking contact name: the customer account email stays constant, while each booking keeps its own contact snapshot.",
-          "Customer updates email: the customer UUID stays the same, old bookings keep their historical booking_contact_email, and the admin history shows the email change.",
-          "Deactivated portal access: portal login is disabled, but the customer and booking history remain intact.",
+          "Email is the customer-facing account identity; UUID is the internal customer identity.",
+          "Booking ref is the customer-facing booking identity; UUID is the internal booking identity.",
+          "One customer can have many bookings.",
+          "A booking keeps its own historical snapshot fields.",
+          "Portal access can be deactivated without deleting records.",
+          "A mismatch between booked-with details and current account details can be expected and valid.",
         ],
       },
     ],
+    scenarios: [
+      {
+        title: "Same customer, two different addresses",
+        summary:
+          "A repeat customer books once for home and later for a job site.",
+        guidance:
+          "Keep both bookings linked to the same customer account if they belong to the same customer. Each booking should still keep its own service location snapshot for that job.",
+      },
+      {
+        title: "Same email, different booking contact name",
+        summary:
+          "An office manager uses the company email, but each job may list a different on-site contact.",
+        guidance:
+          "Treat the customer account email as the account identity and the booking contact as the operational snapshot for that specific rental.",
+      },
+      {
+        title: "Customer changes email after booking",
+        summary:
+          "The customer updates their account email after one or more bookings already exist.",
+        guidance:
+          "The customer remains the same internal customer. Linked bookings stay attached, while older booked-with snapshot values can continue to show the original email.",
+      },
+      {
+        title: "Customer gives booking ref on the phone",
+        summary:
+          "The caller has BK-###### available and wants help quickly.",
+        guidance:
+          "Search the booking ref first. It is the fastest and most reliable path to the exact job the customer is talking about.",
+      },
+      {
+        title: "Booking shows old email but customer account shows new email",
+        summary:
+          "Staff sees different emails on the same booking detail page and assumes something is broken.",
+        guidance:
+          "Confirm which value is the booked-with snapshot and which value is the current linked account. This difference is expected after account updates.",
+      },
+      {
+        title: "Portal access is disabled but records remain",
+        summary:
+          "A customer should no longer be able to sign in, but the business still needs their service history.",
+        guidance:
+          "Deactivate portal access. The customer and all linked bookings remain in the system for operations, reporting, and support history.",
+      },
+    ],
+    faq: [
+      {
+        question: "Why do we use UUIDs if staff and customers do not talk about them?",
+        answer:
+          "UUIDs give the system a stable internal identifier that does not depend on readable fields like email or booking ref. That stability protects links between records, especially when customer details change later.",
+      },
+      {
+        question: "Does changing a customer email create a second customer?",
+        answer:
+          "No. The customer remains the same internal record. The current account email updates, while linked bookings stay attached to the same customer UUID.",
+      },
+      {
+        question: "Why can a booking show one email while the customer account shows another?",
+        answer:
+          "Because the booking keeps a historical booked-with snapshot from the time the order was placed. The customer account shows the current linked account identity.",
+      },
+      {
+        question: "Should staff ever give a customer an internal UUID?",
+        answer:
+          "No. Customers should be given the booking ref for a rental and their account email for portal/account-related confirmation.",
+      },
+      {
+        question: "Does portal deactivation delete anything?",
+        answer:
+          "No. It only blocks sign-in/access. Operational records, linked bookings, and historical data remain intact.",
+      },
+      {
+        question: "What should staff search first during support?",
+        answer:
+          "Start with booking ref when available. Otherwise search the most reliable detail the customer can provide: current account email, booked-with email, name, phone, or service address.",
+      },
+    ],
+    checklist: {
+      title: "Staff checklist",
+      items: [
+        "Ask whether the customer has the booking ref before searching.",
+        "Confirm whether you are looking at the current account identity or the booked-with snapshot.",
+        "Check the service address when a customer has multiple bookings.",
+        "Use booking ref and account email in customer conversations, not UUIDs.",
+        "Treat portal deactivation as access control only, not record deletion.",
+      ],
+    },
   },
   {
     slug: "how-booking-works",

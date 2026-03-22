@@ -177,7 +177,7 @@ export default async function AdminPricingSettingsPage({
   const saved = sp(params, "saved") === "1";
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8 sm:py-10">
+    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
           Pricing Settings

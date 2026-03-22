@@ -384,7 +384,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   ).sort((a, b) => a.localeCompare(b));
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pt-10 pb-16">
+    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
           Financials

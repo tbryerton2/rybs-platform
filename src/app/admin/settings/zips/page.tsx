@@ -2,17 +2,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { FlashSuccess } from "@/app/admin/_components/admin/flash-success";
-import Link from "next/link";
-import { DeleteZipButton } from "./delete-zip-button";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AddZipForm } from "./add-zip-form";
-import { EmptyState } from "./empty-state";
 import { ZipList } from "./zip-list";
-import {
-  deleteServiceZipAction,
-  toggleServiceZipAction,
-} from "./actions";
 
 type ServiceZipRow = {
   id: number;
@@ -72,11 +64,8 @@ export default async function AdminServiceAreaPage({
   const activeCount = rows.filter((row) => row.active).length;
   const disabledCount = totalCount - activeCount;
 
-  const addedRow =
-    addedZip != null ? rows.find((row) => row.zip === addedZip) ?? null : null;
-
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-5xl px-6 pb-16 pt-6">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
           Service Area

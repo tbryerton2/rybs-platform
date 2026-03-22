@@ -2,6 +2,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
+import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -152,17 +154,21 @@ export default async function AdminCustomersPage({
   const totalBookings = customers.reduce((sum, customer) => sum + customer.bookingCount, 0);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 pb-16 pt-10">
-      <div className="mb-8">
-        <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
-          Admin
+    <main className="mx-auto max-w-7xl px-6 pb-16 pt-6">
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-slate-500">Customers</div>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            Customers
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Search customers by current account details and quickly review linked booking history.
+          </p>
         </div>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-          Customers
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Search customers by email, internal UUID, booking reference, phone, or address.
-        </p>
+        <AdminPageHelpLink
+          href="/admin/docs/customer-booking-identity"
+          label="View customers guide"
+        />
       </div>
 
       <section className="mb-8 grid gap-4 md:grid-cols-3">
@@ -182,7 +188,7 @@ export default async function AdminCustomersPage({
       <section className="mb-8 rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search customers</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Find a customer by email, UUID, booking ref, phone, or service address.
+          Find a customer by current email, name, or phone.
         </p>
 
         <form className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -190,7 +196,7 @@ export default async function AdminCustomersPage({
             id="q"
             name="q"
             defaultValue={query}
-            placeholder="Email, booking ref, UUID, phone, address"
+            placeholder="Email, name, or phone"
             className="h-12 flex-1 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
           />
           <button
@@ -208,6 +214,14 @@ export default async function AdminCustomersPage({
             </Link>
           ) : null}
         </form>
+
+        <div className="mt-4">
+          <ContextHelpCard
+            title="Search by current email, name, or phone."
+            body="Linked bookings may still show older booking contact details."
+            emphasis="subtle"
+          />
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
@@ -220,7 +234,28 @@ export default async function AdminCustomersPage({
         </div>
 
         {customers.length === 0 ? (
-          <div className="px-6 py-16 text-center text-sm text-slate-500">No customers found.</div>
+          <div className="px-6 py-16">
+            <div className="mx-auto max-w-xl rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+              <div className="text-lg font-semibold text-slate-900">No customers found for this search</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Try the current email, customer name, or phone number. If you are looking from a booking, older booking contact details may differ from the current account profile.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  href="/admin/customers"
+                  className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Clear search
+                </Link>
+                <Link
+                  href="/admin/docs/customer-booking-identity"
+                  className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Learn more
+                </Link>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full table-fixed">

@@ -4,6 +4,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
+import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { setCustomerPortalStatusAction, updateCustomerIdentityAction } from "./actions";
@@ -157,6 +158,14 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 Portal identity is tied to this email address, while bookings retain their own historical snapshots.
               </p>
             </div>
+            <div className="mb-6">
+              <ContextHelpCard
+                eyebrow="How to read this record"
+                title="This is one customer record, even if past bookings look a little different."
+                body="One customer can have many bookings. Different bookings can have different service addresses, and older bookings may keep older contact details from the time they were created. Updating the customer email does not create a new customer."
+                learnMoreHref="/admin/docs/customer-booking-identity"
+              />
+            </div>
             <form action={updateCustomerIdentityAction} className="grid gap-4 md:grid-cols-2">
               <input type="hidden" name="id" value={customer.id} />
               <label className="block">
@@ -200,6 +209,17 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
               <p className="mt-1 text-sm text-slate-500">
                 Customer/account owner, booking contact, and service location can differ across bookings.
               </p>
+            </div>
+
+            <div className="mb-6">
+              <ContextHelpCard
+                eyebrow="Booking relationship"
+                title="Linked bookings can represent different jobs, contacts, and addresses."
+                body="Use this list to confirm which rental the customer is asking about. The account stays the same, but each booking keeps its own job details and historical contact snapshot."
+                learnMoreHref="/admin/docs/customer-booking-identity"
+                tone="slate"
+                compact
+              />
             </div>
 
             <div className="space-y-3">
@@ -247,6 +267,17 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                   Deactivated {formatDate(customer.deactivated_at)}{customer.deactivation_reason ? ` • ${customer.deactivation_reason}` : ""}
                 </div>
               ) : null}
+            </div>
+
+            <div className="mt-4">
+              <ContextHelpCard
+                eyebrow="Access behavior"
+                title="Turning off portal access only affects sign-in and self-service access."
+                body="Customer records, linked bookings, and operational history remain intact after deactivation."
+                learnMoreHref="/admin/docs/customer-booking-identity"
+                tone="slate"
+                compact
+              />
             </div>
 
             <form action={setCustomerPortalStatusAction} className="mt-4 space-y-3">

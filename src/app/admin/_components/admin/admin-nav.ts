@@ -52,10 +52,16 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Analytics",
     items: [
       {
+        label: "Conversion",
+        href: "/admin/analytics/conversion",
+        icon: "analytics",
+        matchers: ["/admin/analytics/conversion"],
+      },
+      {
         label: "ZIP Heatmap",
         href: "/admin/analytics/zip-heatmap",
         icon: "analytics",
-        matchers: ["/admin/analytics", "/admin/analytics/zip-heatmap", "/admin/analytics/zip-map"],
+        matchers: ["/admin/analytics/zip-heatmap", "/admin/analytics/zip-map"],
       },
     ],
   },

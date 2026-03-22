@@ -273,15 +273,15 @@ export default async function AdminSchedulePage({
     .map((job) => job.delivery_date as string);
 
   return (
-    <div className="mx-auto max-w-[1700px] px-6 pt-10 pb-16">
+    <div className="mx-auto max-w-[1700px] px-6 pb-16 pt-6">
       <div className="rounded-[32px] bg-white px-8 pb-8 pt-6 shadow-xl ring-1 ring-slate-200/70">
         {/* Header */}
         <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-sm font-medium text-[#F97316]">
-              Dispatch / Schedule
+            <div className="text-sm font-medium text-slate-500">
+              Schedule
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
               Weekly dispatch board
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">

@@ -14,6 +14,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
+import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
 import { CopyBookingRefButton } from "@/app/admin/bookings/CopyBookingRefButton";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
 import { getCustomerFacingBookingLabel, normalizeEmail } from "@/lib/identity";
@@ -1070,16 +1071,32 @@ function EmptyState({
   title,
   copy,
   resetHref,
+  tips,
 }: {
   title: string;
   copy: string;
   resetHref: string;
+  tips?: string[];
 }) {
   return (
     <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
       <div className="mx-auto max-w-xl">
         <div className="text-lg font-semibold text-slate-900">{title}</div>
         <p className="mt-2 text-sm leading-6 text-slate-600">{copy}</p>
+        {tips?.length ? (
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+              Try next
+            </div>
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+              {tips.map((tip) => (
+                <li key={tip} className="rounded-xl bg-slate-50 px-3 py-2">
+                  {tip}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Link
             href={resetHref}
@@ -1283,6 +1300,17 @@ export default async function AdminBookingsPage({
   const pageStart = (currentPage - 1) * filters.pageSize;
   const results = filteredResults.slice(pageStart, pageStart + filters.pageSize);
   const pagedHolds = filteredHolds.slice(pageStart, pageStart + filters.pageSize);
+  const noResultsTips = showingHolds
+    ? [
+        "Clear one or more filters to widen the hold view.",
+        "Search all bookings if the customer may already have a confirmed rental instead of an active hold.",
+      ]
+    : [
+        "Try the booking ref first if you have it.",
+        "Search by the current email or an older booked-with email.",
+        "Try the phone number, contact name, or service address.",
+        "If the customer updated their account details, the booking may still be easier to find by older details or address.",
+      ];
 
   const activeChips = buildFilterChips(filters);
   const clearAllHref = "/admin/bookings";
@@ -1440,6 +1468,22 @@ export default async function AdminBookingsPage({
     <main className="min-h-screen bg-slate-100">
       <style>{filtersSummaryClasses()}</style>
       <div className="w-full space-y-6 pb-16 pt-6">
+        <section className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-slate-500">Bookings</div>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
+              Bookings
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Search, triage, and manage operational bookings across current account details, historical booking details, and service locations.
+            </p>
+          </div>
+          <AdminPageHelpLink
+            href="/admin/docs/customer-booking-identity"
+            label="View bookings guide"
+          />
+        </section>
+
         <section>
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Operational snapshot</div>
           <div className={`grid gap-4 ${activeHoldCount > 0 ? "md:grid-cols-2 xl:grid-cols-6" : "md:grid-cols-5"}`}>
@@ -1575,17 +1619,25 @@ export default async function AdminBookingsPage({
           </summary>
 
           <form action="/admin/bookings" method="GET" className="space-y-5 px-6 py-5">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,2.2fr)_220px_220px]">
-              <div>
+            <div className="grid gap-x-4 gap-y-5 xl:grid-cols-[minmax(0,2.2fr)_220px_220px] xl:items-start">
+              <div className="min-w-0">
                 <label className="mb-2 block text-sm font-semibold text-slate-700">Search</label>
                 <div className="relative">
                   <MagnifyingGlassIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                   <input
                     name="q"
                     defaultValue={filters.q}
-                    placeholder="Search booking ref, UUID, booked-with contact, current account, phone, or address"
+                    placeholder="Search booking ref, email, phone, contact name, or address"
                     className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
                   />
+                </div>
+                <div className="mt-2 max-w-2xl pl-0.5">
+                  <p className="text-sm leading-5 text-slate-500">
+                    Search by booking ref, email, phone, contact name, or service address. Booking ref is usually fastest.
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">
+                    If account details changed, older booking details may still help.
+                  </p>
                 </div>
               </div>
               <div>
@@ -1602,21 +1654,24 @@ export default async function AdminBookingsPage({
                   ))}
                 </select>
               </div>
-              <div className="flex items-end gap-3">
-                <button
-                  type="submit"
-                  className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
-                >
-                  Apply
-                </button>
-                {hasFiltersApplied ? (
-                  <Link
-                    href={clearAllHref}
-                    className="inline-flex h-12 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              <div className="flex flex-col">
+                <div className="mb-2 h-5" aria-hidden="true" />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
                   >
-                    Reset
-                  </Link>
-                ) : null}
+                    Apply
+                  </button>
+                  {hasFiltersApplied ? (
+                    <Link
+                      href={clearAllHref}
+                      className="inline-flex h-12 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Reset
+                    </Link>
+                  ) : null}
+                </div>
               </div>
             </div>
 
@@ -1780,7 +1835,9 @@ export default async function AdminBookingsPage({
                   <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(240px,0.95fr)_minmax(220px,0.85fr)_minmax(160px,0.7fr)] 2xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(250px,0.9fr)_minmax(220px,0.8fr)_minmax(170px,0.65fr)]">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-base font-semibold text-slate-900">{getCustomerFacingBookingLabel(booking.booking_ref)}</div>
+                        <span className="inline-flex items-center rounded-full bg-orange-50 px-3 py-1 text-sm font-semibold text-[#F97316] ring-1 ring-orange-200">
+                          {getCustomerFacingBookingLabel(booking.booking_ref)}
+                        </span>
                         <CopyBookingRefButton value={booking.booking_ref ?? booking.id} label={booking.booking_ref ? "Copy booking ref" : "Copy booking id"} />
                       </div>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1926,8 +1983,13 @@ export default async function AdminBookingsPage({
               hasFiltersApplied ? (
                 <EmptyState
                   title={showingHolds ? "No holds matched your current search and filters" : "No bookings matched your current search and filters"}
-                  copy={`Nothing matched this scope. ${scopeLabel}. Remove one or more filters or search all ${showingHolds ? "holds" : "bookings"} to widen the result set.`}
+                  copy={
+                    showingHolds
+                      ? `Nothing matched this scope. ${scopeLabel}. Remove one or more filters or search all holds to widen the result set.`
+                      : "No results found for this search. The booking may still be available under a different identifier, especially if customer details changed after the booking was created."
+                  }
                   resetHref={clearAllHref}
+                  tips={noResultsTips}
                 />
               ) : (
                 <EmptyState

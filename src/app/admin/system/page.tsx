@@ -430,7 +430,7 @@ export default async function AdminSystemPage() {
     .slice(0, 15);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
       <div className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">System</h1>
         <p className="mt-2 text-sm text-slate-500">Monitor system activity and operational health.</p>

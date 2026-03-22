@@ -163,14 +163,6 @@ function getRowHeatClasses(level: number) {
   return "bg-white";
 }
 
-function getIntensityLabel(level: number) {
-  if (level >= 0.85) return "Very high";
-  if (level >= 0.6) return "High";
-  if (level >= 0.35) return "Moderate";
-  if (level > 0) return "Low";
-  return "No activity";
-}
-
 function RevenueCell({
   value,
   max,
@@ -325,33 +317,6 @@ function PricingBadge({ mode }: { mode: "default" | "custom" }) {
     <span className="inline-flex min-w-[96px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-600">
         Default
     </span>
-  );
-}
-
-function HeatMeter({
-  value,
-  max,
-  tone = "orange",
-}: {
-  value: number;
-  max: number;
-  tone?: "orange" | "emerald";
-}) {
-  const width = max > 0 && value > 0 ? Math.max(10, Math.round((value / max) * 100)) : 0;
-  const fillClass = tone === "emerald" ? "bg-emerald-500" : "bg-[#F97316]";
-
-  return (
-    <div className="flex w-full items-center gap-3">
-      <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
-        <div
-          className={`h-full rounded-full ${fillClass}`}
-          style={{ width: `${width}%` }}
-        />
-      </div>
-      <div className="w-10 shrink-0 text-right text-sm font-semibold text-slate-700">
-        {number(value)}
-      </div>
-    </div>
   );
 }
 
@@ -531,36 +496,33 @@ export default async function ZipHeatMapPage({
   const maxRevenue = getMaxRevenue(rows);
 
   return (
-    <div className="min-h-screen bg-white">
-        <div className="mx-auto max-w-7xl px-6 pb-16 pt-10">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-                <div>
-                <h1 className="text-[34px] font-semibold tracking-tight text-slate-900">ZIP Analytics</h1>
-                <p className="mt-2 text-base text-slate-600">
+    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
+        <section className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+                <div className="min-w-0">
+                <div className="text-sm font-medium text-slate-500">ZIP analytics</div>
+                <h1 className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">ZIP Analytics</h1>
+                <p className="mt-2 max-w-3xl text-base text-slate-600">
                     Compare ZIP performance across bookings, revenue, and service coverage.
                 </p>
-                <ZipAnalyticsViewTabs active="heat" />
+                <div className="mt-4">
+                    <ZipAnalyticsViewTabs active="heat" />
+                </div>
                 </div>
 
-                <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1.5 text-sm font-semibold text-[#F97316]">
-                {selectedRange.label}
+                <div className="flex flex-col items-start gap-4 xl:items-end">
+                <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
+                    {selectedRange.label}
                 </div>
-            </div>
-
-            <div className="mt-8 rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                    <h2 className="text-lg font-semibold text-slate-900">Date range</h2>
-                    <p className="mt-1 text-sm text-slate-500">
+                <div className="text-sm text-slate-500 xl:text-right">
                     Filter ZIP performance by booking created date.
-                    </p>
                 </div>
-
                 <RangeTabs activeRange={selectedRange.key} />
                 </div>
             </div>
+        </section>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <ZipAnalyticsStatCard
                     label="Total bookings"
                     value={number(totalBookings)}
@@ -858,7 +820,6 @@ export default async function ZipHeatMapPage({
                 </div>
                 </div>
             </div>
-        </div>
     </div>
   );
 }

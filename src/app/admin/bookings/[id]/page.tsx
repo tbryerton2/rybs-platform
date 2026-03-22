@@ -35,6 +35,7 @@ import {
 } from "./actions";
 import PickupDetailsForm from "./pickup-details-form";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
+import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
 
 import {
   PhoneIcon,
@@ -1020,6 +1021,16 @@ export default async function AdminBookingDetailPage({
                 ) : null}
               </div>
             ) : null}
+
+            <div className="mb-6">
+              <ContextHelpCard
+                eyebrow="Why this may look different"
+                title="This booking keeps the contact details entered when it was created."
+                body="The linked customer account can have newer information later. If the booked-with email and current account email do not match, that is usually expected and not a bug."
+                learnMoreHref="/admin/docs/customer-booking-identity"
+                tone="sky"
+              />
+            </div>
 
             <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 px-5 py-4">

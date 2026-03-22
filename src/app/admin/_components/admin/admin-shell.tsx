@@ -58,6 +58,17 @@ function MobileNav({ pathname }: { pathname: string }) {
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const activeItem = getActiveAdminNavItem(pathname);
+  const showShellHeader =
+    pathname !== "/admin" &&
+    !pathname.startsWith("/admin/bookings") &&
+    pathname !== "/admin/customers" &&
+    !pathname.startsWith("/admin/docs") &&
+    pathname !== "/admin/system" &&
+    pathname !== "/admin/schedule" &&
+    pathname !== "/admin/financials" &&
+    !pathname.startsWith("/admin/analytics") &&
+    pathname !== "/admin/settings/pricing" &&
+    pathname !== "/admin/settings/zips";
   const sidebarCollapsed = useSyncExternalStore(
     subscribeToSidebarState,
     readStoredSidebarState,
@@ -86,18 +97,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           ].join(" ")}
         >
           <div className="min-w-0 px-4 sm:px-6 lg:px-8">
-            <div className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 lg:rounded-[28px] lg:border lg:px-8 lg:py-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                    Tan Can Man Admin
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">
-                    {activeItem?.label ?? "Admin"}
-                  </p>
+            {showShellHeader ? (
+              <div className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 lg:rounded-[28px] lg:border lg:px-8 lg:py-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      Tan Can Man Admin
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-slate-900">
+                      {activeItem?.label ?? "Admin"}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
 
             <main className="min-w-0">{children}</main>
           </div>
