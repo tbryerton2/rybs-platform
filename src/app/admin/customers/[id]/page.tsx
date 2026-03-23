@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { setCustomerPortalStatusAction, updateCustomerIdentityAction } from "./actions";
@@ -109,29 +110,31 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
   const lifetimeValue = bookings.reduce((sum, booking) => sum + (booking.total_price_cents ?? 0), 0);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
+    <AdminPage className="py-8">
       <AdminToastTrigger success={savedMessage} trigger={saved} clearParam="saved" />
 
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-slate-500">Customers</div>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
-            {customer.name || customer.email || "Customer account"}
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
+      <AdminPageHeader
+        title={customer.name || customer.email || "Customer account"}
+        eyebrow="Customers"
+        description={
+          <span className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span>{customer.email || "No email"}</span>
             <span>{customer.phone || "No phone"}</span>
-            <span>UUID: <span className="font-mono">{customer.id}</span></span>
-          </div>
-        </div>
-
-        <Link
-          href="/admin/customers"
-          className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
-          Back to customers
-        </Link>
-      </div>
+            <span>
+              UUID: <span className="font-mono">{customer.id}</span>
+            </span>
+          </span>
+        }
+        className="mb-6"
+        actions={
+          <Link
+            href="/admin/customers"
+            className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            Back to customers
+          </Link>
+        }
+      />
 
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-4">
@@ -324,6 +327,6 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
           </div>
         </aside>
       </div>
-    </main>
+    </AdminPage>
   );
 }

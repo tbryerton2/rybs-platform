@@ -4,6 +4,7 @@ export const revalidate = 0;
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { updatePricingSettingsAction } from "./actions";
 import { formatDateTimeET } from "@/lib/time";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -177,15 +178,11 @@ export default async function AdminPricingSettingsPage({
   const saved = sp(params, "saved") === "1";
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
-          Pricing Settings
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Control the default pricing rules for dumpster rentals.
-        </p>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="Pricing Settings"
+        description="Control the default pricing rules for dumpster rentals."
+      />
 
       {/* Current Pricing */}
         <section className="mb-8 rounded-[32px] border border-slate-200 bg-slate-50/80 p-6 shadow-[0_2px_6px_rgba(15,23,42,0.06)] sm:p-8">
@@ -409,6 +406,6 @@ export default async function AdminPricingSettingsPage({
           </div>
         </Section>
       </form>
-    </div>
+    </AdminPage>
   );
 }

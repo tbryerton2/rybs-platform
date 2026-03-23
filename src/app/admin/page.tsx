@@ -11,6 +11,7 @@ import { TopZipCodesCard } from "./_components/TopZipCodesCard";
 import { revalidatePath } from "next/cache";
 import { SummaryStatCard } from "./_components/SummaryStatCard";
 import { centsToDollars, formatUsd } from "@/lib/money";
+import { AdminPage, AdminPageHeader } from "./_components/admin/admin-page";
 
 export const dynamic = "force-dynamic";
 
@@ -172,21 +173,20 @@ export default async function AdminDashboardPage() {
     }
 
     return (
-        <div className="mx-auto max-w-6xl px-6 pb-16 pt-6">
-            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-                <div>
-                <div className="text-sm font-medium text-slate-500">Dashboard</div>
-                <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Dispatch and operations view for {todayStr}.</p>
-                </div>
-
-                <Link
-                    href="/admin/bookings"
-                    className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                    Open operations
-                </Link>
-            </div>
+        <AdminPage>
+            <AdminPageHeader
+                title="Dashboard"
+                eyebrow="Dashboard"
+                description={`Dispatch and operations view for ${todayStr}.`}
+                actions={
+                    <Link
+                        href="/admin/bookings"
+                        className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                        Open operations
+                    </Link>
+                }
+            />
 
 
             <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -249,7 +249,7 @@ export default async function AdminDashboardPage() {
                 <RevenueMTDCard amount={revenueMTD} />
                 <TopZipCodesCard items={topZipCodes} />
             </div>
-        </div>
+        </AdminPage>
         
     );
 }

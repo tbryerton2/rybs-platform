@@ -3,6 +3,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { CubeIcon, CurrencyDollarIcon, FireIcon, MapPinIcon, TrophyIcon } from "@heroicons/react/24/solid";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd } from "@/lib/money";
 import ZipMapClientWrapper from "./map-client-wrapper";
@@ -231,29 +232,27 @@ export default async function ZipMapPage({
       .find((row) => row.bookingCount > 0) ?? null;
 
   return (
-      <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
+      <AdminPage width="wide">
         <section className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="min-w-0">
-                <div className="text-sm font-medium text-slate-500">ZIP analytics</div>
-                <h1 className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">ZIP Analytics</h1>
-                <p className="mt-2 max-w-3xl text-base text-slate-600">
-                    Compare ZIP performance across bookings, revenue, and service coverage.
-                </p>
-                <div className="mt-4">
-                  <ZipAnalyticsViewTabs active="map" />
+          <AdminPageHeader
+            title="ZIP Analytics"
+            eyebrow="ZIP analytics"
+            description="Compare ZIP performance across bookings, revenue, and service coverage."
+            className="mb-0"
+            actions={
+              <div className="flex flex-col items-start gap-4 xl:items-end">
+                <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
+                  {selectedRange.label}
                 </div>
-            </div>
-
-            <div className="flex flex-col items-start gap-4 xl:items-end">
-              <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
-                {selectedRange.label}
+                <div className="text-sm text-slate-500 xl:text-right">
+                  Filter ZIP map activity by booking created date.
+                </div>
+                <RangeTabs activeRange={selectedRange.key} metric={selectedMetric} />
               </div>
-              <div className="text-sm text-slate-500 xl:text-right">
-                Filter ZIP map activity by booking created date.
-              </div>
-              <RangeTabs activeRange={selectedRange.key} metric={selectedMetric} />
-            </div>
+            }
+          />
+          <div className="mt-4">
+            <ZipAnalyticsViewTabs active="map" />
           </div>
         </section>
 
@@ -346,6 +345,6 @@ export default async function ZipMapPage({
             </div>
           </div>
         </div>
-    </div>
+    </AdminPage>
   );
 }

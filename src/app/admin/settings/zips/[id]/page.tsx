@@ -9,9 +9,8 @@ import { PricingOverrideForm } from "./pricing-override-form";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import {
   toggleZipActiveAction,
-  updateZipLocationAction,
-  updateZipPricingAction,
 } from "./actions";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -66,25 +65,19 @@ export default async function AdminZipDetailPage({
   const isCustomPricing = zipRecord.price_14_yard_override != null;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8">
-      <div className="mb-8">
-        <Link
-          href="/admin/settings/zips"
-          className="inline-flex items-center text-sm font-medium text-slate-500 transition hover:text-slate-900"
-        >
-          ← Back to ZIP settings
-        </Link>
+    <AdminPage className="py-8">
+      <Link
+        href="/admin/settings/zips"
+        className="inline-flex items-center text-sm font-medium text-slate-500 transition hover:text-slate-900"
+      >
+        ← Back to ZIP settings
+      </Link>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-              ZIP Settings
-            </h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Manage service area details and ZIP-level pricing overrides.
-            </p>
-          </div>
-
+      <AdminPageHeader
+        title="ZIP Settings"
+        description="Manage service area details and ZIP-level pricing overrides."
+        className="mt-4"
+        actions={
           <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
@@ -96,8 +89,8 @@ export default async function AdminZipDetailPage({
             </div>
             {statusBadge(zipRecord.active)}
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <AdminToastTrigger
         success={
@@ -249,6 +242,6 @@ export default async function AdminZipDetailPage({
           </section>
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

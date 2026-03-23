@@ -3,6 +3,7 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -154,22 +155,18 @@ export default async function AdminCustomersPage({
   const totalBookings = customers.reduce((sum, customer) => sum + customer.bookingCount, 0);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 pb-16 pt-6">
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-slate-500">Customers</div>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-            Customers
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Search customers by current account details and quickly review linked booking history.
-          </p>
-        </div>
-        <AdminPageHelpLink
-          href="/admin/docs/customer-booking-identity"
-          label="View customers guide"
-        />
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="Customers"
+        eyebrow="Customers"
+        description="Search customers by current account details and quickly review linked booking history."
+        actions={
+          <AdminPageHelpLink
+            href="/admin/docs/customer-booking-identity"
+            label="View customers guide"
+          />
+        }
+      />
 
       <section className="mb-8 grid gap-4 md:grid-cols-3">
         {[
@@ -329,6 +326,6 @@ export default async function AdminCustomersPage({
           </div>
         )}
       </section>
-    </main>
+    </AdminPage>
   );
 }

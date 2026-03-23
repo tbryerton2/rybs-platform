@@ -1,6 +1,7 @@
 // src/app/admin/docs/page.tsx
 
 import Link from "next/link";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { docs } from "@/lib/admin/docs";
 
 export const dynamic = "force-dynamic";
@@ -27,15 +28,12 @@ export default function AdminDocsPage() {
   const featuredSecondaryCards = featuredDoc?.summaryCards?.slice(2, 5) ?? [];
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Docs
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Internal guides for running the business.
-        </p>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="Docs"
+        description="Internal guides for running the business."
+        className="mb-6"
+      />
 
       {featuredDoc ? (
         <Link
@@ -155,6 +153,6 @@ export default function AdminDocsPage() {
           </Link>
         ))}
       </div>
-    </div>
+    </AdminPage>
   );
 }

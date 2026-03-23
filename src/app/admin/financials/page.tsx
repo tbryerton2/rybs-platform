@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
 
@@ -384,15 +385,11 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   ).sort((a, b) => a.localeCompare(b));
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Financials
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Track revenue, booking value, and business performance.
-        </p>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="Financials"
+        description="Track revenue, booking value, and business performance."
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className={cardShell("p-5")}>
@@ -761,6 +758,6 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         This is operational revenue visibility, not finalized accounting or payment
         reconciliation.
       </div>
-    </div>
+    </AdminPage>
   );
 }

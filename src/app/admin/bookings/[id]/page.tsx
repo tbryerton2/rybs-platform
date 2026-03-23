@@ -35,6 +35,7 @@ import {
 } from "./actions";
 import PickupDetailsForm from "./pickup-details-form";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
 
 import {
@@ -733,7 +734,7 @@ export default async function AdminBookingDetailPage({
           : "Booking is progressing normally.");
 
   return (
-    <div className="w-full space-y-6 py-8">
+    <AdminPage className="space-y-6 py-8">
       <AdminToastTrigger success={savedMessage} trigger={saved} clearParam="saved" />
 
       <div>
@@ -1741,6 +1742,6 @@ export default async function AdminBookingDetailPage({
   
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

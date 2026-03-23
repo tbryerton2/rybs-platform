@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type BookingStatus =
@@ -430,11 +431,11 @@ export default async function AdminSystemPage() {
     .slice(0, 15);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">System</h1>
-        <p className="mt-2 text-sm text-slate-500">Monitor system activity and operational health.</p>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="System"
+        description="Monitor system activity and operational health."
+      />
 
       <div className="space-y-6">
         <SectionCard
@@ -592,6 +593,6 @@ export default async function AdminSystemPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

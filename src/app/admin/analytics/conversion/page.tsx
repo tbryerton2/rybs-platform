@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 import {
   ArrowTrendingDownIcon,
   ArrowTrendingUpIcon,
@@ -611,7 +612,7 @@ export default async function ConversionAnalyticsPage({
   const maxFunnelSessions = Math.max(...analytics.funnel.map((step) => step.sessions));
 
   return (
-    <main className="mx-auto min-w-0 max-w-[1080px] pb-16 pt-8">
+    <AdminPage className="min-w-0 pt-8">
       <FilterBar filters={filters} />
 
       <section className="mt-10 rounded-[36px] border border-slate-200/80 bg-white/80 p-6 shadow-sm lg:p-8">
@@ -764,6 +765,6 @@ export default async function ConversionAnalyticsPage({
           <ValuePanel title="Operational value summary" rows={analytics.portalValueStats} />
         </div>
       </section>
-    </main>
+    </AdminPage>
   );
 }

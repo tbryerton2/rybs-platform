@@ -21,45 +21,9 @@ import {
   type IssueReportDetails,
   type PickupRequestDetails,
 } from "@/lib/rental-action-requests";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getPortalRequestDetail } from "@/lib/admin/portal-requests";
 import { updatePortalRequestAction } from "./actions";
-
-type PortalRequestDetail = {
-  id: string;
-  booking_id: string;
-  customer_id: string;
-  action_type: "pickup_request" | "extension_request" | "issue_report";
-  status: "submitted" | "under_review" | "approved" | "denied" | "completed";
-  customer_visible_status:
-    | "received"
-    | "under_review"
-    | "pickup_scheduled"
-    | "unable_to_confirm"
-    | "completed";
-  priority: "low" | "normal" | "high" | "urgent";
-  details_json: PickupRequestDetails | ExtensionRequestDetails | IssueReportDetails | null;
-  internal_notes: string | null;
-  customer_update: string | null;
-  submitted_at: string;
-  reviewed_at: string | null;
-  resolved_at: string | null;
-  customer: {
-    id: string;
-    name: string | null;
-    email: string | null;
-    phone: string | null;
-  } | null;
-  booking: {
-    id: string;
-    status: string | null;
-    customer_name: string | null;
-    customer_street: string | null;
-    customer_city: string | null;
-    customer_zip: string | null;
-    delivery_date: string | null;
-    pickup_date: string | null;
-  } | null;
-};
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -107,79 +71,53 @@ export default async function AdminPortalRequestDetailPage({
 }) {
   const { id } = await params;
   const resolvedSearchParams = (await searchParams) ?? {};
-
-  const { data, error } = await supabaseAdmin
-    .from("rental_action_requests")
-    .select(
-      `
-      id,
-      booking_id,
-      customer_id,
-      action_type,
-      status,
-      customer_visible_status,
-      priority,
-      details_json,
-      internal_notes,
-      customer_update,
-      submitted_at,
-      reviewed_at,
-      resolved_at,
-      customer:customers(id, name, email, phone),
-      booking:bookings(id, status, customer_name, customer_street, customer_city, customer_zip, delivery_date, pickup_date)
-    `,
-    )
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-  if (!data) notFound();
-
-  const request = data as PortalRequestDetail;
+  const request = await getPortalRequestDetail(id);
+  if (!request) notFound();
   const pickupDetails = (request.details_json ?? null) as PickupRequestDetails | null;
   const extensionDetails = (request.details_json ?? null) as ExtensionRequestDetails | null;
   const issueDetails = (request.details_json ?? null) as IssueReportDetails | null;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 pb-16 pt-10">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <Link href="/admin/portal-requests" className="text-sm font-medium text-slate-500 hover:text-slate-900">
-            ← Back to portal requests
-          </Link>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-            {getActionTypeLabel(request.action_type)}
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Request #{request.id.slice(0, 8)} for rental #{request.booking_id.slice(0, 8)}
-          </p>
-          <p className="mt-2 text-sm text-slate-500">{getActionTypeShortDescription(request.action_type)}</p>
-        </div>
+    <AdminPage className="pt-10">
+      <Link href="/admin/portal-requests" className="text-sm font-medium text-slate-500 hover:text-slate-900">
+        ← Back to portal requests
+      </Link>
 
-        <div className="flex flex-wrap gap-2">
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getRequestPriorityTone(
-              request.priority,
-            )}`}
-          >
-            Priority: {getRequestPriorityLabel(request.priority)}
-          </span>
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getInternalRequestStatusTone(
-              request.status,
-            )}`}
-          >
-            {getInternalRequestStatusLabel(request.status)}
-          </span>
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getCustomerVisibleStatusTone(
-              request.customer_visible_status,
-            )}`}
-          >
-            Customer: {getCustomerVisibleStatusLabel(request.customer_visible_status, request.action_type)}
-          </span>
-        </div>
-      </div>
+      <AdminPageHeader
+        title={getActionTypeLabel(request.action_type)}
+        description={
+          <>
+            <span>Request #{request.id.slice(0, 8)} for rental #{request.booking_id.slice(0, 8)}</span>
+            <span className="block">{getActionTypeShortDescription(request.action_type)}</span>
+          </>
+        }
+        className="mt-4"
+        actions={
+          <>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getRequestPriorityTone(
+                request.priority,
+              )}`}
+            >
+              Priority: {getRequestPriorityLabel(request.priority)}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getInternalRequestStatusTone(
+                request.status,
+              )}`}
+            >
+              {getInternalRequestStatusLabel(request.status)}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${getCustomerVisibleStatusTone(
+                request.customer_visible_status,
+              )}`}
+            >
+              Customer: {getCustomerVisibleStatusLabel(request.customer_visible_status, request.action_type)}
+            </span>
+          </>
+        }
+      />
 
       {resolvedSearchParams.saved ? (
         <div className="mt-6 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
@@ -374,6 +312,6 @@ export default async function AdminPortalRequestDetailPage({
           </div>
         </aside>
       </div>
-    </main>
+    </AdminPage>
   );
 }

@@ -12,37 +12,10 @@ import {
   getRequestPriorityLabel,
   getRequestPriorityTone,
 } from "@/lib/rental-action-requests";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getPortalRequests } from "@/lib/admin/portal-requests";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-
-type PortalRequestListRow = {
-  id: string;
-  booking_id: string;
-  action_type: "pickup_request" | "extension_request" | "issue_report";
-  status: "submitted" | "under_review" | "approved" | "denied" | "completed";
-  customer_visible_status:
-    | "received"
-    | "under_review"
-    | "pickup_scheduled"
-    | "unable_to_confirm"
-    | "completed";
-  priority: "low" | "normal" | "high" | "urgent";
-  submitted_at: string;
-  customer: {
-    id: string;
-    name: string | null;
-    email: string | null;
-  } | null;
-  booking: {
-    id: string;
-    customer_name: string | null;
-    customer_street: string | null;
-    customer_city: string | null;
-    customer_zip: string | null;
-    status: string | null;
-  } | null;
-};
 
 function sp(obj: SearchParams, key: string) {
   const value = obj[key];
@@ -57,53 +30,6 @@ function formatDateTime(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function getFilterWhere(filter: string) {
-  switch (filter) {
-    case "submitted":
-      return { type: "eq" as const, value: "submitted" };
-    case "under_review":
-      return { type: "eq" as const, value: "under_review" };
-    case "completed":
-      return { type: "eq" as const, value: "completed" };
-    default:
-      return null;
-  }
-}
-
-async function getPortalRequests(filter: string) {
-  let query = supabaseAdmin
-    .from("rental_action_requests")
-    .select(
-      `
-      id,
-      booking_id,
-      action_type,
-      status,
-      customer_visible_status,
-      priority,
-      submitted_at,
-      customer:customers(id, name, email),
-      booking:bookings(id, customer_name, customer_street, customer_city, customer_zip, status)
-    `,
-    )
-    .order("submitted_at", { ascending: false })
-    .limit(200);
-
-  const where = getFilterWhere(filter);
-  if (where?.type === "eq") {
-    query = query.eq("status", where.value);
-  }
-
-  if (filter === "pickup_request" || filter === "extension_request" || filter === "issue_report") {
-    query = query.eq("action_type", filter);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  return (data ?? []) as PortalRequestListRow[];
 }
 
 function FilterLink({
@@ -137,37 +63,35 @@ export default async function AdminPortalRequestsPage({
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const filter = sp(resolvedSearchParams, "filter") ?? "all";
-  const requests = await getPortalRequests(filter);
+  const { requests, loadError } = await getPortalRequests(filter);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 pb-16 pt-10">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
-            Admin
-          </div>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-            Portal requests
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Review self-service rental requests submitted from the customer portal.
-          </p>
-        </div>
+    <AdminPage className="pt-6">
+      <AdminPageHeader
+        title="Portal requests"
+        description="Review self-service rental requests submitted from the customer portal."
+        actions={
+          <>
+            <FilterLink href="/admin/portal-requests?filter=all" label="All" active={filter === "all"} />
+            <FilterLink href="/admin/portal-requests?filter=submitted" label="New" active={filter === "submitted"} />
+            <FilterLink
+              href="/admin/portal-requests?filter=under_review"
+              label="Under review"
+              active={filter === "under_review"}
+            />
+            <FilterLink href="/admin/portal-requests?filter=completed" label="Completed" active={filter === "completed"} />
+            <FilterLink href="/admin/portal-requests?filter=pickup_request" label="Pickup" active={filter === "pickup_request"} />
+            <FilterLink href="/admin/portal-requests?filter=extension_request" label="Extension" active={filter === "extension_request"} />
+            <FilterLink href="/admin/portal-requests?filter=issue_report" label="Issues" active={filter === "issue_report"} />
+          </>
+        }
+      />
 
-        <div className="flex flex-wrap gap-2">
-          <FilterLink href="/admin/portal-requests?filter=all" label="All" active={filter === "all"} />
-          <FilterLink href="/admin/portal-requests?filter=submitted" label="New" active={filter === "submitted"} />
-          <FilterLink
-            href="/admin/portal-requests?filter=under_review"
-            label="Under review"
-            active={filter === "under_review"}
-          />
-          <FilterLink href="/admin/portal-requests?filter=completed" label="Completed" active={filter === "completed"} />
-          <FilterLink href="/admin/portal-requests?filter=pickup_request" label="Pickup" active={filter === "pickup_request"} />
-          <FilterLink href="/admin/portal-requests?filter=extension_request" label="Extension" active={filter === "extension_request"} />
-          <FilterLink href="/admin/portal-requests?filter=issue_report" label="Issues" active={filter === "issue_report"} />
+      {loadError ? (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Portal requests could not be fully loaded. {loadError}
         </div>
-      </div>
+      ) : null}
 
       <section className="mt-8 rounded-[32px] border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-6 py-4">
@@ -178,7 +102,7 @@ export default async function AdminPortalRequestsPage({
 
         {requests.length === 0 ? (
           <div className="px-6 py-10 text-sm leading-6 text-slate-500">
-            No portal requests match this filter yet.
+            {loadError ? "No portal requests are available right now." : "No portal requests match this filter yet."}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -261,6 +185,6 @@ export default async function AdminPortalRequestsPage({
           </div>
         )}
       </section>
-    </main>
+    </AdminPage>
   );
 }

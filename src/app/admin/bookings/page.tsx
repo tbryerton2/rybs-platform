@@ -14,6 +14,7 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
 import { CopyBookingRefButton } from "@/app/admin/bookings/CopyBookingRefButton";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
@@ -1467,7 +1468,7 @@ export default async function AdminBookingsPage({
   return (
     <main className="min-h-screen bg-slate-100">
       <style>{filtersSummaryClasses()}</style>
-      <div className="w-full space-y-6 pb-16 pt-6">
+      <AdminPage className="space-y-6">
         <section className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-sm font-medium text-slate-500">Bookings</div>
@@ -2050,7 +2051,7 @@ export default async function AdminBookingsPage({
             ) : null}
           </div>
         </section>
-      </div>
+      </AdminPage>
     </main>
   );
 }

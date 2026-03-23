@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AddZipForm } from "./add-zip-form";
 import { ZipList } from "./zip-list";
@@ -65,15 +66,11 @@ export default async function AdminServiceAreaPage({
   const disabledCount = totalCount - activeCount;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pb-16 pt-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Service Area
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Manage ZIP codes where the business accepts bookings.
-        </p>
-      </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="Service Area"
+        description="Manage ZIP codes where the business accepts bookings."
+      />
 
       <AdminToastTrigger
         success={addedZip ? `ZIP ${addedZip} added successfully.` : null}
@@ -119,6 +116,6 @@ export default async function AdminServiceAreaPage({
       </div>
 
       <ZipList rows={rows} />
-    </div>
+    </AdminPage>
   );
 }

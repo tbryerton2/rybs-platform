@@ -63,6 +63,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     !pathname.startsWith("/admin/bookings") &&
     pathname !== "/admin/customers" &&
     !pathname.startsWith("/admin/docs") &&
+    pathname !== "/admin/portal-requests" &&
     pathname !== "/admin/system" &&
     pathname !== "/admin/schedule" &&
     pathname !== "/admin/financials" &&

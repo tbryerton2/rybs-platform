@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 import { docs, getDocBySlug } from "@/lib/admin/docs";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
   }));
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-16 pt-6">
+    <AdminPage>
       <div className="mb-6">
         <Link
           href="/admin/docs"
@@ -439,6 +440,6 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           </div>
         </aside>
       </div>
-    </div>
+    </AdminPage>
   );
 }
