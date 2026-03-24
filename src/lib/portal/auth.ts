@@ -12,11 +12,14 @@ export const PORTAL_LOGIN_COOLDOWN_SECONDS = 60;
 
 type PortalCustomer = {
   id: string;
+  customerId: string;
+  authUserId: string;
   name: string | null;
   email: string | null;
   phone: string | null;
   primary_street: string | null;
   primary_city: string | null;
+  primary_state: string | null;
   primary_zip: string | null;
   portal_status: "invited" | "active" | "deactivated";
   last_login_at: string | null;
@@ -30,8 +33,82 @@ type PortalCustomerRow = PortalCustomer & {
 };
 
 const PORTAL_CUSTOMER_SELECT =
-  "id, name, email, phone, primary_street, primary_city, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email, deactivated_at, deactivation_reason";
-const PORTAL_CUSTOMER_FALLBACK_SELECT = "id, name, email, phone, primary_street, primary_city, primary_zip";
+  "id, name, email, phone, primary_street, primary_city, primary_state, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email, deactivated_at, deactivation_reason";
+const PORTAL_CUSTOMER_FALLBACK_SELECT =
+  "id, name, email, phone, primary_street, primary_city, primary_zip";
+const PORTAL_CUSTOMER_ID_ONLY_SELECT = "id";
+
+export const PORTAL_CUSTOMER_NOT_LINKED_ERROR = "PORTAL_CUSTOMER_NOT_LINKED";
+
+async function lookupPortalCustomerByAuthUserId(userId: string) {
+  let lookup = await supabaseAdmin
+    .from("customers")
+    .select(PORTAL_CUSTOMER_SELECT)
+    .eq("auth_user_id", userId)
+    .maybeSingle();
+
+  if (lookup.error && isPortalSchemaError(lookup.error)) {
+    lookup = await supabaseAdmin
+      .from("customers")
+      .select(PORTAL_CUSTOMER_FALLBACK_SELECT)
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+  }
+
+  if (lookup.error) {
+    throw new Error(lookup.error.message);
+  }
+
+  return (lookup.data as PortalCustomerRow | null) ?? null;
+}
+
+async function lookupPortalCustomerByEmail(normalizedEmail: string) {
+  let lookup = await supabaseAdmin
+    .from("customers")
+    .select(PORTAL_CUSTOMER_SELECT)
+    .eq("normalized_email", normalizedEmail)
+    .maybeSingle();
+
+  if (lookup.error && isPortalSchemaError(lookup.error)) {
+    lookup = await supabaseAdmin
+      .from("customers")
+      .select(PORTAL_CUSTOMER_FALLBACK_SELECT)
+      .ilike("email", normalizedEmail)
+      .maybeSingle();
+  }
+
+  if (lookup.error) {
+    throw new Error(lookup.error.message);
+  }
+
+  return (lookup.data as PortalCustomerRow | null) ?? null;
+}
+
+async function verifyPortalCustomerRecord(customerId: string) {
+  let lookup = await supabaseAdmin
+    .from("customers")
+    .select(PORTAL_CUSTOMER_ID_ONLY_SELECT)
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (lookup.error && isPortalSchemaError(lookup.error)) {
+    lookup = await supabaseAdmin
+      .from("customers")
+      .select("id")
+      .eq("id", customerId)
+      .maybeSingle();
+  }
+
+  if (lookup.error) {
+    throw new Error(lookup.error.message);
+  }
+
+  if (!lookup.data?.id) {
+    throw new Error(PORTAL_CUSTOMER_NOT_LINKED_ERROR);
+  }
+
+  return lookup.data.id as string;
+}
 
 export function createPortalAuthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -181,35 +258,10 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
 
   let customer: PortalCustomerRow | null = null;
 
-  const authLookup = await supabaseAdmin
-    .from("customers")
-    .select(PORTAL_CUSTOMER_SELECT)
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
-  if (authLookup.error && !isPortalSchemaError(authLookup.error)) {
-    throw new Error(authLookup.error.message);
-  }
-
-  customer = (authLookup.data as PortalCustomerRow | null) ?? null;
+  customer = await lookupPortalCustomerByAuthUserId(user.id);
 
   if (!customer && normalizedUserEmail) {
-    let lookup = await supabaseAdmin
-      .from("customers")
-      .select(PORTAL_CUSTOMER_SELECT)
-      .eq("normalized_email", normalizedUserEmail)
-      .maybeSingle();
-
-    if (lookup.error && isPortalSchemaError(lookup.error)) {
-      lookup = await supabaseAdmin
-        .from("customers")
-        .select(PORTAL_CUSTOMER_FALLBACK_SELECT)
-        .ilike("email", normalizedUserEmail)
-        .maybeSingle();
-    }
-
-    if (lookup.error) throw new Error(lookup.error.message);
-    customer = (lookup.data as PortalCustomerRow | null) ?? null;
+    customer = await lookupPortalCustomerByEmail(normalizedUserEmail);
 
     if (customer?.id && !customer.auth_user_id) {
       await attachPortalAuthUserToCustomer(customer.id, user.id);
@@ -222,13 +274,24 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
   if (!customer) return null;
   if ((customer.portal_status ?? "active") === "deactivated") return null;
 
+  const verifiedCustomerId = await verifyPortalCustomerRecord(customer.id);
+  devPortalLog("portal_customer_resolved", {
+    authUserId: user.id,
+    customerId: verifiedCustomerId,
+    matchedCustomerRowId: customer.id,
+    email: user.email ?? null,
+  });
+
   return {
-    id: customer.id,
+    id: verifiedCustomerId,
+    customerId: verifiedCustomerId,
+    authUserId: user.id,
     name: customer.name,
     email: customer.email,
     phone: customer.phone,
     primary_street: customer.primary_street,
     primary_city: customer.primary_city,
+    primary_state: customer.primary_state,
     primary_zip: customer.primary_zip,
     portal_status: customer.portal_status ?? "active",
     last_login_at: customer.last_login_at ?? null,

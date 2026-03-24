@@ -20,6 +20,7 @@ type BookingDraft = {
   customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
+  customerState?: string;
   customerZip?: string;
   reorderSourceBookingId?: string;
   reorderSourceBookingRef?: string | null;
@@ -101,9 +102,13 @@ export default function PlacementStepPage() {
   const router = useRouter();
 
   const initialDraft = useMemo(() => readDraft(), []);
-  const addressSummary = [initialDraft.customerStreet, initialDraft.customerCity, initialDraft.customerZip]
+  const addressSummary = [
+    initialDraft.customerStreet,
+    [initialDraft.customerCity, initialDraft.customerState].filter(Boolean).join(", "),
+    initialDraft.customerZip,
+  ]
     .filter(Boolean)
-    .join(", ");
+    .join(" ");
 
   const [placementPreference, setPlacementPreference] = useState<PlacementPreference | "">(
     initialDraft.placementPreference ?? "",

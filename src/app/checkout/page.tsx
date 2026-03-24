@@ -24,6 +24,7 @@ type BookingDraft = {
   customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
+  customerState?: string;
   customerZip?: string;
   placementPreference?: PlacementPreference | null;
   placementDetails?: string | null;
@@ -390,8 +391,8 @@ export default function CheckoutPage() {
                   <div className="mt-2 text-slate-700">
                     {(draft.customerStreet || "").trim() || "—"}
                     <br />
-                    {(draft.customerCity || "").trim() || "—"}
-                    {draft.customerZip ? `, NY ${draft.customerZip}` : ", NY"}
+                    {[draft.customerCity, draft.customerState].filter(Boolean).join(", ") || "—"}
+                    {draft.customerZip ? ` ${draft.customerZip}` : ""}
                   </div>
                 </div>
 

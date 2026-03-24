@@ -12,6 +12,7 @@ export type ReorderDraft = {
   customerPhone?: string | null;
   customerStreet?: string | null;
   customerCity?: string | null;
+  customerState?: string | null;
   customerZip?: string | null;
   placementPreference?: string | null;
   placementDetails?: string | null;
@@ -35,6 +36,7 @@ export type ReorderSourceBookingRow = {
   customer_phone: string | null;
   customer_street: string | null;
   customer_city: string | null;
+  customer_state: string | null;
   customer_zip: string | null;
   service_county: string | null;
   service_town: string | null;
@@ -64,6 +66,7 @@ export function buildReorderDraft(source: ReorderSourceBookingRow): ReorderDraft
     customerPhone: source.customer_phone,
     customerStreet: source.customer_street,
     customerCity: source.customer_city,
+    customerState: source.customer_state,
     customerZip: source.customer_zip,
     placementPreference: source.placement_preference,
     placementDetails: source.placement_details,

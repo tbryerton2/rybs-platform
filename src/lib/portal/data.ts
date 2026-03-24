@@ -47,8 +47,12 @@ export type PortalLocation = {
   label: string;
   street: string;
   city: string;
+  state: string;
   zip: string;
   delivery_notes: string | null;
+  access_notes: string | null;
+  onsite_contact_name: string | null;
+  onsite_contact_phone: string | null;
   is_default: boolean;
 };
 
@@ -149,7 +153,9 @@ export async function getPortalDashboardData(customerId: string) {
     await Promise.all([
       supabaseAdmin
         .from("customer_locations")
-        .select("id, label, street, city, zip, delivery_notes, is_default")
+        .select(
+          "id, label, street, city, state, zip, delivery_notes, access_notes, onsite_contact_name, onsite_contact_phone, is_default",
+        )
         .eq("customer_id", customerId)
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: true }),

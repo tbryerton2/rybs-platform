@@ -8,6 +8,7 @@ type PortalNavItem = {
 const navItems: PortalNavItem[] = [
   { href: "/portal", label: "Dashboard" },
   { href: "/portal/rentals", label: "Rentals" },
+  { href: "/portal/locations", label: "Locations" },
   { href: "/portal/account", label: "Account" },
 ];
 
@@ -36,6 +37,13 @@ export function PortalShell({
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Link
+                href="/book"
+                className="rounded-full bg-[#F97316] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#EA580C]"
+              >
+                Start new rental
+              </Link>
+
               {navItems.map((item) => {
                 const isActive =
                   item.href === "/portal"

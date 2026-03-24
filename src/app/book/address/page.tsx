@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getReorderNotice } from "@/lib/reorder";
+import type { SavedServiceLocation } from "@/lib/service-locations";
 
 type BookingDraft = {
   zip?: string;
@@ -14,9 +15,11 @@ type BookingDraft = {
   customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
+  customerState?: string;
   customerZip?: string;
   reorderSourceBookingId?: string;
   reorderSourceBookingRef?: string | null;
+  selectedServiceLocationId?: string | null;
 };
 
 type ZipStatus =
@@ -24,6 +27,16 @@ type ZipStatus =
   | { state: "checking" }
   | { state: "valid"; county: string; town: string }
   | { state: "invalid"; message: string };
+
+type PortalCustomerSnapshot = {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  primaryStreet?: string | null;
+  primaryCity?: string | null;
+  primaryState?: string | null;
+  primaryZip?: string | null;
+};
 
 function formatPhoneUS(raw: string) {
   const digits = raw.replace(/\D/g, "").slice(0, 10);
@@ -36,6 +49,11 @@ function formatPhoneUS(raw: string) {
 
 function digitsOnly(raw: string) {
   return raw.replace(/\D/g, "").slice(0, 10);
+}
+
+function formatSummaryValue(value: string, fallback = "Not provided yet") {
+  const trimmed = value.trim();
+  return trimmed || fallback;
 }
 
 function inputClass() {
@@ -51,11 +69,17 @@ export default function AddressStepPage() {
   const [phone, setPhone] = useState("");
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
+  const [stateCode, setStateCode] = useState("");
   const [zip, setZip] = useState("");
   const [isEditingZip, setIsEditingZip] = useState(false);
   const [zipStatus, setZipStatus] = useState<ZipStatus>({ state: "idle" });
   const [reorderNotice, setReorderNotice] = useState<string | null>(null);
   const [reorderError, setReorderError] = useState<string | null>(null);
+  const [savedLocations, setSavedLocations] = useState<SavedServiceLocation[]>([]);
+  const [savedLocationsReady, setSavedLocationsReady] = useState(false);
+  const [savedLocationsError, setSavedLocationsError] = useState<string | null>(null);
+  const [selectedSavedLocationId, setSelectedSavedLocationId] = useState<string | null>(null);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
   const zipSectionRef = useRef<HTMLDivElement | null>(null);
   const reorderFromQuery = useMemo(() => (searchParams.get("reorderFrom") || "").trim(), [searchParams]);
 
@@ -88,10 +112,12 @@ export default function AddressStepPage() {
         setPhone("");
         setStreet("");
         setCity("");
+        setStateCode("");
         setZip("");
         setZipStatus({ state: "idle" });
         setIsEditingZip(false);
         setZipBeforeEdit("");
+        setSelectedSavedLocationId(null);
         return;
       }
 
@@ -102,10 +128,12 @@ export default function AddressStepPage() {
         setPhone("");
         setStreet("");
         setCity("");
+        setStateCode("");
         setZip(queryZip);
         setZipStatus({ state: "idle" });
         setIsEditingZip(false);
         setZipBeforeEdit("");
+        setSelectedSavedLocationId(null);
         return;
       }
 
@@ -117,6 +145,8 @@ export default function AddressStepPage() {
       if (existing.customerPhone) setPhone(formatPhoneUS(existing.customerPhone));
       if (existing.customerStreet) setStreet(existing.customerStreet);
       if (existing.customerCity) setCity(existing.customerCity);
+      if (existing.customerState) setStateCode(existing.customerState);
+      if (existing.selectedServiceLocationId) setSelectedSavedLocationId(existing.selectedServiceLocationId);
       if (existing.reorderSourceBookingRef) {
         setReorderNotice(getReorderNotice(existing.reorderSourceBookingRef));
       }
@@ -174,6 +204,8 @@ export default function AddressStepPage() {
         setPhone(formatPhoneUS(nextDraft.customerPhone ?? ""));
         setStreet(nextDraft.customerStreet ?? "");
         setCity(nextDraft.customerCity ?? "");
+        setStateCode(nextDraft.customerState ?? "");
+        setSelectedSavedLocationId(nextDraft.selectedServiceLocationId ?? null);
 
         const nextZip = ((nextDraft.customerZip || nextDraft.zip || "") + "").replace(/\D/g, "").slice(0, 5);
         setZip(nextZip);
@@ -192,6 +224,77 @@ export default function AddressStepPage() {
     };
   }, [reorderFromQuery]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/portal/locations", { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (res.status === 401) {
+          setSavedLocations([]);
+          setSavedLocationsError(null);
+          setSavedLocationsReady(true);
+          return;
+        }
+
+        if (!res.ok || !json?.ok) {
+          setSavedLocations([]);
+          setSavedLocationsError(json?.error || "Saved locations are unavailable right now.");
+          setSavedLocationsReady(true);
+          return;
+        }
+
+        setSavedLocations((json.locations ?? []) as SavedServiceLocation[]);
+        setSavedLocationsError(null);
+        setSavedLocationsReady(true);
+      } catch {
+        if (cancelled) return;
+        setSavedLocations([]);
+        setSavedLocationsError("Saved locations are unavailable right now.");
+        setSavedLocationsReady(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/portal/me", { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled || !res.ok || !json?.ok || !json?.customer) {
+          return;
+        }
+
+        const customer = json.customer as PortalCustomerSnapshot;
+
+        setName((current) => current || (customer.name?.trim() ?? ""));
+        setEmail((current) => current || (customer.email?.trim() ?? ""));
+        setPhone((current) => current || formatPhoneUS(customer.phone ?? ""));
+        setStreet((current) => current || (customer.primaryStreet?.trim() ?? ""));
+        setCity((current) => current || (customer.primaryCity?.trim() ?? ""));
+        setStateCode((current) => current || (customer.primaryState?.trim().toUpperCase() ?? ""));
+        setZip((current) => current || ((customer.primaryZip ?? "").replace(/\D/g, "").slice(0, 5) || ""));
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function persistDraft(extra?: Partial<BookingDraft>) {
     const raw = sessionStorage.getItem("tcm.booking");
     const existing: BookingDraft = raw ? JSON.parse(raw) : {};
@@ -206,15 +309,17 @@ export default function AddressStepPage() {
         customerPhone: digitsOnly(phone),
         customerStreet: street.trim(),
         customerCity: city.trim(),
+        customerState: stateCode.trim().toUpperCase(),
         customerZip: sanitizedZip,
-        zip: existing.zip ?? sanitizedZip,
+        selectedServiceLocationId: selectedSavedLocationId,
+        zip: sanitizedZip,
         ...extra,
       }),
     );
   }
 
-  async function handleZipCheck(): Promise<boolean> {
-    const z = zip.replace(/[^\d]/g, "").slice(0, 5);
+  async function handleZipCheck(zipOverride?: string): Promise<boolean> {
+    const z = (zipOverride ?? zip).replace(/[^\d]/g, "").slice(0, 5);
 
     if (!/^\d{5}$/.test(z)) {
       setZipStatus({ state: "invalid", message: "Enter a valid 5-digit ZIP code." });
@@ -272,7 +377,35 @@ export default function AddressStepPage() {
     router.push("/book/placement");
   }
 
+  async function handleUseSavedLocation(location: SavedServiceLocation) {
+    setStreet(location.street);
+    setCity(location.city);
+    setStateCode(location.state);
+    setZip(location.zip);
+    setSelectedSavedLocationId(location.id);
+    setIsEditingDetails(false);
+    setZipBeforeEdit(location.zip);
+    setIsEditingZip(false);
+
+    const ok = await handleZipCheck(location.zip);
+    if (!ok) {
+      zipSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    persistDraft({
+      customerStreet: location.street,
+      customerCity: location.city,
+      customerState: location.state,
+      customerZip: location.zip,
+      selectedServiceLocationId: location.id,
+    });
+  }
+
   const normalizedZip = zip.replace(/[^\d]/g, "").slice(0, 5);
+  const selectedSavedLocation =
+    savedLocations.find((location) => location.id === selectedSavedLocationId) ?? null;
+  const showSavedLocationSummary = !!selectedSavedLocation && !isEditingDetails;
   const canContinue =
     !isEditingZip &&
     !!name.trim() &&
@@ -280,6 +413,7 @@ export default function AddressStepPage() {
     !!phone.trim() &&
     !!street.trim() &&
     !!city.trim() &&
+    /^[A-Z]{2}$/.test(stateCode.trim().toUpperCase()) &&
     /^\d{5}$/.test(normalizedZip);
 
   return (
@@ -324,14 +458,172 @@ export default function AddressStepPage() {
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-5">
-                <h2 className="text-lg font-semibold text-slate-900">Contact & address</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  This is where we will deliver the dumpster and how we will contact you about the job.
+            {savedLocationsReady && savedLocations.length > 0 ? (
+              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Use a saved location</h2>
+                  </div>
+                  <a
+                    href="/portal/locations"
+                    className="inline-flex items-center justify-center rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 hover:text-slate-900"
+                  >
+                    Manage saved locations
+                  </a>
+                </div>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Start with your default location or pick another saved address, then update anything you need below.
                 </p>
+
+                <div className="mt-5 grid gap-3">
+                  {savedLocations.map((location) => (
+                    <button
+                      key={location.id}
+                      type="button"
+                      onClick={() => handleUseSavedLocation(location)}
+                      className={[
+                        "rounded-[24px] border px-4 py-4 text-left transition",
+                        selectedSavedLocationId === location.id
+                          ? "border-[#FDBA74] bg-[#FFF7ED] ring-2 ring-[#FDBA74]/40"
+                          : "border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-900">{location.label}</span>
+                            {location.is_default ? (
+                              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                                Default
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-1 text-sm leading-6 text-slate-500">
+                            {[location.street, [location.city, location.state].filter(Boolean).join(", "), location.zip]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </div>
+                          {location.delivery_notes ? (
+                            <div className="mt-2 text-sm leading-6 text-slate-600">{location.delivery_notes}</div>
+                          ) : null}
+                        </div>
+                        <span className="text-sm font-semibold text-[#F97316]">
+                          {selectedSavedLocationId === location.id ? "Selected" : "Use"}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {!selectedSavedLocation ? (
+                  <div className="mt-4 text-sm text-slate-500">Or enter a new address manually below.</div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {savedLocationsReady && savedLocationsError ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+                {savedLocationsError}
+              </div>
+            ) : null}
+
+            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    {showSavedLocationSummary ? "Booking details" : "Contact & address"}
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    {showSavedLocationSummary
+                      ? "Your saved location has already filled in this booking. Review what will be used, or open the form if anything should be different for this rental."
+                      : "This is where we will deliver the dumpster and how we will contact you about the job."}
+                  </p>
+                </div>
+
+                {showSavedLocationSummary ? (
+                  <div className="flex w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDetails(true)}
+                      className="inline-flex h-11 items-center justify-center whitespace-nowrap rounded-2xl bg-slate-900 px-5 text-center text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Edit details
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
+              {showSavedLocationSummary ? (
+                <div className="space-y-4">
+                  <div className="rounded-[24px] border border-[#FDBA74] bg-[#FFF7ED] px-5 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900">{selectedSavedLocation.label}</span>
+                      {selectedSavedLocation.is_default ? (
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                          Default saved location
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Using this saved location as the starting point for this booking.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Contact</div>
+                      <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Name</div>
+                          <div className="mt-1 font-medium text-slate-900">{formatSummaryValue(name)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Email</div>
+                          <div className="mt-1 font-medium text-slate-900">{formatSummaryValue(email)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Phone</div>
+                          <div className="mt-1 font-medium text-slate-900">{formatSummaryValue(phone)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                        Delivery address
+                      </div>
+                      <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Street</div>
+                          <div className="mt-1 font-medium text-slate-900">{formatSummaryValue(street)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">City, state</div>
+                          <div className="mt-1 font-medium text-slate-900">
+                            {formatSummaryValue([city.trim(), stateCode.trim().toUpperCase()].filter(Boolean).join(", "))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">ZIP code</div>
+                          <div className="mt-1 font-medium text-slate-900">{formatSummaryValue(zip)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedSavedLocation.delivery_notes ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-600">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Placement notes</div>
+                      <div className="mt-2 text-slate-900">{selectedSavedLocation.delivery_notes}</div>
+                    </div>
+                  ) : null}
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
+                    Editing these details later only changes this booking. It does not update the saved location automatically.
+                  </div>
+                </div>
+              ) : (
               <div className="grid gap-5">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">Name</label>
@@ -387,6 +679,18 @@ export default function AddressStepPage() {
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="e.g., Chittenango"
                     autoComplete="address-level2"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">State</label>
+                  <input
+                    className={inputClass()}
+                    value={stateCode}
+                    onChange={(e) => setStateCode(e.target.value.toUpperCase())}
+                    placeholder="e.g., NY"
+                    autoComplete="address-level1"
+                    maxLength={2}
                   />
                 </div>
 
@@ -486,6 +790,13 @@ export default function AddressStepPage() {
                   </div>
                 </div>
               </div>
+              )}
+
+              {selectedSavedLocation && isEditingDetails ? (
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm leading-6 text-slate-500">
+                  You are editing this booking&apos;s snapshot details. Your saved location record will stay unchanged.
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-2">

@@ -62,7 +62,7 @@ export default async function PortalAccountPage() {
             <ContactCard
               label="Default address"
               value={formatAddressLine(
-                [customer.primary_street, customer.primary_city, customer.primary_zip],
+                [customer.primary_street, [customer.primary_city, customer.primary_state].filter(Boolean).join(", "), customer.primary_zip],
                 "No default address saved",
               )}
             />
@@ -94,9 +94,14 @@ export default async function PortalAccountPage() {
                   Service locations we can reuse for future rentals and deliveries.
                 </p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                {locations.length} total
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                  {locations.length} total
+                </span>
+                <Link href="/portal/locations" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
+                  Manage
+                </Link>
+              </div>
             </div>
 
             <div className="mt-5 space-y-3">
@@ -112,7 +117,9 @@ export default async function PortalAccountPage() {
                       <div>
                         <div className="text-sm font-semibold text-slate-900">{location.label}</div>
                         <div className="mt-1 text-sm leading-6 text-slate-500">
-                          {[location.street, location.city, location.zip].filter(Boolean).join(", ")}
+                          {[location.street, [location.city, location.state].filter(Boolean).join(", "), location.zip]
+                            .filter(Boolean)
+                            .join(" ")}
                         </div>
                       </div>
                       {location.is_default ? (

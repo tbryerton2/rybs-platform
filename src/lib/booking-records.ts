@@ -10,6 +10,7 @@ type BookingIdentityInput = {
   customerPhone?: string | null;
   customerStreet?: string | null;
   customerCity?: string | null;
+  customerState?: string | null;
   customerZip?: string | null;
   notes?: string | null;
 };
@@ -60,6 +61,7 @@ export async function createBookingRecord({
       phone: normalizedPhone,
       street: identity.customerStreet,
       city: identity.customerCity,
+      state: identity.customerState,
       zip: identity.customerZip,
       deliveryNotes: identity.notes,
     },
@@ -81,6 +83,7 @@ export async function createBookingRecord({
     customer_phone: normalizedPhone,
     customer_street: identity.customerStreet?.trim() || null,
     customer_city: identity.customerCity?.trim() || null,
+    customer_state: identity.customerState?.trim().toUpperCase() || null,
     customer_zip: identity.customerZip?.trim() || null,
     booking_contact_name: identity.customerName?.trim() || null,
     booking_contact_email: identity.customerEmail?.trim() || null,

@@ -16,6 +16,7 @@ type BookingDraft = {
   customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
+  customerState?: string;
   customerZip?: string;
   placementPreference?: string | null;
   placementDetails?: string | null;
@@ -528,8 +529,8 @@ export default function ConfirmPage() {
                 <div className="text-sm text-slate-700">
                   <div className="font-medium text-slate-900">{(draft.customerStreet || "").trim() || "—"}</div>
                   <div className="mt-1">
-                    {(draft.customerCity || "").trim() || "—"}
-                    {draft.customerZip ? `, NY ${draft.customerZip}` : ", NY"}
+                    {[draft.customerCity, draft.customerState].filter(Boolean).join(", ") || "—"}
+                    {draft.customerZip ? ` ${draft.customerZip}` : ""}
                   </div>
                 </div>
               </CardShell>

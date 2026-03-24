@@ -9,18 +9,20 @@ export function PortalSubpageHeader({
 }: {
   title: string;
   description?: string;
-  backHref?: string;
+  backHref?: string | null;
   backLabel?: string;
   meta?: React.ReactNode;
 }) {
   return (
     <div className="space-y-3">
-      <Link
-        href={backHref}
-        className="inline-flex items-center text-sm font-medium text-slate-500 transition hover:text-slate-900"
-      >
-        ← {backLabel}
-      </Link>
+      {backHref ? (
+        <Link
+          href={backHref}
+          className="inline-flex items-center text-sm font-medium text-slate-500 transition hover:text-slate-900"
+        >
+          ← {backLabel}
+        </Link>
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-3xl font-semibold tracking-tight text-slate-900">{title}</h2>

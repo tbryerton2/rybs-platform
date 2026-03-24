@@ -22,6 +22,7 @@ type ConfirmBody = {
     customerPhone?: string;
     customerStreet?: string;
     customerCity?: string;
+    customerState?: string;
     customerZip?: string;
     placementPreference?: string | null;
     placementDetails?: string | null;
@@ -44,6 +45,7 @@ type ConfirmBody = {
   customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
+  customerState?: string;
   customerZip?: string;
   placementPreference?: string | null;
   placementDetails?: string | null;
@@ -107,6 +109,7 @@ export async function POST(req: Request) {
     const customerPhone = normalizePhone(draft.customerPhone ?? body.customerPhone);
     const customerStreet = ((draft.customerStreet ?? body.customerStreet) || "").trim();
     const customerCity = ((draft.customerCity ?? body.customerCity) || "").trim();
+    const customerState = ((draft.customerState ?? body.customerState) || "").trim().toUpperCase();
     const customerZip = ((draft.customerZip ?? body.customerZip) || "").trim();
     const reorderSourceBookingId = ((draft.reorderSourceBookingId ?? body.reorderSourceBookingId) || "").trim();
     const placement = sanitizePlacementDetails({
@@ -132,6 +135,10 @@ export async function POST(req: Request) {
         { ok: false, error: "Invalid deliveryDate. Use YYYY-MM-DD." },
         { status: 400 }
       );
+    }
+
+    if (customerState && !/^[A-Z]{2}$/.test(customerState)) {
+      return NextResponse.json({ ok: false, error: "Use a valid 2-letter state code." }, { status: 400 });
     }
 
     if (pickupDate && !isYMD(pickupDate)) {
@@ -240,6 +247,7 @@ export async function POST(req: Request) {
           customerPhone,
           customerStreet,
           customerCity,
+          customerState,
           customerZip,
         },
         placement: {

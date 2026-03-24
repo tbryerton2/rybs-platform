@@ -116,103 +116,122 @@ create trigger customer_locations_set_updated_at
 before update on public.customer_locations
 for each row execute function public.set_updated_at();
 
-alter table public.bookings
-  add column if not exists customer_id uuid references public.customers (id) on delete set null;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'bookings'
+  ) then
+    alter table public.bookings
+      add column if not exists customer_id uuid references public.customers (id) on delete set null;
 
-create index if not exists bookings_customer_id_idx
-  on public.bookings (customer_id);
-
-create table if not exists public.booking_requests (
-  id uuid primary key default gen_random_uuid(),
-  booking_id uuid not null references public.bookings (id) on delete cascade,
-  customer_id uuid references public.customers (id) on delete set null,
-  request_type text not null
-    check (request_type in ('pickup', 'extension', 'issue')),
-  status text not null default 'submitted'
-    check (status in ('submitted', 'reviewed', 'approved', 'rejected', 'completed')),
-  message text,
-  requested_pickup_date date,
-  requested_extension_days integer
-    check (requested_extension_days is null or requested_extension_days > 0),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists booking_requests_booking_id_idx
-  on public.booking_requests (booking_id);
-
-create index if not exists booking_requests_customer_id_idx
-  on public.booking_requests (customer_id);
-
-create index if not exists booking_requests_status_idx
-  on public.booking_requests (status);
-
-drop trigger if exists booking_requests_set_updated_at on public.booking_requests;
-create trigger booking_requests_set_updated_at
-before update on public.booking_requests
-for each row execute function public.set_updated_at();
+    create index if not exists bookings_customer_id_idx
+      on public.bookings (customer_id);
+  end if;
+end
+$$;
 
 alter table public.customers enable row level security;
 alter table public.customer_locations enable row level security;
-alter table public.booking_requests enable row level security;
+do $$
+begin
+  if to_regclass('public.bookings') is not null then
+    create table if not exists public.booking_requests (
+      id uuid primary key default gen_random_uuid(),
+      booking_id uuid not null references public.bookings (id) on delete cascade,
+      customer_id uuid references public.customers (id) on delete set null,
+      request_type text not null
+        check (request_type in ('pickup', 'extension', 'issue')),
+      status text not null default 'submitted'
+        check (status in ('submitted', 'reviewed', 'approved', 'rejected', 'completed')),
+      message text,
+      requested_pickup_date date,
+      requested_extension_days integer
+        check (requested_extension_days is null or requested_extension_days > 0),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
 
-create or replace view public.customer_rollups as
-with base as (
-  select
-    b.id,
-    b.created_at,
-    b.delivery_date,
-    b.status,
-    b.total_price_cents,
-    b.customer_name,
-    b.customer_email,
-    b.customer_phone,
-    b.customer_city,
-    b.customer_zip,
-    case
-      when public.normalize_email(b.customer_email) is not null then public.normalize_email(b.customer_email)
-      else public.normalize_phone(b.customer_phone)
-    end as identifier,
-    case
-      when public.normalize_email(b.customer_email) is not null then 'email'
-      else 'phone'
-    end as identifier_type
-  from public.bookings b
-  where public.normalize_email(b.customer_email) is not null
-     or public.normalize_phone(b.customer_phone) is not null
-),
-ranked as (
-  select
-    base.*,
-    row_number() over (
-      partition by base.identifier, base.identifier_type
-      order by base.delivery_date desc nulls last, base.created_at desc nulls last
-    ) as rn
-  from base
-)
-select
-  (array_agg(
-    ranked.id
-    order by ranked.delivery_date desc nulls last, ranked.created_at desc nulls last, ranked.id desc
-  ))[1] as id,
-  ranked.identifier,
-  ranked.identifier_type::text as identifier_type,
-  max(ranked.customer_name) filter (where ranked.customer_name is not null and ranked.customer_name <> '') as name,
-  max(ranked.customer_email) filter (where ranked.customer_email is not null and ranked.customer_email <> '') as email,
-  max(ranked.customer_phone) filter (where ranked.customer_phone is not null and ranked.customer_phone <> '') as phone,
-  max(ranked.customer_city) filter (where ranked.rn = 1) as primary_city,
-  max(ranked.customer_zip) filter (where ranked.rn = 1) as primary_zip,
-  count(*)::integer as booking_count,
-  count(*) filter (where ranked.status in ('confirmed', 'scheduled', 'delivered'))::integer as active_booking_count,
-  min(ranked.created_at) as first_booking_at,
-  max(ranked.created_at) as last_booking_at,
-  (
-    sum(
-      case
-        when ranked.total_price_cents is null then 0
-        else ranked.total_price_cents
-      end
-    )::numeric / 100
-  )::numeric(12, 2) as lifetime_revenue
-from ranked
-group by ranked.identifier, ranked.identifier_type;
+    create index if not exists booking_requests_booking_id_idx
+      on public.booking_requests (booking_id);
+
+    create index if not exists booking_requests_customer_id_idx
+      on public.booking_requests (customer_id);
+
+    create index if not exists booking_requests_status_idx
+      on public.booking_requests (status);
+
+    drop trigger if exists booking_requests_set_updated_at on public.booking_requests;
+    create trigger booking_requests_set_updated_at
+    before update on public.booking_requests
+    for each row execute function public.set_updated_at();
+
+    alter table public.booking_requests enable row level security;
+
+    execute $view$
+      create or replace view public.customer_rollups as
+      with base as (
+        select
+          b.id,
+          b.created_at,
+          b.delivery_date,
+          b.status,
+          b.total_price_cents,
+          b.customer_name,
+          b.customer_email,
+          b.customer_phone,
+          b.customer_city,
+          b.customer_zip,
+          case
+            when public.normalize_email(b.customer_email) is not null then public.normalize_email(b.customer_email)
+            else public.normalize_phone(b.customer_phone)
+          end as identifier,
+          case
+            when public.normalize_email(b.customer_email) is not null then 'email'
+            else 'phone'
+          end as identifier_type
+        from public.bookings b
+        where public.normalize_email(b.customer_email) is not null
+           or public.normalize_phone(b.customer_phone) is not null
+      ),
+      ranked as (
+        select
+          base.*,
+          row_number() over (
+            partition by base.identifier, base.identifier_type
+            order by base.delivery_date desc nulls last, base.created_at desc nulls last
+          ) as rn
+        from base
+      )
+      select
+        (array_agg(
+          ranked.id
+          order by ranked.delivery_date desc nulls last, ranked.created_at desc nulls last, ranked.id desc
+        ))[1] as id,
+        ranked.identifier,
+        ranked.identifier_type::text as identifier_type,
+        max(ranked.customer_name) filter (where ranked.customer_name is not null and ranked.customer_name <> '') as name,
+        max(ranked.customer_email) filter (where ranked.customer_email is not null and ranked.customer_email <> '') as email,
+        max(ranked.customer_phone) filter (where ranked.customer_phone is not null and ranked.customer_phone <> '') as phone,
+        max(ranked.customer_city) filter (where ranked.rn = 1) as primary_city,
+        max(ranked.customer_zip) filter (where ranked.rn = 1) as primary_zip,
+        count(*)::integer as booking_count,
+        count(*) filter (where ranked.status in ('confirmed', 'scheduled', 'delivered'))::integer as active_booking_count,
+        min(ranked.created_at) as first_booking_at,
+        max(ranked.created_at) as last_booking_at,
+        (
+          sum(
+            case
+              when ranked.total_price_cents is null then 0
+              else ranked.total_price_cents
+            end
+          )::numeric / 100
+        )::numeric(12, 2) as lifetime_revenue
+      from ranked
+      group by ranked.identifier, ranked.identifier_type
+    $view$;
+  end if;
+end
+$$;

@@ -19,7 +19,7 @@ export async function GET(req: Request) {
     const { data, error } = await supabaseAdmin
       .from("bookings")
       .select(
-        "id, status, total_price_cents, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county"
+        "id, status, total_price_cents, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county",
       )
       .eq("id", bookingId)
       .single();
@@ -51,6 +51,7 @@ export async function POST(req: Request) {
       customer_phone,
       customer_street,
       customer_city,
+      customer_state,
       customer_zip,
       placement_preference,
       placement_details,
@@ -79,6 +80,9 @@ export async function POST(req: Request) {
     }
     if (!customer_email || !isValidEmail(customer_email)) {
       return NextResponse.json({ ok: false, error: "A valid email address is required." }, { status: 400 });
+    }
+    if (customer_state && !/^[A-Za-z]{2}$/.test(String(customer_state).trim())) {
+      return NextResponse.json({ ok: false, error: "A valid 2-letter customer_state is required." }, { status: 400 });
     }
 
     const normalizedCustomerPhone = normalizePhone(customer_phone);
@@ -118,6 +122,7 @@ export async function POST(req: Request) {
           customerPhone: normalizedCustomerPhone,
           customerStreet: customer_street,
           customerCity: customer_city,
+          customerState: customer_state,
           customerZip: customer_zip,
         },
         placement: {

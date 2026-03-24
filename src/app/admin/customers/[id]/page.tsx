@@ -42,6 +42,17 @@ type HistoryRow = {
   created_at: string;
 };
 
+type SavedLocationRow = {
+  id: string;
+  label: string;
+  street: string;
+  city: string;
+  state: string | null;
+  zip: string;
+  delivery_notes: string | null;
+  is_default: boolean;
+};
+
 function formatDate(value: string | null) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", {
@@ -76,11 +87,11 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
   const { saved } = (await searchParams) ?? {};
   const savedMessage = getSavedMessage(saved);
 
-  const [{ data: customer, error: customerError }, { data: bookingsData, error: bookingsError }, { data: historyData, error: historyError }] =
+  const [{ data: customer, error: customerError }, { data: bookingsData, error: bookingsError }, { data: historyData, error: historyError }, { data: savedLocationsData, error: savedLocationsError }] =
     await Promise.all([
       supabaseAdmin
         .from("customers")
-        .select("id, created_at, name, email, phone, primary_street, primary_city, primary_zip, portal_status, deactivated_at, deactivation_reason")
+        .select("id, created_at, name, email, phone, primary_street, primary_city, primary_state, primary_zip, portal_status, deactivated_at, deactivation_reason")
         .eq("id", id)
         .maybeSingle(),
       supabaseAdmin
@@ -95,15 +106,23 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         .eq("entity_id", id)
         .order("created_at", { ascending: false })
         .limit(25),
+      supabaseAdmin
+        .from("customer_locations")
+        .select("id, label, street, city, state, zip, delivery_notes, is_default")
+        .eq("customer_id", id)
+        .order("is_default", { ascending: false })
+        .order("updated_at", { ascending: false }),
     ]);
 
   if (customerError) throw new Error(customerError.message);
   if (bookingsError) throw new Error(bookingsError.message);
   if (historyError) throw new Error(historyError.message);
+  if (savedLocationsError) throw new Error(savedLocationsError.message);
   if (!customer) notFound();
 
   const bookings = (bookingsData ?? []) as BookingRow[];
   const history = (historyData ?? []) as HistoryRow[];
+  const savedLocations = (savedLocationsData ?? []) as SavedLocationRow[];
   const activeBookings = bookings.filter((booking) =>
     ["confirmed", "scheduled", "delivered"].includes((booking.status ?? "").toLowerCase()),
   );
@@ -257,6 +276,42 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         </section>
 
         <aside className="space-y-6">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Saved service locations</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Reusable customer locations. These are separate from booking address snapshots.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              {savedLocations.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+                  No saved service locations on this customer yet.
+                </div>
+              ) : (
+                savedLocations.map((location) => (
+                  <div key={location.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-slate-900">{location.label}</div>
+                      {location.is_default ? (
+                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                          Default
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {[location.street, [location.city, location.state].filter(Boolean).join(", "), location.zip]
+                        .filter(Boolean)
+                        .join(" ")}
+                    </div>
+                    {location.delivery_notes ? (
+                      <div className="mt-2 text-sm leading-6 text-slate-500">{location.delivery_notes}</div>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Portal access</h2>
             <p className="mt-1 text-sm text-slate-500">

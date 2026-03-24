@@ -10,6 +10,7 @@ type CustomerContactInput = {
   phone?: string | null;
   street?: string | null;
   city?: string | null;
+  state?: string | null;
   zip?: string | null;
   deliveryNotes?: string | null;
 };
@@ -21,12 +22,17 @@ type CustomerRow = {
   phone: string | null;
   primary_street: string | null;
   primary_city: string | null;
+  primary_state: string | null;
   primary_zip: string | null;
   normalized_email?: string | null;
   portal_status?: string | null;
 };
 
 export const PORTAL_ACCESS_DEACTIVATED_ERROR = "PORTAL_ACCESS_DEACTIVATED";
+const CUSTOMER_SELECT =
+  "id, name, email, phone, primary_street, primary_city, primary_state, primary_zip, normalized_email, portal_status";
+const CUSTOMER_FALLBACK_SELECT =
+  "id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status";
 
 function clean(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -94,9 +100,7 @@ async function findMatchingCustomer(
   if (normalizedEmail) {
     const emailLookup = await supabase
       .from("customers")
-      .select(
-        "id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status",
-      )
+      .select(CUSTOMER_SELECT)
       .eq("normalized_email", normalizedEmail)
       .maybeSingle();
 
@@ -107,7 +111,7 @@ async function findMatchingCustomer(
 
     const fallbackEmailLookup = await supabase
       .from("customers")
-      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
+      .select(CUSTOMER_FALLBACK_SELECT)
       .ilike("email", normalizedEmail)
       .limit(1);
 
@@ -121,7 +125,7 @@ async function findMatchingCustomer(
   if (normalizedPhone && fullName) {
     const { data, error } = await supabase
       .from("customers")
-      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
+      .select(CUSTOMER_SELECT)
       .not("phone", "is", null);
 
     if (error) throw new Error(error.message);
@@ -145,9 +149,10 @@ async function ensureCustomerLocation(
 ) {
   const street = clean(input.street);
   const city = clean(input.city);
+  const state = clean(input.state)?.toUpperCase() ?? null;
   const zip = clean(input.zip);
 
-  if (!street || !city || !zip) return;
+  if (!street || !city || !state || !zip) return;
 
   const { data: existing, error: existingError } = await supabase
     .from("customer_locations")
@@ -155,6 +160,7 @@ async function ensureCustomerLocation(
     .eq("customer_id", customerId)
     .eq("street", street)
     .eq("city", city)
+    .eq("state", state)
     .eq("zip", zip)
     .limit(1);
 
@@ -184,6 +190,7 @@ async function ensureCustomerLocation(
     label,
     street,
     city,
+    state,
     zip,
     delivery_notes: clean(input.deliveryNotes),
     is_default: !hasDefault,
@@ -264,6 +271,7 @@ export async function findOrCreateCustomerRecord(
   const phone = normalizePhone(input.phone);
   const street = clean(input.street);
   const city = clean(input.city);
+  const state = clean(input.state)?.toUpperCase() ?? null;
   const zip = clean(input.zip);
 
   if (email && !isValidEmail(email)) {
@@ -285,6 +293,7 @@ export async function findOrCreateCustomerRecord(
       phone,
       primary_street: street,
       primary_city: city,
+      primary_state: state,
       primary_zip: zip,
       portal_status: "invited",
       identifier: legacyIdentifier.identifier,
@@ -294,7 +303,7 @@ export async function findOrCreateCustomerRecord(
     let inserted = await supabase
       .from("customers")
       .insert(insertPayload)
-      .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
+      .select(CUSTOMER_SELECT)
       .single();
 
     if (inserted.error && isPortalSchemaError(inserted.error)) {
@@ -310,7 +319,7 @@ export async function findOrCreateCustomerRecord(
       inserted = await supabase
         .from("customers")
         .insert(fallbackPayload)
-        .select("id, name, email, phone, primary_street, primary_city, primary_zip, normalized_email, portal_status")
+        .select(CUSTOMER_FALLBACK_SELECT)
         .single();
     }
 
@@ -326,6 +335,7 @@ export async function findOrCreateCustomerRecord(
     if (phone && normalizePhone(customer.phone) !== phone) updates.phone = phone;
     if (!customer.primary_street && street) updates.primary_street = street;
     if (!customer.primary_city && city) updates.primary_city = city;
+    if (!customer.primary_state && state) updates.primary_state = state;
     if (!customer.primary_zip && zip) updates.primary_zip = zip;
 
     if (Object.keys(updates).length > 0) {
@@ -414,7 +424,7 @@ export async function ensureCustomerForEmail(
   const { data: bookings, error: bookingError } = await supabase
     .from("bookings")
     .select(
-      "id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, notes",
+      "id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, notes",
     )
     .ilike("customer_email", normalizedEmail)
     .order("created_at", { ascending: false });
@@ -431,6 +441,7 @@ export async function ensureCustomerForEmail(
       phone: latest.customer_phone,
       street: latest.customer_street,
       city: latest.customer_city,
+      state: latest.customer_state,
       zip: latest.customer_zip,
       deliveryNotes: latest.notes,
     },

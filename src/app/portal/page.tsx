@@ -98,16 +98,35 @@ export default async function PortalHomePage() {
       <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
         <section className="space-y-6">
           <div className="rounded-[32px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 px-6 py-6 text-white shadow-sm">
-            <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-200 ring-1 ring-white/10">
-              Portal home
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-200 ring-1 ring-white/10">
+                  Portal home
+                </div>
+                <h2 className="mt-4 text-3xl font-semibold tracking-tight">
+                  {customer.name || "Your customer portal"}
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+                  Track your rental, see what happens next, and start a fresh booking without leaving
+                  the portal.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href="/book"
+                  className="inline-flex items-center justify-center rounded-2xl bg-[#F97316] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#EA580C]"
+                >
+                  Start new rental
+                </Link>
+                <Link
+                  href="/portal/locations"
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  View saved locations
+                </Link>
+              </div>
             </div>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-              {customer.name || "Your customer portal"}
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-              Track your rental, see what happens next, and request service updates without leaving
-              the portal.
-            </p>
           </div>
 
           {activeRental ? (
@@ -296,7 +315,7 @@ export default async function PortalHomePage() {
                   Job sites we can reuse to speed up future rentals.
                 </p>
               </div>
-              <Link href="/portal/account" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
+              <Link href="/portal/locations" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
                 View all
               </Link>
             </div>
@@ -318,7 +337,9 @@ export default async function PortalHomePage() {
                       ) : null}
                     </div>
                     <div className="mt-2 text-sm leading-6 text-slate-500">
-                      {[location.street, location.city, location.zip].filter(Boolean).join(", ")}
+                      {[location.street, [location.city, location.state].filter(Boolean).join(", "), location.zip]
+                        .filter(Boolean)
+                        .join(" ")}
                     </div>
                   </div>
                 ))

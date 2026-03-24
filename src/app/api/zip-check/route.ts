@@ -1,25 +1,15 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getActiveServiceAreaZip, sanitizeServiceAreaZip } from "@/lib/service-area";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const zip = (searchParams.get("zip") || "").trim();
+  const zip = sanitizeServiceAreaZip(searchParams.get("zip"));
 
   if (!/^\d{5}$/.test(zip)) {
     return NextResponse.json({ ok: false, error: "Invalid ZIP" }, { status: 400 });
   }
 
-  const { data, error } = await supabase
-    .from("service_area_zips")
-    .select("zip, county, town, active")
-    .eq("zip", zip)
-    .eq("active", true)
-    .maybeSingle();
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-
+  const data = await getActiveServiceAreaZip(zip);
   if (!data) {
     return NextResponse.json({ ok: false, serviced: false });
   }

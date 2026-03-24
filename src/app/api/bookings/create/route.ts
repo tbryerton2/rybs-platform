@@ -10,6 +10,7 @@ type Payload = {
   customer_name: string;
   customer_street: string;
   customer_city?: string;
+  customer_state?: string;
   customer_zip: string;
 
   service_county?: string;
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
     }
     if (!/^\d{5}$/.test(body.customer_zip ?? "")) {
       return NextResponse.json({ ok: false, error: "Invalid customer_zip" }, { status: 400 });
+    }
+    if (body.customer_state && !/^[A-Za-z]{2}$/.test(body.customer_state.trim())) {
+      return NextResponse.json({ ok: false, error: "Invalid customer_state" }, { status: 400 });
     }
     if (!body.customer_email?.trim() || !isValidEmail(body.customer_email)) {
       return NextResponse.json({ ok: false, error: "A valid customer_email is required" }, { status: 400 });
@@ -90,6 +94,7 @@ export async function POST(req: Request) {
           customerPhone: customerPhone,
           customerStreet: body.customer_street.trim(),
           customerCity: body.customer_city?.trim() ?? null,
+          customerState: body.customer_state?.trim().toUpperCase() ?? null,
           customerZip: body.customer_zip,
         },
         placement: {
