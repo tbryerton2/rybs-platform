@@ -81,6 +81,15 @@ type Booking = {
   pickup_date: string | null;
   status: BookingStatus;
   total_price_cents: number | null;
+  base_rental_price_cents: number | null;
+  included_rental_days: number | null;
+  rental_duration_days: number | null;
+  extra_days: number | null;
+  daily_overage_price_cents: number | null;
+  extra_days_charge_cents: number | null;
+  subtotal_cents: number | null;
+  taxable_subtotal_cents: number | null;
+  tax_cents: number | null;
   service_county: string | null;
   service_town: string | null;
   delivered_at: string | null;
@@ -433,6 +442,15 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      base_rental_price_cents,
+      included_rental_days,
+      rental_duration_days,
+      extra_days,
+      daily_overage_price_cents,
+      extra_days_charge_cents,
+      subtotal_cents,
+      taxable_subtotal_cents,
+      tax_cents,
       service_county,
       service_town,
       delivered_at,
@@ -1624,6 +1642,28 @@ export default async function AdminBookingDetailPage({
                 <div className="mt-3">
                   <Field label="Price" value={formatUsdFromCents(booking.total_price_cents)} />
                 </div>
+                {booking.base_rental_price_cents != null || booking.tax_cents != null ? (
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <Field label="Base rental" value={formatUsdFromCents(booking.base_rental_price_cents)} />
+                    <Field
+                      label="Extra days"
+                      value={
+                        booking.extra_days && booking.extra_days > 0
+                          ? `${booking.extra_days} (${formatUsdFromCents(booking.extra_days_charge_cents)})`
+                          : "0"
+                      }
+                    />
+                    <Field label="Tax" value={formatUsdFromCents(booking.tax_cents)} />
+                    <Field
+                      label="Rental period"
+                      value={
+                        booking.rental_duration_days != null && booking.included_rental_days != null
+                          ? `${booking.rental_duration_days} days (${booking.included_rental_days} included)`
+                          : "—"
+                      }
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           </Section>

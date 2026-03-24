@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { createBookingRecord } from "@/lib/booking-records";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabase } from "@/lib/supabase";
-import { getDefaultRentalDays } from "@/lib/config";
 import { normalizePhone } from "@/lib/customers";
+import { get14YardPriceForZip } from "@/lib/pricing";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -103,6 +103,7 @@ export async function POST(req: Request) {
 
     const deliveryDate = ((draft.deliveryDate ?? body.deliveryDate) || "").trim();
     const pickupDate = ((draft.pickupDate ?? body.pickupDate) || "").trim();
+    const pickupMode = (draft.pickupMode ?? body.pickupMode) === "date" ? "date" : "unspecified";
 
     const customerName = ((draft.customerName ?? body.customerName) || "").trim();
     const customerEmail = ((draft.customerEmail ?? body.customerEmail) || "").trim();
@@ -173,10 +174,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1.5) SERVER GUARD: prevent bookings that run into a tight date (capacity hit)
-    // If pickupDate isn't provided, assume default rental length.
-    const defaultRentalDays = getDefaultRentalDays();
-    const effectivePickup = pickupDate || addDaysYMD(deliveryDate, defaultRentalDays);
+    const pricing = await get14YardPriceForZip(customerZip, {
+      deliveryDate,
+      pickupDate,
+      pickupMode,
+    });
+
+    if (!pricing.serviceable || !pricing.priceQuote) {
+      await supabase
+        .from("booking_holds")
+        .update({ status: "active" })
+        .eq("id", holdId)
+        .eq("status", "converting");
+
+      return NextResponse.json(
+        { ok: false, error: "We couldn’t calculate pricing for this ZIP. Please review the booking details." },
+        { status: 409 },
+      );
+    }
+
+    const effectivePickup = pricing.priceQuote.effectivePickupDate;
+
+    if (!effectivePickup) {
+      await supabase
+        .from("booking_holds")
+        .update({ status: "active" })
+        .eq("id", holdId)
+        .eq("status", "converting");
+
+      return NextResponse.json(
+        { ok: false, error: "We couldn’t determine the rental duration for this booking." },
+        { status: 409 },
+      );
+    }
 
     // Find the earliest day offset where availability drops to 0 within a reasonable horizon.
     // (30 is arbitrary safety; feel free to change.)
@@ -238,8 +268,9 @@ export async function POST(req: Request) {
         booking: {
           delivery_date: deliveryDate,
           pickup_date: effectivePickup || null,
+          pickup_mode: pickupMode === "date" ? "schedule" : "request",
           status: "confirmed",
-          total_price_cents: normalizedTotalPriceCents,
+          total_price_cents: pricing.priceQuote.totalCents,
         },
         identity: {
           customerName,
@@ -260,6 +291,17 @@ export async function POST(req: Request) {
           alternate_contact_phone: placement.alternateContactPhone,
           placement_photo_url: placement.placementPhotoUrl,
           special_delivery_instructions: placement.specialDeliveryInstructions,
+        },
+        pricing: {
+          base_rental_price_cents: pricing.priceQuote.rentalPriceCents,
+          included_rental_days: pricing.priceQuote.includedRentalDays,
+          rental_duration_days: pricing.priceQuote.rentalDurationDays,
+          extra_days: pricing.priceQuote.extraDays,
+          daily_overage_price_cents: pricing.priceQuote.dailyOveragePrice * 100,
+          extra_days_charge_cents: pricing.priceQuote.extraDaysChargeCents,
+          subtotal_cents: pricing.priceQuote.subtotalCents,
+          taxable_subtotal_cents: pricing.priceQuote.taxableSubtotalCents,
+          tax_cents: pricing.priceQuote.salesTaxCents,
         },
       });
     } catch (insertError) {

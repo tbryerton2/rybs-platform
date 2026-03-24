@@ -41,6 +41,17 @@ type CreateBookingRecordInput = {
   };
   identity: BookingIdentityInput;
   placement?: PlacementInsertFields;
+  pricing?: {
+    base_rental_price_cents?: number | null;
+    included_rental_days?: number | null;
+    rental_duration_days?: number | null;
+    extra_days?: number | null;
+    daily_overage_price_cents?: number | null;
+    extra_days_charge_cents?: number | null;
+    subtotal_cents?: number | null;
+    taxable_subtotal_cents?: number | null;
+    tax_cents?: number | null;
+  };
 };
 
 export async function createBookingRecord({
@@ -48,6 +59,7 @@ export async function createBookingRecord({
   booking,
   identity,
   placement,
+  pricing,
 }: CreateBookingRecordInput) {
   if (identity.customerEmail && !isValidEmail(identity.customerEmail)) {
     throw new Error("Please enter a valid email address before booking.");
@@ -68,7 +80,7 @@ export async function createBookingRecord({
     supabase,
   );
 
-  const baseInsertRow = {
+  const legacyBaseInsertRow = {
     delivery_date: booking.delivery_date ?? null,
     pickup_mode: booking.pickup_mode ?? null,
     pickup_date: booking.pickup_date ?? null,
@@ -90,9 +102,23 @@ export async function createBookingRecord({
     booking_contact_phone: normalizedPhone,
   };
 
+  const baseInsertRow = {
+    ...legacyBaseInsertRow,
+    base_rental_price_cents: pricing?.base_rental_price_cents ?? null,
+    included_rental_days: pricing?.included_rental_days ?? null,
+    rental_duration_days: pricing?.rental_duration_days ?? null,
+    extra_days: pricing?.extra_days ?? null,
+    daily_overage_price_cents: pricing?.daily_overage_price_cents ?? null,
+    extra_days_charge_cents: pricing?.extra_days_charge_cents ?? null,
+    subtotal_cents: pricing?.subtotal_cents ?? null,
+    taxable_subtotal_cents: pricing?.taxable_subtotal_cents ?? null,
+    tax_cents: pricing?.tax_cents ?? null,
+  };
+
   const insertWithPlacementRow = placement ? { ...baseInsertRow, ...placement } : baseInsertRow;
 
   let placementPersistenceSkipped = false;
+  let pricingPersistenceSkipped = false;
   let insertResult = await supabase
     .from("bookings")
     .insert(insertWithPlacementRow)
@@ -104,6 +130,15 @@ export async function createBookingRecord({
     insertResult = await supabase
       .from("bookings")
       .insert(baseInsertRow)
+      .select("id, booking_ref, customer_id")
+      .single();
+  }
+
+  if (insertResult.error && isBookingSchemaError(insertResult.error)) {
+    pricingPersistenceSkipped = true;
+    insertResult = await supabase
+      .from("bookings")
+      .insert(legacyBaseInsertRow)
       .select("id, booking_ref, customer_id")
       .single();
   }
@@ -128,5 +163,6 @@ export async function createBookingRecord({
     bookingRef: (insertResult.data.booking_ref as string | null) ?? null,
     customerId: (insertResult.data.customer_id as string | null) ?? null,
     placementPersistenceSkipped,
+    pricingPersistenceSkipped,
   };
 }

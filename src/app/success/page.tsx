@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { getOptionalPortalCustomer } from "@/lib/portal/auth";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
+import { formatUsdFromCents } from "@/lib/money";
 
 type SuccessPageProps = {
   searchParams?: Promise<{
     bookingId?: string;
     bookingRef?: string;
     email?: string;
+    rentalPriceCents?: string;
+    dailyOveragePriceCents?: string;
+    extraDays?: string;
+    extraDaysChargeCents?: string;
+    salesTaxCents?: string;
+    totalCents?: string;
   }>;
 };
 
@@ -16,6 +23,16 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   const bookingRef = getCustomerFacingBookingLabel(params.bookingRef);
   const bookingEmail = params.email?.trim() || null;
   const portalHref = bookingEmail ? `/portal/login?email=${encodeURIComponent(bookingEmail)}` : "/portal/login";
+  const rentalPriceCents = Number(params.rentalPriceCents);
+  const dailyOveragePriceCents = Number(params.dailyOveragePriceCents);
+  const extraDays = Number(params.extraDays);
+  const extraDaysChargeCents = Number(params.extraDaysChargeCents);
+  const salesTaxCents = Number(params.salesTaxCents);
+  const totalCents = Number(params.totalCents);
+  const hasPricingSummary =
+    Number.isFinite(rentalPriceCents) &&
+    Number.isFinite(salesTaxCents) &&
+    Number.isFinite(totalCents);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
@@ -41,6 +58,40 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
               </p>
             ) : null}
           </div>
+
+          {hasPricingSummary ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left">
+              <div className="text-sm font-semibold text-slate-900">Order summary</div>
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center justify-between gap-4 text-slate-700">
+                  <span>Dumpster rental</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatUsdFromCents(rentalPriceCents)}
+                  </span>
+                </div>
+                {Number.isFinite(extraDays) && extraDays > 0 ? (
+                  <div className="flex items-center justify-between gap-4 text-slate-700">
+                    <span>
+                      Extra days ({extraDays} x {formatUsdFromCents(dailyOveragePriceCents)})
+                    </span>
+                    <span className="font-semibold text-slate-900">
+                      {formatUsdFromCents(extraDaysChargeCents)}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-4 text-slate-700">
+                  <span>NY sales tax (8%)</span>
+                  <span className="font-semibold text-slate-900">
+                    {formatUsdFromCents(salesTaxCents)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4 border-t border-slate-200 pt-2 font-semibold text-slate-900">
+                  <span>Total</span>
+                  <span>{formatUsdFromCents(totalCents)}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <p className="mt-6 text-sm text-slate-600">
             You’ll receive a confirmation email shortly with your delivery details and booking reference.

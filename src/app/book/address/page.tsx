@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { BookingPriceQuote } from "@/lib/booking-pricing";
 import { getReorderNotice } from "@/lib/reorder";
 import type { SavedServiceLocation } from "@/lib/service-locations";
 
@@ -17,6 +18,7 @@ type BookingDraft = {
   customerCity?: string;
   customerState?: string;
   customerZip?: string;
+  priceQuote?: BookingPriceQuote | null;
   reorderSourceBookingId?: string;
   reorderSourceBookingRef?: string | null;
   selectedServiceLocationId?: string | null;
@@ -350,6 +352,7 @@ export default function AddressStepPage() {
       zip: z,
       county: json.county,
       town: json.town,
+      priceQuote: json.priceQuote ?? null,
     });
 
     setZipStatus({ state: "valid", county: json.county, town: json.town });

@@ -3,7 +3,16 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { getDefaultRentalDays } from "@/lib/config";
+import {
+  addDaysYmd,
+  priceQuoteMatchesSelection,
+  type BookingPriceQuote,
+} from "@/lib/booking-pricing";
+import {
+  AvailabilityCalendar,
+  type CalendarAvailabilityEntry,
+} from "@/components/booking/AvailabilityCalendar";
+import { formatUsdFromCents } from "@/lib/money";
 import { getReorderNotice } from "@/lib/reorder";
 
 type BookingDraft = {
@@ -33,6 +42,7 @@ type BookingDraft = {
   holdId?: string;
   holdDeliveryDate?: string;
   holdExpiresAt?: string;
+  priceQuote?: BookingPriceQuote | null;
 
   pickupMode?: "unspecified" | "date";
   pickupDate?: string; // YYYY-MM-DD
@@ -47,16 +57,6 @@ type BookingDraft = {
 
 function isYMD(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test((s || "").trim());
-}
-
-function addDaysYMD(ymd: string, days: number) {
-  const [y, m, d] = ymd.split("-").map((n) => Number(n));
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  const yy = dt.getUTCFullYear();
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
 }
 
 function formatPhoneUS(raw: string) {
@@ -89,6 +89,28 @@ function formatDateLong(ymd: string) {
     day: "2-digit",
     year: "numeric",
   }).format(dt);
+}
+
+function parseYmd(ymd: string) {
+  const [y, m, d] = ymd.split("-").map((n) => Number(n));
+  return new Date(y, m - 1, d);
+}
+
+function toYmd(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
 }
 
 function formatMMSS(totalSeconds: number) {
@@ -133,7 +155,9 @@ export default function ConfirmPage() {
   const router = useRouter();
 
   const [draft, setDraft] = useState<BookingDraft>({});
+  const [pickupMode, setPickupMode] = useState<"unspecified" | "date">("unspecified");
   const [pickupDate, setPickupDate] = useState<string>("");
+  const [quoteLoading, setQuoteLoading] = useState(false);
 
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +180,7 @@ export default function ConfirmPage() {
   // earliest pickup is day after delivery (24h notice)
   const minPickupDate = useMemo(() => {
     if (!isYMD(deliveryDate)) return "";
-    return addDaysYMD(deliveryDate, 1);
+    return addDaysYmd(deliveryDate, 1);
   }, [deliveryDate]);
 
   // raw max from draft (cap)
@@ -181,6 +205,33 @@ export default function ConfirmPage() {
     return minPickupDate ? formatDateLong(minPickupDate) : "—";
   }, [minPickupDate]);
 
+  const pickupCalendarEntries = useMemo(() => {
+    const start = startOfMonth(parseYmd(minPickupDate || deliveryDate || toYmd(new Date())));
+    const totalDays = 186;
+
+    return Array.from({ length: totalDays }, (_, index) => {
+      const date = addDays(start, index);
+      const ymd = toYmd(date);
+      const beforeWindow = Boolean(minPickupDate && ymd < minPickupDate);
+      const afterWindow = Boolean(maxPickupDate && ymd > maxPickupDate);
+      const state = beforeWindow || afterWindow ? "unavailable" : "available";
+
+      return {
+        date: ymd,
+        remaining: state === "available" ? 1 : 0,
+        capacity: 1,
+        used: state === "available" ? 0 : 1,
+        state,
+        label: state === "available" ? "Open" : "Blocked",
+      } satisfies CalendarAvailabilityEntry;
+    });
+  }, [deliveryDate, maxPickupDate, minPickupDate]);
+
+  const pickupNextAvailableDate = useMemo(
+    () => pickupCalendarEntries.find((entry) => entry.state === "available")?.date ?? null,
+    [pickupCalendarEntries],
+  );
+
   // initial hydration
   useEffect(() => {
     try {
@@ -188,8 +239,16 @@ export default function ConfirmPage() {
       if (!raw) return;
 
       const d: BookingDraft = JSON.parse(raw);
+      const storedPickupDate = (d.pickupDate || "").trim();
+      const storedMaxPickupDate = (d.maxPickupDate || "").trim();
+      const nextPickupMode =
+        isYMD(storedMaxPickupDate) || d.pickupMode === "date" || isYMD(storedPickupDate)
+          ? "date"
+          : "unspecified";
+
       setDraft(d);
-      setPickupDate((d.pickupDate || "").trim());
+      setPickupMode(nextPickupMode);
+      setPickupDate(nextPickupMode === "date" ? storedPickupDate : "");
 
       const dy = (d.deliveryDate || "").trim();
       const hasDelivery = isYMD(dy);
@@ -200,6 +259,12 @@ export default function ConfirmPage() {
       // ignore
     }
   }, []);
+
+  useEffect(() => {
+    if (maxPickupDate && pickupMode !== "date") {
+      setPickupMode("date");
+    }
+  }, [maxPickupDate, pickupMode]);
 
   // fetch cap if missing
   useEffect(() => {
@@ -277,11 +342,67 @@ export default function ConfirmPage() {
     return secondsLeft <= 0;
   }, [secondsLeft]);
 
-  const defaultRentalDays = useMemo(() => getDefaultRentalDays(), []);
+  const defaultRentalDays = draft.priceQuote?.includedRentalDays ?? 7;
   const defaultPickupDate = useMemo(() => {
     if (!isYMD(deliveryDate)) return "";
-    return addDaysYMD(deliveryDate, defaultRentalDays);
+    return addDaysYmd(deliveryDate, defaultRentalDays);
   }, [deliveryDate, defaultRentalDays]);
+
+  useEffect(() => {
+    const bookingZip = (draft.customerZip || draft.zip || "").trim();
+    if (!isYMD(deliveryDate) || !bookingZip) return;
+
+    if (
+      priceQuoteMatchesSelection(draft.priceQuote, {
+        zip: bookingZip,
+        deliveryDate,
+        pickupDate,
+        pickupMode,
+      })
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setQuoteLoading(true);
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          zip: bookingZip,
+          deliveryDate,
+          pickupMode,
+        });
+
+        if (pickupMode === "date" && isYMD(pickupDate)) {
+          params.set("pickupDate", pickupDate);
+        }
+
+        const res = await fetch(`/api/zip-check?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (!res.ok || !json?.serviced || !json?.priceQuote) {
+          setError("We couldn’t refresh pricing for this rental period. Please try again.");
+          return;
+        }
+
+        persist({ priceQuote: json.priceQuote as BookingPriceQuote });
+      } catch {
+        if (cancelled) return;
+        setError("We couldn’t refresh pricing for this rental period. Please try again.");
+      } finally {
+        if (!cancelled) setQuoteLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.customerZip, draft.zip, draft.priceQuote, deliveryDate, pickupDate, pickupMode]);
 
   function getResetPickupDate() {
     if (!isYMD(deliveryDate)) return "";
@@ -293,30 +414,34 @@ export default function ConfirmPage() {
     return defaultPickupDate;
   }
 
-  function savePickupDraft(v: string) {
+  function savePickupDraft(mode: "unspecified" | "date", v: string) {
     persist({
-      pickupDate: v || undefined,
-      pickupMode: v ? "date" : "unspecified",
+      pickupMode: mode,
+      pickupDate: mode === "date" && v ? v : undefined,
     });
   }
 
   // ✅ pickup validation only uses *effective* max (never the impossible one)
   const pickupOk = useMemo(() => {
     if (capIsImpossible) return false; // delivery not viable
+    if (pickupMode !== "date") return !maxPickupDate;
+
     const pd = (pickupDate || "").trim();
-    if (!pd) return !maxPickupDate; // required only when effective max exists
+    if (!pd) return false;
     if (!isYMD(pd)) return false;
     if (minPickupDate && pd < minPickupDate) return false;
     if (maxPickupDate && pd > maxPickupDate) return false;
     return true;
-  }, [pickupDate, minPickupDate, maxPickupDate, capIsImpossible]);
+  }, [pickupDate, pickupMode, minPickupDate, maxPickupDate, capIsImpossible]);
 
   // ✅ pickupError no longer shows the backwards cap message
   const pickupError = useMemo(() => {
     if (capIsImpossible) return null; // handled by capProblem banner below
 
+    if (pickupMode !== "date") return null;
+
     const pd = (pickupDate || "").trim();
-    if (maxPickupDate && !pd) return "Pickup date is required for this delivery date.";
+    if (!pd) return "Pickup date is required.";
 
     if (!pd) return null;
     if (!isYMD(pd)) return "Please select a valid pickup date.";
@@ -327,7 +452,7 @@ export default function ConfirmPage() {
       return `Pickup date must be on or before ${formatDateLong(maxPickupDate)}.`;
     }
     return null;
-  }, [pickupDate, minPickupDate, maxPickupDate, capIsImpossible]);
+  }, [pickupDate, pickupMode, minPickupDate, maxPickupDate, capIsImpossible]);
 
   // ✅ if cap is impossible, show a sane delivery-level error
   const deliveryCapError = useMemo(() => {
@@ -366,12 +491,12 @@ export default function ConfirmPage() {
     }
 
     const pd = (pickupDate || "").trim();
-    if (maxPickupDate && !pd) {
-      setError("Pickup date is required for this delivery date.");
-      return;
-    }
+    if (pickupMode === "date") {
+      if (!pd) {
+        setError("Pickup date is required.");
+        return;
+      }
 
-    if (pd) {
       if (!isYMD(pd)) {
         setError("Please select a valid pickup date.");
         return;
@@ -386,10 +511,10 @@ export default function ConfirmPage() {
       }
     }
 
-    if (!pd) {
+    if (pickupMode !== "date") {
       persist({
         pickupMode: "unspecified",
-        pickupDate: defaultPickupDate || undefined,
+        pickupDate: undefined,
       });
     } else {
       persist({
@@ -439,15 +564,28 @@ export default function ConfirmPage() {
     </IconChip>
   );
 
+  const PricingIcon = (
+    <IconChip>
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 7h16" />
+        <path d="M4 12h10" />
+        <path d="M4 17h7" />
+        <circle cx="18" cy="17" r="3" />
+      </svg>
+    </IconChip>
+  );
+
   const canContinue =
     capState === "ready" &&
     !capProblem &&
     !deliveryCapError &&
+    !quoteLoading &&
     !!draft.holdId &&
     !!draft.holdExpiresAt &&
     !holdExpired &&
     isYMD(deliveryDate) &&
     pickupOk;
+  const showPickupDateField = pickupMode === "date";
 
   return (
     <main className="bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
@@ -540,7 +678,7 @@ export default function ConfirmPage() {
                 <div className="mt-1 text-xs text-slate-500">We’ll contact you with the exact delivery time.</div>
               </CardShell>
 
-              <CardShell title={maxPickupDate ? "Pickup date (required)" : "Pickup date (optional)"} icon={PickupIcon}>
+              <CardShell title="Pickup scheduling" icon={PickupIcon}>
                 <p className="text-sm text-slate-600">
                   {maxPickupDate ? (
                     <>
@@ -571,13 +709,16 @@ export default function ConfirmPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            setPickupMode("unspecified");
                             setPickupDate("");
-                            savePickupDraft("");
+                            savePickupDraft("unspecified", "");
                             setError(null);
                           }}
                           className={[
                             "w-full rounded-xl border px-4 py-3 text-left transition",
-                            !pickupDate ? "border-[#F97316]/40 bg-white shadow-sm" : "border-slate-200 bg-white hover:border-slate-300",
+                            pickupMode === "unspecified"
+                              ? "border-[#F97316]/40 bg-white shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-300",
                           ].join(" ")}
                         >
                           <div className="text-sm font-semibold text-slate-900">I’ll schedule pickup later</div>
@@ -588,15 +729,18 @@ export default function ConfirmPage() {
                       <button
                         type="button"
                         onClick={() => {
+                          setPickupMode("date");
                           if (!pickupDate && minPickupDate) {
                             setPickupDate(minPickupDate);
-                            savePickupDraft(minPickupDate);
+                            savePickupDraft("date", minPickupDate);
                           }
                           setError(null);
                         }}
                         className={[
                           "w-full rounded-xl border px-4 py-3 text-left transition",
-                          !!pickupDate ? "border-[#F97316]/40 bg-white shadow-sm" : "border-slate-200 bg-white hover:border-slate-300",
+                          pickupMode === "date"
+                            ? "border-[#F97316]/40 bg-white shadow-sm"
+                            : "border-slate-200 bg-white hover:border-slate-300",
                         ].join(" ")}
                       >
                         <div className="text-sm font-semibold text-slate-900">Schedule a pickup date now</div>
@@ -607,68 +751,160 @@ export default function ConfirmPage() {
                     </div>
                   </div>
 
-                  <div className="mt-3">
-                    <label className="text-sm font-medium text-slate-700">Pickup date</label>
-
-                    <div className="mt-2 self-start w-[520px] max-w-full">
-                      <input
-                        type="date"
-                        value={pickupDate}
-                        min={minPickupDate}
-                        max={maxPickupDate || undefined}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setPickupDate(v);
-                          savePickupDraft(v);
-                          setError(null);
-                        }}
-                        className={[
-                          "block w-full sm:w-[520px] max-w-full",
-                          "h-12 rounded-xl border bg-white px-4 text-slate-900 shadow-sm outline-none transition",
-                          "leading-[48px] py-0",
-                          pickupError
-                            ? "border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-200/60"
-                            : "border-slate-300 focus:border-[#F97316] focus:ring-4 focus:ring-[#F97316]/15",
-                        ].join(" ")}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const resetDate = getResetPickupDate();
-                          setPickupDate(resetDate);
-                          savePickupDraft(resetDate);
-                        }}
-                        className="mt-2 text-xs text-slate-500 underline hover:text-slate-700"
-                      >
-                        Reset to recommended date
-                      </button>
-                    </div>
-
-                    {(pickupDate || maxPickupDate) && (
-                    <div className="mt-2 text-xs text-slate-500 space-y-1">
-                      <div>
-                        Earliest pickup:{" "}
-                        <span className="font-medium text-slate-700">
-                          {minPickupDateLabel}
-                        </span>
+                  {showPickupDateField ? (
+                    <div className="mt-3 space-y-3">
+                      <div className="space-y-1">
+                        <h3 className="text-base font-semibold text-slate-900">Choose a pickup date</h3>
+                        <p className="text-sm text-slate-600">
+                          Eligible pickup dates are shown up front, with the earliest opening highlighted below.
+                        </p>
                       </div>
 
-                      {maxPickupDate && (
-                        <div>
-                          Latest allowed pickup:{" "}
-                          <span className="font-medium text-slate-700">
-                            {formatDateLong(maxPickupDate)}
-                          </span>
-                        </div>
+                      {pickupNextAvailableDate && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPickupDate(pickupNextAvailableDate);
+                            savePickupDraft("date", pickupNextAvailableDate);
+                            setError(null);
+                          }}
+                          className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15"
+                        >
+                          Earliest pickup: {formatDateLong(pickupNextAvailableDate)}
+                        </button>
                       )}
-                    </div>
-                  )}
 
-                    {pickupError && <div className="mt-2 text-sm text-red-700">{pickupError}</div>}
-                  </div>
+                      <AvailabilityCalendar
+                        selectedDate={pickupDate}
+                        onSelectDate={(value) => {
+                          setPickupDate(value);
+                          savePickupDraft("date", value);
+                          setError(null);
+                        }}
+                        entries={pickupCalendarEntries}
+                        nextAvailableDate={pickupNextAvailableDate}
+                        getTileLabel={(entry, context) => {
+                          if (!context.isCurrentMonth) return null;
+                          if (!entry || entry.state === "past") return "Past";
+                          return entry.label ?? (entry.state === "available" ? "Open" : "Blocked");
+                        }}
+                        legendItems={[
+                          { label: "Open", dotClassName: "bg-emerald-500" },
+                          { label: "Blocked", dotClassName: "bg-slate-400" },
+                        ]}
+                        emptyMonthMessage={(monthLabel, nextAvailable) =>
+                          `No pickup dates are available in ${monthLabel}.${nextAvailable ? ` Earliest pickup: ${formatDateLong(nextAvailable)}.` : ""}`
+                        }
+                        getAriaLabel={(entry, date) =>
+                          `${formatDateLong(date)}. ${
+                            !entry || entry.state === "past"
+                              ? "Past"
+                              : entry.state === "available"
+                                ? "Open for pickup"
+                                : "Unavailable for pickup"
+                          }.`
+                        }
+                      />
+
+                      <div
+                        className={`rounded-2xl border px-4 py-4 text-sm ${
+                          pickupError
+                            ? "border-red-200 bg-red-50 text-red-900"
+                            : "border-slate-200 bg-white text-slate-700 shadow-sm"
+                        }`}
+                      >
+                        {pickupError ? (
+                          pickupError
+                        ) : pickupDate ? (
+                          <>
+                            <span className="font-semibold text-slate-900">
+                              {formatDateLong(pickupDate)} selected
+                            </span>
+                            {` — pickup requested for this date.`}
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-slate-900">
+                              Earliest pickup:
+                            </span>
+                            {` ${minPickupDateLabel}`}
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <div>
+                          Earliest pickup:{" "}
+                          <span className="font-medium text-slate-700">{minPickupDateLabel}</span>
+                        </div>
+                        {maxPickupDate && (
+                          <div>
+                            Latest allowed pickup:{" "}
+                            <span className="font-medium text-slate-700">{formatDateLong(maxPickupDate)}</span>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const resetDate = getResetPickupDate();
+                            setPickupDate(resetDate);
+                            savePickupDraft("date", resetDate);
+                            setError(null);
+                          }}
+                          className="underline hover:text-slate-700"
+                        >
+                          Reset to recommended date
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </CardShell>
+
+              {draft.priceQuote ? (
+                <CardShell title="Price summary" icon={PricingIcon}>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-600">Dumpster rental</span>
+                      <span className="font-semibold text-slate-900">
+                        {formatUsdFromCents(draft.priceQuote.rentalPriceCents)}
+                      </span>
+                    </div>
+                    {draft.priceQuote.extraDays > 0 ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-slate-600">
+                          Extra days ({draft.priceQuote.extraDays} x {formatUsdFromCents(draft.priceQuote.dailyOveragePrice * 100)})
+                        </span>
+                        <span className="font-semibold text-slate-900">
+                          {formatUsdFromCents(draft.priceQuote.extraDaysChargeCents)}
+                        </span>
+                      </div>
+                    ) : null}
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-600">
+                        NY sales tax ({Math.round(draft.priceQuote.salesTaxRate * 100)}%)
+                      </span>
+                      <span className="font-semibold text-slate-900">
+                        {formatUsdFromCents(draft.priceQuote.salesTaxCents)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t border-slate-200 pt-2">
+                      <span className="font-semibold text-slate-900">Total</span>
+                      <span className="font-semibold text-slate-900">
+                        {formatUsdFromCents(draft.priceQuote.totalCents)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {draft.priceQuote.extraDays > 0
+                        ? `Includes ${draft.priceQuote.extraDays} extra rental day${draft.priceQuote.extraDays === 1 ? "" : "s"} beyond the ${draft.priceQuote.includedRentalDays}-day included period.`
+                        : `Includes up to ${draft.priceQuote.includedRentalDays} rental days before daily overage charges apply.`}
+                    </div>
+                    {quoteLoading ? (
+                      <div className="text-xs text-slate-500">Refreshing pricing…</div>
+                    ) : null}
+                  </div>
+                </CardShell>
+              ) : null}
             </div>
 
             <div className="grid gap-2">

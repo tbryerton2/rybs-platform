@@ -1,10 +1,14 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 // src/app/book/date/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { BookingPriceQuote } from "@/lib/booking-pricing";
 import { getHoldMinutes } from "@/lib/config";
+import {
+  AvailabilityCalendar,
+  type CalendarAvailabilityEntry,
+} from "@/components/booking/AvailabilityCalendar";
 
 type BookingDraft = {
   zip?: string;
@@ -26,6 +30,7 @@ type BookingDraft = {
   holdId?: string;
   holdDeliveryDate?: string;
   holdExpiresAt?: string;
+  priceQuote?: BookingPriceQuote | null;
 
   // pickup fields (used later on confirm/checkout)
   pickupMode?: "unspecified" | "date";
@@ -48,15 +53,49 @@ type HoldState =
   | { state: "creating" }
   | { state: "error"; message: string };
 
+function isYmd(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test((value || "").trim());
+}
+
+function parseYmd(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function toYmd(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function formatDateLong(value: string) {
+  if (!isYmd(value)) return value || "—";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(parseYmd(value));
+}
+
 export default function DateStepPage() {
   const router = useRouter();
-    const holdMinutes = getHoldMinutes();
+  const holdMinutes = getHoldMinutes();
 
   const [deliveryDate, setDeliveryDate] = useState(""); // YYYY-MM-DD (from <input type="date">)
   const [availability, setAvailability] = useState<AvailState>({ state: "idle" });
   const [hold, setHold] = useState<HoldState>({ state: "idle" });
   const [cap, setCap] = useState<null | { maxPickupDate: string; maxDaysAllowed: number }>(null);
   const [limitedAck, setLimitedAck] = useState(false);
+  const [calendarEntries, setCalendarEntries] = useState<CalendarAvailabilityEntry[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [nextAvailableDate, setNextAvailableDate] = useState<string | null>(null);
 
   // Load saved date (if user navigates back)
   useEffect(() => {
@@ -73,6 +112,85 @@ export default function DateStepPage() {
 
   // Normalize (future-proof if we ever change date input type)
   const normalizedDate = useMemo(() => (deliveryDate || "").trim(), [deliveryDate]);
+  const calendarRangeStart = useMemo(() => toYmd(startOfMonth(new Date())), []);
+
+  const highlightedEarliestDate = nextAvailableDate;
+
+  async function loadCalendarRange(start: string, days = 186) {
+    setCalendarLoading(true);
+    setCalendarError(null);
+
+    try {
+      const res = await fetch(
+        `/api/availability/calendar?start=${encodeURIComponent(start)}&days=${days}`,
+        { cache: "no-store" },
+      );
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok || !json?.ok || !Array.isArray(json?.dates)) {
+        setCalendarError(json?.error || "Could not load calendar availability.");
+        return;
+      }
+
+      const nextEntries = json.dates as CalendarAvailabilityEntry[];
+      setCalendarEntries(nextEntries);
+      setNextAvailableDate(typeof json?.nextAvailableDate === "string" ? json.nextAvailableDate : null);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not load calendar availability.";
+      setCalendarError(message);
+    } finally {
+      setCalendarLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadCalendarRange(calendarRangeStart);
+  }, [calendarRangeStart]);
+
+  const selectedCalendarEntry = useMemo(
+    () => calendarEntries.find((entry) => entry.date === normalizedDate) || null,
+    [calendarEntries, normalizedDate],
+  );
+
+  const nextAvailableAfterSelection = useMemo(() => {
+    if (!isYmd(normalizedDate)) return nextAvailableDate;
+    return (
+      calendarEntries.find(
+        (entry) =>
+          entry.date > normalizedDate &&
+          (entry.state === "available" || entry.state === "limited"),
+      )?.date || nextAvailableDate
+    );
+  }, [calendarEntries, nextAvailableDate, normalizedDate]);
+
+  function updateDeliveryDate(d: string) {
+    setDeliveryDate(d);
+
+    const raw = sessionStorage.getItem("tcm.booking");
+    const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+
+    sessionStorage.setItem(
+      "tcm.booking",
+      JSON.stringify({
+        ...existing,
+        deliveryDate: d,
+
+        holdId: undefined,
+        holdDeliveryDate: undefined,
+        holdExpiresAt: undefined,
+
+        maxPickupDate: undefined,
+        maxDaysAllowed: undefined,
+        limitedAck: false,
+
+        pickupMode: "unspecified",
+        pickupDate: undefined,
+      }),
+    );
+
+    setHold({ state: "idle" });
+  }
 
   function hasActiveHoldForDate(draft: Partial<BookingDraft>, selectedDeliveryYMD: string) {
     const holdId = (draft?.holdId || "").trim();
@@ -99,7 +217,7 @@ export default function DateStepPage() {
     }
 
     // Invalid format (shouldn't happen with type="date", but safe)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    if (!isYmd(d)) {
       setAvailability({ state: "error", message: "Please select a valid date." });
       return;
     }
@@ -224,7 +342,7 @@ export default function DateStepPage() {
   }, [normalizedDate]);
 
   const canContinue =
-    /^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) &&
+    isYmd(normalizedDate) &&
     availability.state === "ok" &&
     availability.remaining > 0 &&
     hold.state !== "creating" &&
@@ -234,7 +352,7 @@ export default function DateStepPage() {
     const d = normalizedDate;
 
     // guard
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    if (!isYmd(d)) return;
 
     // ✅ if we already have an active hold for this same date, reuse it
     try {
@@ -263,12 +381,16 @@ export default function DateStepPage() {
     setHold({ state: "creating" });
 
     let zip = "";
+    let bodyRentalDays = cap ? cap.maxDaysAllowed : 7;
     try {
       const raw = sessionStorage.getItem("tcm.booking");
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
       zip = (existing.zip || "").trim(); // assuming Step 1 saved it as `zip`
+      const includedRentalDays = existing.priceQuote?.includedRentalDays ?? 7;
+      bodyRentalDays = cap ? cap.maxDaysAllowed : includedRentalDays;
     } catch {
       zip = "";
+      bodyRentalDays = cap ? cap.maxDaysAllowed : 7;
     }
 
     try {
@@ -277,7 +399,7 @@ export default function DateStepPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deliveryDate: d,
-          rentalDays: cap ? cap.maxDaysAllowed : 7,
+          rentalDays: bodyRentalDays,
           zip,
         }),
       });
@@ -341,25 +463,41 @@ export default function DateStepPage() {
             <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">
               Book Your Dumpster
             </h1>
-
-            <p className="text-[#475569]">Choose your delivery date.</p>
           </div>
 
           <section className="mt-8">
             <div className="mx-auto w-full max-w-[640px] grid gap-6 [&>*]:w-full">
-              {/* Availability banner */}
-              {availability.state === "loading" && (
-                <div className="w-full rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm text-slate-600">
-                  Checking availability…
+              <div className="space-y-2.5">
+                <div className="space-y-1.5">
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
+                    Choose an open delivery day
+                  </h2>
+                  <p className="text-sm text-slate-600 sm:text-[15px]">
+                    Availability is visible up front, so the next opening is easy to spot.
+                  </p>
                 </div>
-              )}
 
-              {availability.state === "ok" && (
-                <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                  ✅ <span className="font-semibold">{availability.remaining}</span>{" "}
-                  available for this date.
+                {highlightedEarliestDate && (
+                  <button
+                    type="button"
+                    onClick={() => updateDeliveryDate(highlightedEarliestDate)}
+                    className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15"
+                  >
+                    Earliest available: {formatDateLong(highlightedEarliestDate)}
+                  </button>
+                )}
+
+                <div>
+                  <AvailabilityCalendar
+                    selectedDate={normalizedDate}
+                    onSelectDate={updateDeliveryDate}
+                    entries={calendarEntries}
+                    loading={calendarLoading}
+                    loadError={calendarError}
+                    nextAvailableDate={nextAvailableDate}
+                  />
                 </div>
-              )}
+              </div>
 
               {cap && (
                 <div className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 space-y-3">
@@ -386,64 +524,54 @@ export default function DateStepPage() {
                 </div>
               )}
 
-              {availability.state === "none" && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-                  ❌ No dumpsters available for this date. Please pick another date.
+              {normalizedDate || availability.state === "loading" || availability.state === "error" || availability.state === "none" ? (
+                <div
+                  className={`rounded-2xl border px-4 py-4 text-sm ${
+                    availability.state === "none"
+                        ? "border-red-200 bg-red-50 text-red-950"
+                        : availability.state === "error"
+                          ? "border-red-200 bg-red-50 text-red-900"
+                          : availability.state === "loading"
+                            ? "border-slate-200 bg-slate-50 text-slate-700"
+                            : "border-slate-200 bg-white text-slate-700 shadow-sm"
+                  }`}
+                >
+                  {availability.state === "loading" ? (
+                    "Checking availability…"
+                  ) : availability.state === "error" ? (
+                    availability.message
+                  ) : availability.state === "none" ? (
+                    <>
+                      <span className="font-semibold">
+                        {isYmd(normalizedDate) ? formatDateLong(normalizedDate) : "That date"} selected
+                      </span>
+                      {` — unavailable for delivery.${nextAvailableAfterSelection ? ` Next available: ${formatDateLong(nextAvailableAfterSelection)}.` : ""}`}
+                    </>
+                  ) : selectedCalendarEntry ? (
+                    <>
+                      <span className="font-semibold">
+                        {formatDateLong(selectedCalendarEntry.date)} selected
+                      </span>
+                      {selectedCalendarEntry.state === "limited"
+                        ? ` — only ${selectedCalendarEntry.remaining} dumpster left for delivery.`
+                        : ` — ${availability.remaining} dumpster${availability.remaining === 1 ? "" : "s"} available for delivery.`}
+                    </>
+                  ) : null}
                 </div>
-              )}
-
-              {availability.state === "error" && (
-                <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-900">
-                  {availability.message}
+              ) : nextAvailableDate ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                  Next available delivery date: <span className="font-semibold text-slate-950">{formatDateLong(nextAvailableDate)}</span>
                 </div>
-              )}
-
-              {/* Date input */}
-              <div className="w-full space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Select delivery date
-                </label>
-                <div className="w-full h-12 rounded-xl border border-slate-300 bg-white overflow-hidden shadow-sm transition focus-within:border-[#F97316] focus-within:ring-4 focus-within:ring-[#F97316]/15">
-                  <input
-                    type="date"
-                    value={deliveryDate}
-                    onChange={(e) => {
-                      const d = e.target.value;
-                      setDeliveryDate(d);
-
-                      const raw = sessionStorage.getItem("tcm.booking");
-                      const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-
-                      sessionStorage.setItem(
-                        "tcm.booking",
-                        JSON.stringify({
-                          ...existing,
-                          deliveryDate: d,
-
-                          holdId: undefined,
-                          holdDeliveryDate: undefined,
-                          holdExpiresAt: undefined,
-
-                          maxPickupDate: undefined,
-                          maxDaysAllowed: undefined,
-                          limitedAck: false,
-
-                          pickupMode: "unspecified",
-                          pickupDate: undefined,
-                        })
-                      );
-
-                      setHold({ state: "idle" });
-                    }}
-                    className="h-full w-full bg-transparent px-4 text-slate-900 outline-none appearance-none"
-                  />
-                </div>
-              </div>
+              ) : null}
 
               {/* Note */}
               <div className="w-full rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm text-slate-600">
                 Note: Continuing will create a temporary {holdMinutes}-minute hold.
               </div>
+
+              <p className="text-xs text-slate-500">
+                Disabled dates are not bookable online. Availability updates automatically as inventory changes.
+              </p>
 
               {/* Continue */}
               <div className="w-full grid gap-2">

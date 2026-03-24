@@ -3,6 +3,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  priceQuoteMatchesSelection,
+  type BookingPriceQuote,
+} from "@/lib/booking-pricing";
 import { formatUsdFromCents } from "@/lib/money";
 import { getReorderNotice } from "@/lib/reorder";
 import {
@@ -41,6 +45,7 @@ type BookingDraft = {
   holdId?: string;
   holdDeliveryDate?: string;
   holdExpiresAt?: string;
+  priceQuote?: BookingPriceQuote | null;
 
   rentalDays?: number; // default fallback = 7
 
@@ -87,6 +92,7 @@ export default function CheckoutPage() {
   const [draft, setDraft] = useState<BookingDraft>({});
   const [error, setError] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
 
@@ -125,6 +131,72 @@ export default function CheckoutPage() {
       router.replace("/book/date");
     }
   }, [hydrated, draft.holdId, draft.holdExpiresAt, nowMs, router]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const bookingZip = (draft.customerZip || draft.zip || "").trim();
+
+    if (
+      !bookingZip ||
+      priceQuoteMatchesSelection(draft.priceQuote, {
+        zip: bookingZip,
+        deliveryDate: draft.deliveryDate,
+        pickupDate: draft.pickupDate,
+        pickupMode: draft.pickupMode,
+      })
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setQuoteLoading(true);
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          zip: bookingZip,
+          deliveryDate: String(draft.deliveryDate ?? ""),
+          pickupMode: draft.pickupMode === "date" ? "date" : "unspecified",
+        });
+
+        if (draft.pickupMode === "date" && isYMD(draft.pickupDate || "")) {
+          params.set("pickupDate", String(draft.pickupDate));
+        }
+
+        const res = await fetch(`/api/zip-check?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (!res.ok || !json?.serviced || !json?.priceQuote) {
+          setError("We couldn’t load the latest pricing for this ZIP. Please go back and recheck the service address.");
+          return;
+        }
+
+        setDraft((current) => {
+          const next = { ...current, priceQuote: json.priceQuote as BookingPriceQuote };
+          try {
+            sessionStorage.setItem("tcm.booking", JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+          return next;
+        });
+      } catch {
+        if (cancelled) return;
+        setError("We couldn’t load the latest pricing for this ZIP. Please go back and recheck the service address.");
+      } finally {
+        if (!cancelled) setQuoteLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, draft.customerZip, draft.zip, draft.deliveryDate, draft.pickupDate, draft.pickupMode, draft.priceQuote]);
 
 
   const deliveryDateLabel = useMemo(
@@ -177,6 +249,11 @@ export default function CheckoutPage() {
 
   async function handleSimulatePayment() {
     setError(null);
+
+    if (!draft.priceQuote) {
+      setError("Pricing is still loading. Please wait a moment and try again.");
+      return;
+    }
 
     if (holdExpired) {
       setError("Your hold has expired. Please choose a new delivery date.");
@@ -272,6 +349,12 @@ export default function CheckoutPage() {
         bookingId: String(bookingId),
         ...(bookingRef ? { bookingRef } : {}),
         ...(bookingEmail ? { email: bookingEmail } : {}),
+        rentalPriceCents: String(baseRentalCents),
+        dailyOveragePriceCents: String(draft.priceQuote.dailyOveragePrice * 100),
+        extraDays: String(draft.priceQuote.extraDays),
+        extraDaysChargeCents: String(extraDaysChargeCents),
+        salesTaxCents: String(salesTaxCents),
+        totalCents: String(totalCents),
       });
       router.push(`/success?${nextParams.toString()}`);
     } catch {
@@ -283,12 +366,15 @@ export default function CheckoutPage() {
 
   if (!hydrated) return null;
 
-  const subtotalCents = 49900; // TODO: replace with real pricing later
-  const salesTaxRate = 0.08;
-  const salesTaxCents = Math.round(subtotalCents * salesTaxRate);
+  const baseRentalCents = draft.priceQuote?.rentalPriceCents ?? 0;
+  const extraDaysChargeCents = draft.priceQuote?.extraDaysChargeCents ?? 0;
+  const subtotalCents = draft.priceQuote?.subtotalCents ?? baseRentalCents + extraDaysChargeCents;
+  const salesTaxRate = draft.priceQuote?.salesTaxRate ?? 0.08;
+  const salesTaxCents = draft.priceQuote?.salesTaxCents ?? 0;
   const feesCents = 0; // TODO: fees later
-  const totalCents = subtotalCents + salesTaxCents + feesCents;
+  const totalCents = (draft.priceQuote?.totalCents ?? subtotalCents + salesTaxCents) + feesCents;
   const fmtMoney = (cents: number) => formatUsdFromCents(cents);
+  const canSubmitPayment = !!draft.priceQuote && !quoteLoading;
     
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
@@ -320,14 +406,25 @@ export default function CheckoutPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-600">Dumpster rental</span>
                   <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
-                    {fmtMoney(subtotalCents)}
+                    {quoteLoading ? "Calculating..." : fmtMoney(baseRentalCents)}
                   </span>
                 </div>
 
+                {draft.priceQuote?.extraDays ? (
+                  <div className="mt-2 flex items-center justify-between text-sm">
+                    <span className="text-slate-600">
+                      Extra days ({draft.priceQuote.extraDays} x {fmtMoney(draft.priceQuote.dailyOveragePrice * 100)})
+                    </span>
+                    <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
+                      {quoteLoading ? "Calculating..." : fmtMoney(extraDaysChargeCents)}
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-slate-600">NY sales tax (8%)</span>
+                  <span className="text-slate-600">NY sales tax ({Math.round(salesTaxRate * 100)}%)</span>
                   <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
-                    {fmtMoney(salesTaxCents)}
+                    {quoteLoading ? "Calculating..." : fmtMoney(salesTaxCents)}
                   </span>
                 </div>
 
@@ -341,10 +438,18 @@ export default function CheckoutPage() {
                 <div className="mt-4 border-t border-slate-200 pt-3 flex items-center justify-between">
                   <span className="text-base font-semibold text-slate-900">Total</span>
                   <span className="w-24 text-right text-base font-semibold text-slate-900 tabular-nums">
-                    {fmtMoney(totalCents)}
+                    {quoteLoading ? "Calculating..." : fmtMoney(totalCents)}
                   </span>
                 </div>
               </div>
+
+              {draft.priceQuote ? (
+                <div className="mt-3 text-xs text-slate-500">
+                  {draft.priceQuote.extraDays > 0
+                    ? `This rental runs ${draft.priceQuote.rentalDurationDays} days, which is ${draft.priceQuote.extraDays} day${draft.priceQuote.extraDays === 1 ? "" : "s"} beyond the included ${draft.priceQuote.includedRentalDays}-day rental period.`
+                    : `This quote includes up to ${draft.priceQuote.includedRentalDays} rental days before daily overage charges apply.`}
+                </div>
+              ) : null}
 
             <div className="mt-4 grid gap-4">
                 {draft.reorderSourceBookingId ? (
@@ -499,11 +604,11 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={handleSimulatePayment}
-                  disabled={isPaying || holdExpired}
+                  disabled={isPaying || holdExpired || !canSubmitPayment}
                   className="group w-full h-14 rounded-2xl bg-[#0F172A] text-white font-semibold text-base shadow-md transition-all duration-200 ease-out hover:bg-[#0B1220] hover:shadow-lg active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <span className="flex items-center justify-center gap-2">
-                    {isPaying ? "Processing..." : "Simulate successful payment"}
+                    {isPaying ? "Processing..." : quoteLoading ? "Loading pricing..." : "Simulate successful payment"}
                     <span className="transition-transform group-hover:translate-x-1 text-white/90">→</span>
                   </span>
                 </button>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabase } from "@/lib/supabase";
 
 function isYMD(s: string) {
@@ -23,7 +24,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid deliveryDate" }, { status: 400 });
   }
 
-  const defaultEnd = addDaysYMD(deliveryDate, 7);
+  const pricingSettings = await getPricingSettingsSnapshot();
+  const defaultEnd = addDaysYMD(deliveryDate, pricingSettings.includedRentalDays);
 
   // Find earliest tight date >= deliveryDate where used >= 3
   const { data, error } = await supabase.rpc("next_tight_date", { start_date: deliveryDate });
