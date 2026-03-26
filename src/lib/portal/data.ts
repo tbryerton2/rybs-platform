@@ -19,6 +19,7 @@ export type PortalBooking = {
   customer_phone: string | null;
   customer_street: string | null;
   customer_city: string | null;
+  customer_state: string | null;
   customer_zip: string | null;
   delivery_date: string | null;
   pickup_date: string | null;
@@ -104,7 +105,7 @@ async function getPortalBookingSummaries(customerId: string) {
   const { data: bookings, error: bookingsError } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
+      "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
     )
     .eq("customer_id", customerId)
     .order("delivery_date", { ascending: false, nullsFirst: false })
@@ -165,11 +166,20 @@ export async function getPortalDashboardData(customerId: string) {
   if (locationsError && !isPortalSchemaError(locationsError)) {
     throw new Error(locationsError.message);
   }
-  const activeRental =
-    bookingRows.find((booking) => ACTIVE_STATUSES.has((booking.status ?? "").toLowerCase())) ?? null;
+  const activeRentals = bookingRows.filter((booking) => ACTIVE_STATUSES.has((booking.status ?? "").toLowerCase()));
+  const activeRental = activeRentals[0] ?? null;
+  const completedRentals = bookingRows.filter((booking) => (booking.status ?? "").toLowerCase() === "picked_up");
+  const totalSpentCents = bookingRows.reduce((sum, booking) => sum + (booking.total_price_cents ?? 0), 0);
+  const latestPastRental =
+    bookingRows.find((booking) => !ACTIVE_STATUSES.has((booking.status ?? "").toLowerCase())) ?? null;
 
   return {
+    bookings: bookingRows,
     activeRental,
+    activeRentals,
+    latestPastRental,
+    completedRentals,
+    totalSpentCents,
     recentBookings: bookingRows.slice(0, 6),
     locations: locationsError ? [] : ((locations ?? []) as PortalLocation[]),
   };
@@ -185,7 +195,7 @@ export async function getPortalRental(customerId: string, bookingId: string) {
       supabaseAdmin
         .from("bookings")
         .select(
-          "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
+          "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
         )
         .eq("id", bookingId)
         .eq("customer_id", customerId)

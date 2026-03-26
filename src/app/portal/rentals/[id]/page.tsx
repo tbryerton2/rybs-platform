@@ -1,5 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ComponentType, ReactNode, SVGProps } from "react";
+import {
+  CalendarDaysIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  CurrencyDollarIcon,
+  ExclamationTriangleIcon,
+  MapPinIcon,
+  TruckIcon,
+} from "@heroicons/react/24/outline";
 import {
   getActionTypeLabel,
   getActionTypeShortDescription,
@@ -14,7 +24,6 @@ import type { PortalBookingRequest } from "@/lib/portal/data";
 import { formatUsdFromCents } from "@/lib/money";
 import { PortalShell } from "../../_components/portal-shell";
 import { PortalStatusBadge } from "../../_components/portal-status-badge";
-import { PortalSubpageHeader } from "../../_components/portal-subpage-header";
 import { RentalTimeline } from "../../_components/rental-timeline";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -34,6 +43,16 @@ function formatDate(value: string | null) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  }).format(new Date(value));
+}
+
 function formatServiceArea(town: string | null, county: string | null) {
   return [town, county].filter(Boolean).join(", ");
 }
@@ -44,16 +63,6 @@ function normalizeText(value: string | null | undefined) {
 
 function normalizePhone(value: string | null | undefined) {
   return (value ?? "").replace(/\D/g, "");
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  }).format(new Date(value));
 }
 
 function getSubmissionMessage(searchParams: SearchParams) {
@@ -70,39 +79,148 @@ function getSubmissionMessage(searchParams: SearchParams) {
   return null;
 }
 
-function ActionCard({
-  title,
-  description,
-  tone = "default",
-  children,
+function formatAddressLine(parts: Array<string | null | undefined>, fallback = "Not provided") {
+  const value = parts.filter(Boolean).join(", ");
+  return value || fallback;
+}
+
+function InfoItem({
+  label,
+  value,
 }: {
-  title: string;
-  description: string;
-  tone?: "default" | "muted";
-  children: React.ReactNode;
+  label: string;
+  value: string;
 }) {
   return (
-    <div
-      className={[
-        "rounded-[28px] border p-5 shadow-sm",
-        tone === "muted" ? "border-slate-200 bg-slate-50/70" : "border-slate-200 bg-white",
-      ].join(" ")}
-    >
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-        Rental action
-      </div>
-      <h3 className="mt-2 text-base font-semibold text-slate-900">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
-      <div className="mt-5">{children}</div>
+    <div className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[160px_minmax(0,1fr)] sm:gap-4">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+      <div className="text-sm leading-6 text-slate-900">{value}</div>
     </div>
   );
 }
 
-function RequestHistoryCard({
-  request,
+function InfoCard({
+  title,
+  icon: Icon,
+  children,
 }: {
-  request: PortalBookingRequest;
+  title: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  children: ReactNode;
 }) {
+  return (
+    <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+          <Icon className="h-5 w-5" />
+        </span>
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      </div>
+      <div className="mt-5 divide-y divide-slate-200/80">{children}</div>
+    </section>
+  );
+}
+
+function ActionTile({
+  title,
+  href,
+  icon: Icon,
+  eligible,
+  reason,
+}: {
+  title: string;
+  href: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  eligible: boolean;
+  reason: string | null;
+}) {
+  const styles =
+    title === "Request pickup"
+      ? {
+          surface: "border-emerald-200 bg-emerald-50/55",
+          iconWrap: "bg-white text-emerald-700 ring-emerald-100",
+          chevronWrap:
+            "border-emerald-200 bg-white text-emerald-700 group-hover:border-emerald-300 group-hover:bg-emerald-50 group-hover:text-emerald-800",
+          hover: "hover:border-emerald-300 hover:bg-emerald-50/75",
+          disabled: "border-emerald-200/70 bg-emerald-50/35",
+          disabledIcon: "bg-white/90 text-emerald-500 ring-emerald-100",
+          disabledChevron: "border-emerald-200/80 bg-white/90 text-emerald-400",
+        }
+      : title === "Request more time"
+        ? {
+          surface: "border-amber-200 bg-amber-50/55",
+          iconWrap: "bg-white text-amber-700 ring-amber-100",
+            chevronWrap:
+              "border-amber-200 bg-white text-amber-600 group-hover:border-amber-300 group-hover:bg-amber-50 group-hover:text-amber-700",
+            hover: "hover:border-amber-300 hover:bg-amber-50/75",
+            disabled: "border-amber-200/70 bg-amber-50/35",
+            disabledIcon: "bg-white/90 text-amber-500 ring-amber-100",
+            disabledChevron: "border-amber-200/80 bg-white/90 text-amber-300",
+          }
+        : {
+            surface: "border-rose-200 bg-rose-50/55",
+            iconWrap: "bg-white text-rose-700 ring-rose-100",
+            chevronWrap:
+              "border-rose-200 bg-white text-rose-600 group-hover:border-rose-300 group-hover:bg-rose-50 group-hover:text-rose-700",
+            hover: "hover:border-rose-300 hover:bg-rose-50/75",
+            disabled: "border-rose-200/70 bg-rose-50/35",
+            disabledIcon: "bg-white/90 text-rose-500 ring-rose-100",
+            disabledChevron: "border-rose-200/80 bg-white/90 text-rose-300",
+          };
+
+  if (!eligible) {
+    return (
+      <div className={`rounded-[24px] border px-4 py-4 text-sm text-slate-500 ${styles.disabled}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${styles.disabledIcon}`}>
+              <Icon className="h-4.5 w-4.5" />
+            </span>
+            <div>
+              <div className="font-semibold text-slate-700">{title}</div>
+              <div className="mt-1 leading-6">
+                {title === "Request pickup" ? "Available after delivery" : reason}
+              </div>
+            </div>
+          </div>
+          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${styles.disabledChevron}`}>
+            <ChevronRightIcon className="h-4 w-4" />
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      className={`group rounded-[24px] border px-4 py-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f97316] focus-visible:ring-offset-2 ${styles.surface} ${styles.hover}`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ring-1 ${styles.iconWrap}`}>
+            <Icon className="h-4.5 w-4.5" />
+          </span>
+          <div>
+            <div className="text-sm font-semibold text-slate-900">{title}</div>
+            <div className="mt-1 text-sm text-slate-500">
+              {title === "Request pickup"
+                ? "Available after delivery"
+                : title === "Request more time"
+                  ? "Ask for extra days"
+                  : "Get support"}
+            </div>
+          </div>
+        </div>
+        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border shadow-[0_4px_12px_rgba(15,23,42,0.04)] transition ${styles.chevronWrap}`}>
+          <ChevronRightIcon className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-0.5" />
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function RequestHistoryCard({ request }: { request: PortalBookingRequest }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -156,232 +274,196 @@ export default async function PortalRentalDetailPage({
     normalizeText(booking.customer_email) !== normalizeText(customer.email) ||
     normalizePhone(booking.customer_phone) !== normalizePhone(customer.phone);
 
+  const address = `${booking.customer_street || "Address pending"}${
+    booking.customer_city || booking.customer_zip
+      ? `, ${[booking.customer_city, booking.customer_zip].filter(Boolean).join(" ")}`
+      : ""
+  }`;
+
   return (
     <PortalShell pathname={`/portal/rentals/${booking.id}`}>
       <div className="space-y-6">
-        <PortalSubpageHeader
-          title={getPortalRentalLabel(booking.booking_ref)}
-          description={`${booking.customer_street || "Address pending"}${
-            booking.customer_city || booking.customer_zip
-              ? `, ${[booking.customer_city, booking.customer_zip].filter(Boolean).join(" ")}`
-              : ""
-          }`}
-          meta={<PortalStatusBadge stage={booking.portalStage} />}
-        />
+        <div className="space-y-4">
+          <Link
+            href="/portal/rentals"
+            className="inline-flex items-center text-sm font-medium text-slate-500 transition hover:text-slate-900"
+          >
+            ← Back to rentals
+          </Link>
 
-        {submissionMessage ? (
-          <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
-            {submissionMessage}
-          </div>
-        ) : null}
-
-        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <section className="space-y-6">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div
-                className={`grid gap-4 sm:grid-cols-2 ${
-                  formatServiceArea(booking.service_town, booking.service_county)
-                    ? "xl:grid-cols-4"
-                    : "xl:grid-cols-3"
-                }`}
-              >
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Delivery date
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-slate-900">
-                    {formatDate(booking.delivery_date)}
-                  </div>
+          <section className="rounded-[30px] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  Rental details
                 </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Pickup date
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-slate-900">
-                    {formatDate(booking.pickup_date)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Rental total
-                  </div>
-                  <div className="mt-2 text-sm font-semibold text-slate-900">
-                    {formatUsdFromCents(booking.total_price_cents)}
-                  </div>
-                </div>
-                {formatServiceArea(booking.service_town, booking.service_county) ? (
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Service area
-                    </div>
-                    <div className="mt-2 text-sm font-semibold text-slate-900">
-                      {formatServiceArea(booking.service_town, booking.service_county)}
-                    </div>
-                  </div>
-                ) : null}
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                  {getPortalRentalLabel(booking.booking_ref)}
+                </h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">{address}</p>
               </div>
-
-              <div className="mt-6 rounded-3xl border border-orange-100 bg-orange-50/70 px-5 py-4">
-                <div className="text-sm font-semibold text-slate-900">What happens next</div>
-                <div className="mt-1 text-sm leading-6 text-slate-600">{booking.nextAction}</div>
+              <div className="flex items-center gap-3">
+                <PortalStatusBadge stage={booking.portalStage} />
               </div>
             </div>
 
-            {bookingContactDiffers ? (
-              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900">Booking contact</h3>
-                    <p className="mt-1 text-sm leading-6 text-slate-500">
-                      This booking was submitted with contact details that differ from your current account profile.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                    Booked with snapshot
-                  </span>
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Name</div>
-                    <div className="mt-2 text-sm font-semibold text-slate-900">{booking.customer_name || "—"}</div>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Email</div>
-                    <div className="mt-2 text-sm font-semibold text-slate-900">{booking.customer_email || "—"}</div>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Phone</div>
-                    <div className="mt-2 text-sm font-semibold text-slate-900">{booking.customer_phone || "—"}</div>
-                  </div>
-                </div>
+            {submissionMessage ? (
+              <div className="mt-5 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
+                {submissionMessage}
               </div>
             ) : null}
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Rental timeline</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                A simple view of where your rental stands and what is coming next.
-              </p>
+            <div className="mt-6 rounded-[26px] border border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Rental progress</h2>
+                  <p className="mt-1 text-sm text-slate-500">See what is complete, current, and next.</p>
+                </div>
+                <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                  {booking.nextAction}
+                </div>
+              </div>
               <div className="mt-6">
                 <RentalTimeline stage={booking.portalStage} />
               </div>
             </div>
 
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Notes and instructions</h3>
-              <div className="mt-3 text-sm leading-6 text-slate-500">
-                {booking.notes || "No special notes are attached to this rental yet."}
+            <div className="mt-6">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold text-slate-900">Quick actions</h2>
+                {reorderEligible ? (
+                  <Link
+                    href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
+                    className="text-sm font-semibold text-[#ea580c] transition hover:text-[#c2410c]"
+                  >
+                    Book this setup again
+                  </Link>
+                ) : null}
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <ActionTile
+                  title="Request pickup"
+                  href={`/portal/rentals/${booking.id}/pickup-request`}
+                  icon={TruckIcon}
+                  eligible={pickupEligibility.eligible}
+                  reason={pickupEligibility.reason}
+                />
+                <ActionTile
+                  title="Request more time"
+                  href={`/portal/rentals/${booking.id}/extension-request`}
+                  icon={ClockIcon}
+                  eligible={extensionEligibility.eligible}
+                  reason={extensionEligibility.reason}
+                />
+                <ActionTile
+                  title="Report an issue"
+                  href={`/portal/rentals/${booking.id}/issue-report`}
+                  icon={ExclamationTriangleIcon}
+                  eligible={issueReportEligibility.eligible}
+                  reason={issueReportEligibility.reason}
+                />
               </div>
             </div>
           </section>
-
-          <aside className="space-y-6" id="actions">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Manage rental</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Request rental changes or support without calling or texting.
-              </p>
-
-              <div className="mt-5 space-y-4">
-                <ActionCard
-                  title="Request pickup"
-                  description="Finished using your dumpster? Let us know and we’ll review your pickup request."
-                  tone={pickupEligibility.eligible ? "default" : "muted"}
-                >
-                  {pickupEligibility.eligible ? (
-                    <Link
-                      href={`/portal/rentals/${booking.id}/pickup-request`}
-                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      Start pickup request
-                    </Link>
-                  ) : (
-                    <div className="rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-500 ring-1 ring-slate-200">
-                      {pickupEligibility.reason}
-                    </div>
-                  )}
-                </ActionCard>
-
-                <ActionCard
-                  title="Request more time"
-                  description="Need to keep the dumpster longer? Send a request and we’ll review availability and any added cost."
-                  tone={extensionEligibility.eligible ? "default" : "muted"}
-                >
-                  {extensionEligibility.eligible ? (
-                    <Link
-                      href={`/portal/rentals/${booking.id}/extension-request`}
-                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      Start extension request
-                    </Link>
-                  ) : (
-                    <div className="rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-500 ring-1 ring-slate-200">
-                      {extensionEligibility.reason}
-                    </div>
-                  )}
-                </ActionCard>
-
-                <ActionCard
-                  title="Report an issue"
-                  description="Tell us about service or rental problems and our team will review it."
-                  tone={issueReportEligibility.eligible ? "default" : "muted"}
-                >
-                  {issueReportEligibility.eligible ? (
-                    <Link
-                      href={`/portal/rentals/${booking.id}/issue-report`}
-                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      Report an issue
-                    </Link>
-                  ) : (
-                    <div className="rounded-2xl bg-white px-4 py-4 text-sm leading-6 text-slate-500 ring-1 ring-slate-200">
-                      {issueReportEligibility.reason}
-                    </div>
-                  )}
-                </ActionCard>
-
-                {reorderEligible ? (
-                  <ActionCard
-                    title="Book this setup again"
-                    description="Start a new booking using this rental as your starting point. You can review and update everything before confirming."
-                  >
-                    <Link
-                      href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
-                      className="inline-flex items-center justify-center rounded-2xl bg-[#F97316] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#EA580C]"
-                    >
-                      Book this setup again
-                    </Link>
-                  </ActionCard>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900">Rental requests</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Track what you submitted and the latest response from our team.
-                  </p>
-                </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                  {requests.length} total
-                </span>
-              </div>
-              <div className="mt-4 space-y-3">
-                {requests.length === 0 ? (
-                  <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
-                    No rental requests have been submitted for this rental yet. When you request pickup,
-                    more time, or support, updates will appear here.
-                  </div>
-                ) : (
-                  requests.slice(0, 5).map((request) => <RequestHistoryCard key={request.id} request={request} />)
-                )}
-              </div>
-            </div>
-          </aside>
         </div>
+
+        <section className="grid gap-6 xl:grid-cols-2">
+          <InfoCard title="Rental Information" icon={TruckIcon}>
+            <InfoItem label="Rental ID" value={getPortalRentalLabel(booking.booking_ref)} />
+            <InfoItem label="Portal status" value={booking.portalStage.replaceAll("_", " ")} />
+            <InfoItem label="Order date" value={booking.created_at ? formatDate(booking.created_at.slice(0, 10)) : "—"} />
+            <InfoItem label="Requests submitted" value={`${requests.length}`} />
+          </InfoCard>
+
+          <InfoCard title="Schedule" icon={CalendarDaysIcon}>
+            <InfoItem label="Delivery date" value={formatDate(booking.delivery_date)} />
+            <InfoItem label="Pickup date" value={formatDate(booking.pickup_date)} />
+            <InfoItem label="Pickup mode" value={booking.pickup_mode === "request" ? "By request" : booking.pickup_mode === "schedule" ? "Scheduled" : "Not set"} />
+            <InfoItem label="What happens next" value={booking.nextAction} />
+          </InfoCard>
+
+          <InfoCard title="Location" icon={MapPinIcon}>
+            <InfoItem
+              label="Service address"
+              value={formatAddressLine(
+                [
+                  booking.customer_street,
+                  [booking.customer_city].filter(Boolean).join(", "),
+                  booking.customer_zip,
+                ],
+                "Address pending",
+              )}
+            />
+            <InfoItem label="Customer name" value={booking.customer_name || customer.name || "—"} />
+            <InfoItem label="Service area" value={formatServiceArea(booking.service_town, booking.service_county) || "—"} />
+          </InfoCard>
+
+          <InfoCard title="Financial Summary" icon={CurrencyDollarIcon}>
+            <InfoItem label="Rental total" value={formatUsdFromCents(booking.total_price_cents)} />
+            <InfoItem label="Billing details" value="Included in your booking confirmation" />
+            <InfoItem label="Billing questions" value="Use Report an issue for support" />
+            <InfoItem label="Rebook this setup" value={reorderEligible ? "Available" : "Not available yet"} />
+          </InfoCard>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <div className="space-y-6">
+            <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Notes and instructions</h2>
+              <div className="mt-3 text-sm leading-6 text-slate-500">
+                {booking.notes || "No special notes are attached to this rental yet."}
+              </div>
+            </section>
+
+            {bookingContactDiffers ? (
+              <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Booking contact</h2>
+                    <p className="mt-1 text-sm leading-6 text-slate-500">
+                      This rental was booked with contact details that differ from your current account profile.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                    Snapshot
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <InfoItem label="Name" value={booking.customer_name || "—"} />
+                  <InfoItem label="Email" value={booking.customer_email || "—"} />
+                  <InfoItem label="Phone" value={booking.customer_phone || "—"} />
+                </div>
+              </section>
+            ) : null}
+          </div>
+
+          <section className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Rental requests</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Track what you submitted and the latest response from our team.
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                {requests.length} total
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {requests.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
+                  No rental requests have been submitted for this rental yet. When you request pickup,
+                  more time, or support, updates will appear here.
+                </div>
+              ) : (
+                requests.slice(0, 5).map((request) => <RequestHistoryCard key={request.id} request={request} />)
+              )}
+            </div>
+          </section>
+        </section>
       </div>
     </PortalShell>
   );

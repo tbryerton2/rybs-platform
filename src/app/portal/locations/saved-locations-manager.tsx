@@ -18,6 +18,15 @@ type LocationFormValues = {
 
 type FieldErrors = Partial<Record<keyof LocationFormValues, string>>;
 
+type SuggestedLocation = {
+  label: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  note: string;
+};
+
 const emptyForm: LocationFormValues = {
   label: "",
   street: "",
@@ -74,12 +83,14 @@ async function parseJson(response: Response) {
 
 export function SavedLocationsManager({
   initialLocations,
+  suggestedLocation,
 }: {
   initialLocations: SavedServiceLocation[];
+  suggestedLocation: SuggestedLocation | null;
 }) {
   const [locations, setLocations] = useState(initialLocations);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(initialLocations.length === 0);
+  const [showForm, setShowForm] = useState(false);
   const [formValues, setFormValues] = useState<LocationFormValues>(emptyForm);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -117,6 +128,27 @@ export function SavedLocationsManager({
     setEditingId(null);
     setSuccessMessage(null);
     resetForm();
+    setShowForm(true);
+  }
+
+  function openSuggestedForm() {
+    if (!suggestedLocation) {
+      openAddForm();
+      return;
+    }
+
+    setEditingId(null);
+    setSuccessMessage(null);
+    setFieldErrors({});
+    setFormError(null);
+    setFormValues({
+      ...emptyForm,
+      label: suggestedLocation.label,
+      street: suggestedLocation.street,
+      city: suggestedLocation.city,
+      state: suggestedLocation.state,
+      zip: suggestedLocation.zip,
+    });
     setShowForm(true);
   }
 
@@ -214,18 +246,14 @@ export function SavedLocationsManager({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <section>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="inline-flex rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
-              Save time on repeat bookings
-            </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
-              Reuse common delivery addresses
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+              Saved service locations
             </h2>
-            <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
-              Save your most common service locations once, then pick them during future bookings
-              instead of retyping the same address and notes every time.
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              Save common job sites so future bookings start faster and delivery details stay consistent.
             </p>
           </div>
           {!showForm ? (
@@ -422,13 +450,66 @@ export function SavedLocationsManager({
       ) : null}
 
       {sortedLocations.length === 0 && !showForm ? (
-        <section className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-          <h3 className="text-xl font-semibold text-slate-900">No saved service locations yet</h3>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
-            Save a job site, home, or rental property here so future bookings start faster and your
-            placement notes stay consistent.
-          </p>
-        </section>
+        suggestedLocation ? (
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div>
+              <h3 className="text-xl font-semibold text-slate-900">No saved service locations yet</h3>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">
+                Save a location now so future bookings go faster.
+              </p>
+            </div>
+
+            <article className="mt-6 rounded-[24px] border border-slate-300 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#c2410c]">
+                    Suggested next step
+                  </div>
+                  <h3 className="mt-2 text-lg font-semibold text-slate-900">Recent booking address</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{suggestedLocation.note}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-slate-300 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-700">
+                {formatServiceLocationAddress(suggestedLocation)}
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={openSuggestedForm}
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                >
+                  Save this location
+                </button>
+                <button
+                  type="button"
+                  onClick={openAddForm}
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Add a different location
+                </button>
+              </div>
+            </article>
+          </section>
+        ) : (
+          <section className="rounded-[28px] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+            <h3 className="text-xl font-semibold text-slate-900">No saved service locations yet</h3>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
+              Save a job site, home, or rental property here so future bookings start faster and your
+              placement notes stay consistent.
+            </p>
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={openAddForm}
+                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Add location
+              </button>
+            </div>
+          </section>
+        )
       ) : (
         <section className="grid gap-4 lg:grid-cols-2">
           {sortedLocations.map((location) => (

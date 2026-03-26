@@ -89,7 +89,7 @@ export function RentalHistoryClient({ bookings }: { bookings: PortalBookingSumma
         </div>
       </div>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-6 space-y-6">
         {bookings.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
             No rentals are linked to this portal account yet. Once bookings are connected, they

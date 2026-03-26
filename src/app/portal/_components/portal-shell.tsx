@@ -1,16 +1,83 @@
 import Link from "next/link";
+import type { ComponentType, SVGProps } from "react";
+import {
+  ArrowRightOnRectangleIcon,
+  ChatBubbleLeftRightIcon,
+  HomeIcon,
+  LifebuoyIcon,
+  MapPinIcon,
+  PlusIcon,
+  RectangleStackIcon,
+  UserCircleIcon,
+} from "@heroicons/react/24/outline";
+import { PortalNavDrawer, type PortalNavItem } from "./portal-nav-drawer";
 
-type PortalNavItem = {
-  href: string;
-  label: string;
+function isActivePath(pathname: string, href: string) {
+  return href === "/portal" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+const iconMap: Record<PortalNavItem["icon"], IconComponent> = {
+  dashboard: HomeIcon,
+  rentals: RectangleStackIcon,
+  locations: MapPinIcon,
+  profile: UserCircleIcon,
+  support: LifebuoyIcon,
+  feedback: ChatBubbleLeftRightIcon,
+  signout: ArrowRightOnRectangleIcon,
 };
 
-const navItems: PortalNavItem[] = [
-  { href: "/portal", label: "Dashboard" },
-  { href: "/portal/rentals", label: "Rentals" },
-  { href: "/portal/locations", label: "Locations" },
-  { href: "/portal/account", label: "Account" },
+const navItems: Array<Pick<PortalNavItem, "href" | "label" | "icon">> = [
+  { href: "/portal", label: "Dashboard", icon: "dashboard" },
+  { href: "/portal/rentals", label: "My rentals", icon: "rentals" },
+  { href: "/portal/locations", label: "Locations", icon: "locations" },
+  { href: "/portal/account", label: "Account", icon: "profile" },
 ];
+
+const utilityItems: Array<Pick<PortalNavItem, "href" | "label" | "icon">> = [
+  { href: "/portal/help", label: "Support", icon: "support" },
+  { href: "/portal/feedback", label: "Feedback", icon: "feedback" },
+  { href: "/portal/logout", label: "Sign out", icon: "signout" },
+];
+
+function SidebarLink({
+  href,
+  label,
+  icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: PortalNavItem["icon"];
+  active: boolean;
+}) {
+  const Icon = iconMap[icon];
+
+  return (
+    <Link
+      href={href}
+      className={[
+        "group flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition",
+        active
+          ? "bg-[#fff4eb] text-slate-950"
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "inline-flex h-9 w-9 items-center justify-center rounded-xl border transition",
+          active
+            ? "border-[#f9c39d] bg-[#f97316] text-white shadow-[0_10px_24px_rgba(249,115,22,0.22)]"
+            : "border-slate-200 bg-white text-slate-500 group-hover:border-slate-300 group-hover:text-slate-700",
+        ].join(" ")}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span>{label}</span>
+    </Link>
+  );
+}
 
 export function PortalShell({
   children,
@@ -19,63 +86,70 @@ export function PortalShell({
   children: React.ReactNode;
   pathname: string;
 }) {
+  const resolvedNavItems = navItems.map((item) => ({
+    ...item,
+    active: isActivePath(pathname, item.href),
+  }));
+  const resolvedUtilityItems = utilityItems.map((item) => ({
+    ...item,
+    active: isActivePath(pathname, item.href),
+  }));
+
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 lg:px-8">
-      <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-        <div className="border-b border-slate-200 px-5 py-5 sm:px-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-h-screen bg-[#f6f4ef]">
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <PortalNavDrawer
+          navItems={resolvedNavItems}
+          utilityItems={resolvedUtilityItems}
+        />
+
+        <div className="mt-4 lg:mt-0 lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-6">
+          <aside className="sticky top-6 hidden h-fit rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)] lg:block">
             <div>
-              <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                 Customer Portal
-              </div>
-              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
-                Manage your rental
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Track progress, request help, and stay on top of what happens next.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/book"
-                className="rounded-full bg-[#F97316] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#EA580C]"
-              >
-                Start new rental
-              </Link>
+            <nav aria-label="Portal sidebar" className="mt-6 space-y-1">
+              {resolvedNavItems.map((item) => (
+                <SidebarLink
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                  active={item.active}
+                />
+              ))}
+            </nav>
 
-              {navItems.map((item) => {
-                const isActive =
-                  item.href === "/portal"
-                    ? pathname === "/portal"
-                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
+            <div className="mt-6 border-t border-slate-200 pt-5">
+              <div className="space-y-1">
+                {resolvedUtilityItems.map((item) => (
+                  <SidebarLink
                     key={item.href}
                     href={item.href}
-                    className={[
-                      "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900",
-                    ].join(" ")}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+                    label={item.label}
+                    icon={item.icon}
+                    active={item.active}
+                  />
+                ))}
+              </div>
 
               <Link
-                href="/portal/logout"
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                href="/book"
+                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#c2410c] bg-[#f97316] px-4 py-3 text-sm font-semibold text-white transition hover:border-[#9a3412] hover:bg-[#ea580c]"
               >
-                Sign out
+                <PlusIcon className="h-4 w-4" />
+                New booking
               </Link>
             </div>
-          </div>
-        </div>
+          </aside>
 
-        <div className="px-5 py-6 sm:px-8">{children}</div>
+          <main className="min-w-0 rounded-[30px] border border-slate-200 bg-white px-4 py-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );
