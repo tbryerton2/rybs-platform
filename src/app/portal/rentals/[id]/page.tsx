@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import {
+  BoltIcon,
   CalendarDaysIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -20,6 +21,7 @@ import { canReorderBooking } from "@/lib/reorder";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalRental, getPortalRequestSummary } from "@/lib/portal/data";
 import { getPortalRentalLabel } from "@/lib/portal/rental-number";
+import { getPortalStageLabel } from "@/lib/portal/status";
 import type { PortalBookingRequest } from "@/lib/portal/data";
 import { formatUsdFromCents } from "@/lib/money";
 import { PortalShell } from "../../_components/portal-shell";
@@ -205,7 +207,7 @@ function ActionTile({
             <div className="text-sm font-semibold text-slate-900">{title}</div>
             <div className="mt-1 text-sm text-slate-500">
               {title === "Request pickup"
-                ? "Available after delivery"
+                ? "Schedule pickup"
                 : title === "Request more time"
                   ? "Ask for extra days"
                   : "Get support"}
@@ -291,8 +293,8 @@ export default async function PortalRentalDetailPage({
             ← Back to rentals
           </Link>
 
-          <section className="rounded-[30px] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6 sm:py-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-[18px]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                   Rental details
@@ -302,76 +304,70 @@ export default async function PortalRentalDetailPage({
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">{address}</p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3 lg:pt-1">
                 <PortalStatusBadge stage={booking.portalStage} />
               </div>
             </div>
 
             {submissionMessage ? (
-              <div className="mt-5 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
+              <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
                 {submissionMessage}
               </div>
             ) : null}
 
-            <div className="mt-6 rounded-[26px] border border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Rental progress</h2>
-                  <p className="mt-1 text-sm text-slate-500">See what is complete, current, and next.</p>
-                </div>
-                <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                  {booking.nextAction}
-                </div>
-              </div>
-              <div className="mt-6">
-                <RentalTimeline stage={booking.portalStage} />
-              </div>
+            <div>
+              <RentalTimeline stage={booking.portalStage} />
             </div>
-
-            <div className="mt-6">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-slate-900">Quick actions</h2>
-                {reorderEligible ? (
-                  <Link
-                    href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
-                    className="text-sm font-semibold text-[#ea580c] transition hover:text-[#c2410c]"
-                  >
-                    Book this setup again
-                  </Link>
-                ) : null}
-              </div>
-
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <ActionTile
-                  title="Request pickup"
-                  href={`/portal/rentals/${booking.id}/pickup-request`}
-                  icon={TruckIcon}
-                  eligible={pickupEligibility.eligible}
-                  reason={pickupEligibility.reason}
-                />
-                <ActionTile
-                  title="Request more time"
-                  href={`/portal/rentals/${booking.id}/extension-request`}
-                  icon={ClockIcon}
-                  eligible={extensionEligibility.eligible}
-                  reason={extensionEligibility.reason}
-                />
-                <ActionTile
-                  title="Report an issue"
-                  href={`/portal/rentals/${booking.id}/issue-report`}
-                  icon={ExclamationTriangleIcon}
-                  eligible={issueReportEligibility.eligible}
-                  reason={issueReportEligibility.reason}
-                />
-              </div>
-            </div>
-          </section>
+          </div>
         </div>
+
+        <section className="rounded-[30px] border border-slate-200/90 bg-white px-5 py-5 shadow-[0_12px_28px_rgba(15,23,42,0.045)] sm:px-6 sm:py-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+                <BoltIcon className="h-5 w-5" />
+              </span>
+              <h2 className="text-lg font-semibold text-slate-900">Quick actions</h2>
+            </div>
+            {reorderEligible ? (
+              <Link
+                href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
+                className="text-sm font-semibold text-[#ea580c] transition hover:text-[#c2410c]"
+              >
+                Book this setup again
+              </Link>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <ActionTile
+              title="Request pickup"
+              href={`/portal/rentals/${booking.id}/pickup-request`}
+              icon={TruckIcon}
+              eligible={pickupEligibility.eligible}
+              reason={pickupEligibility.reason}
+            />
+            <ActionTile
+              title="Request more time"
+              href={`/portal/rentals/${booking.id}/extension-request`}
+              icon={ClockIcon}
+              eligible={extensionEligibility.eligible}
+              reason={extensionEligibility.reason}
+            />
+            <ActionTile
+              title="Report an issue"
+              href={`/portal/rentals/${booking.id}/issue-report`}
+              icon={ExclamationTriangleIcon}
+              eligible={issueReportEligibility.eligible}
+              reason={issueReportEligibility.reason}
+            />
+          </div>
+        </section>
 
         <section className="grid gap-6 xl:grid-cols-2">
           <InfoCard title="Rental Information" icon={TruckIcon}>
             <InfoItem label="Rental ID" value={getPortalRentalLabel(booking.booking_ref)} />
-            <InfoItem label="Portal status" value={booking.portalStage.replaceAll("_", " ")} />
+            <InfoItem label="Portal status" value={getPortalStageLabel(booking.portalStage)} />
             <InfoItem label="Order date" value={booking.created_at ? formatDate(booking.created_at.slice(0, 10)) : "—"} />
             <InfoItem label="Requests submitted" value={`${requests.length}`} />
           </InfoCard>

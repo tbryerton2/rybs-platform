@@ -54,7 +54,7 @@ export function RentalHistoryClient({ bookings }: { bookings: PortalBookingSumma
     <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-3">
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+          <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
             {filteredBookings.length} {filteredBookings.length === 1 ? "booking" : "bookings"}
           </span>
           {deferredSearch.trim() ? (

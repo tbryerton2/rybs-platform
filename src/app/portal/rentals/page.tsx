@@ -15,7 +15,7 @@ export default async function PortalRentalsPage() {
           title="All bookings"
           description="Browse every rental linked to your portal account, reopen the details you need, and book again from completed jobs when it makes sense."
           meta={
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
               {bookings.length} total
             </span>
           }

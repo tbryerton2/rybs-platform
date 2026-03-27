@@ -1,250 +1,291 @@
-import Link from "next/link";
+import type { ComponentType, ReactNode, SVGProps } from "react";
+import {
+  BuildingOffice2Icon,
+  EnvelopeIcon,
+  MapPinIcon,
+  PhoneIcon,
+  UserIcon,
+} from "@heroicons/react/24/outline";
 import { requirePortalCustomer } from "@/lib/portal/auth";
-import { getPortalDashboardData } from "@/lib/portal/data";
-import { getPortalRentalLabel } from "@/lib/portal/rental-number";
-import { canReorderBooking } from "@/lib/reorder";
-import { deactivatePortalAccountAction } from "./actions";
+import { isPortalSchemaError } from "@/lib/portal/schema";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { updatePortalAccountAction } from "./actions";
 import { PortalShell } from "../_components/portal-shell";
 import { PortalSubpageHeader } from "../_components/portal-subpage-header";
-import { PortalStatusBadge } from "../_components/portal-status-badge";
 
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T12:00:00`));
+type SearchParams = Record<string, string | string[] | undefined>;
+
+type PortalAccountProfile = {
+  company: string | null;
+  preferredContactMethod: "email" | "phone" | "either" | null;
+};
+
+function readValue(params: SearchParams, key: string) {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] : value;
 }
 
-function formatContactValue(value: string | null, fallback = "Not on file") {
-  return value?.trim() || fallback;
+async function getPortalAccountProfile(customerId: string): Promise<PortalAccountProfile> {
+  const lookup = await supabaseAdmin
+    .from("customers")
+    .select("company, preferred_contact_method")
+    .eq("id", customerId)
+    .maybeSingle();
+
+  if (lookup.error && !isPortalSchemaError(lookup.error)) {
+    throw new Error(lookup.error.message);
+  }
+
+  if (lookup.error || !lookup.data) {
+    return {
+      company: null,
+      preferredContactMethod: null,
+    };
+  }
+
+  const row = lookup.data as { company?: string | null; preferred_contact_method?: string | null };
+  const preferred =
+    row.preferred_contact_method === "email" ||
+    row.preferred_contact_method === "phone" ||
+    row.preferred_contact_method === "either"
+      ? row.preferred_contact_method
+      : null;
+
+  return {
+    company: row.company ?? null,
+    preferredContactMethod: preferred,
+  };
 }
 
-function formatAddressLine(parts: Array<string | null | undefined>, fallback: string) {
-  const value = parts.filter(Boolean).join(", ");
-  return value || fallback;
-}
-
-function ContactCard({
+function Field({
   label,
-  value,
+  name,
+  type = "text",
+  defaultValue,
+  placeholder,
+  autoComplete,
+  children,
 }: {
   label: string;
-  value: string;
+  name: string;
+  type?: string;
+  defaultValue?: string | null;
+  placeholder?: string;
+  autoComplete?: string;
+  children?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-slate-50 px-4 py-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm leading-6 text-slate-900">{value}</div>
-    </div>
+    <label className="block">
+      <div className="text-sm font-semibold text-slate-900">{label}</div>
+      {children ?? (
+        <input
+          type={type}
+          name={name}
+          defaultValue={defaultValue ?? ""}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[#f97316]/20"
+        />
+      )}
+    </label>
   );
 }
 
-export default async function PortalAccountPage() {
+function SectionCard({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+          <Icon className="h-5 w-5" />
+        </span>
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ContactMethodSelect({ defaultValue }: { defaultValue: PortalAccountProfile["preferredContactMethod"] }) {
+  return (
+    <Field label="Preferred method of contact" name="preferred_contact_method">
+      <select
+        name="preferred_contact_method"
+        defaultValue={defaultValue ?? "either"}
+        className="mt-2 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-[#f97316]/20"
+      >
+        <option value="either">Email or phone</option>
+        <option value="email">Email</option>
+        <option value="phone">Phone</option>
+      </select>
+    </Field>
+  );
+}
+
+export default async function PortalAccountPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
   const customer = await requirePortalCustomer();
-  const { locations, recentBookings } = await getPortalDashboardData(customer.id);
+  const profile = await getPortalAccountProfile(customer.id);
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const saved = readValue(resolvedSearchParams, "saved") === "1";
 
   return (
     <PortalShell pathname="/portal/account">
-      <div className="space-y-6">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <PortalSubpageHeader
-            title={customer.name || "Your portal account"}
-            description="Review your contact details, saved service locations, and recent rental activity. Account settings stay read-only in v1."
-          />
+      <form action={updatePortalAccountAction} className="space-y-6">
+        <PortalSubpageHeader
+          title="Account"
+          description="Keep your profile, contact information, and primary service address up to date."
+          backHref={null}
+          meta={
+            <button
+              type="submit"
+              className="inline-flex h-11 items-center justify-center rounded-2xl border border-[#ea580c] bg-[#f97316] px-5 text-sm font-semibold text-white transition hover:border-[#c2410c] hover:bg-[#ea580c]"
+            >
+              Save changes
+            </button>
+          }
+        />
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <ContactCard label="Full name" value={formatContactValue(customer.name)} />
-            <ContactCard label="Email" value={formatContactValue(customer.email)} />
-            <ContactCard label="Phone" value={formatContactValue(customer.phone)} />
-            <ContactCard
-              label="Default address"
-              value={formatAddressLine(
-                [customer.primary_street, [customer.primary_city, customer.primary_state].filter(Boolean).join(", "), customer.primary_zip],
-                "No default address saved",
-              )}
-            />
+        {saved ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            Your account details were updated.
           </div>
+        ) : null}
 
-          <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-4">
-            <div className="text-sm font-semibold text-slate-900">Account access</div>
-            <div className="mt-1 text-sm leading-6 text-slate-600">
-              Portal account settings are read-only for now. Contact support if you need to
-              update your default contact details.
-            </div>
-            <form action={deactivatePortalAccountAction} className="mt-4">
-              <button
-                type="submit"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        <div className="grid gap-6 xl:grid-cols-2">
+          <SectionCard title="Personal Details" icon={UserIcon}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Full name"
+                name="full_name"
+                defaultValue={customer.name}
+                placeholder="Full name"
+                autoComplete="name"
+              />
+              <Field
+                label="Company"
+                name="company"
+                defaultValue={profile.company}
+                placeholder="Company name"
+                autoComplete="organization"
               >
-                Deactivate account
-              </button>
-            </form>
-          </div>
-        </section>
+                <div className="relative mt-2">
+                  <span className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-400">
+                    <BuildingOffice2Icon className="h-4.5 w-4.5" />
+                  </span>
+                  <input
+                    type="text"
+                    name="company"
+                    defaultValue={profile.company ?? ""}
+                    placeholder="Company name"
+                    autoComplete="organization"
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[#f97316]/20"
+                  />
+                </div>
+              </Field>
+            </div>
+          </SectionCard>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
-          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Saved service locations</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  Service locations we can reuse for future rentals and deliveries.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                  {locations.length} total
-                </span>
-                <Link href="/portal/locations" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
-                  Manage
-                </Link>
+          <SectionCard title="Contact Information" icon={EnvelopeIcon}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field
+                label="Email"
+                name="email"
+                type="email"
+                defaultValue={customer.email}
+                placeholder="name@example.com"
+                autoComplete="email"
+              >
+                <div className="relative mt-2">
+                  <span className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-400">
+                    <EnvelopeIcon className="h-4.5 w-4.5" />
+                  </span>
+                  <input
+                    type="email"
+                    name="email"
+                    defaultValue={customer.email ?? ""}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[#f97316]/20"
+                  />
+                </div>
+              </Field>
+              <Field
+                label="Phone"
+                name="phone"
+                type="tel"
+                defaultValue={customer.phone}
+                placeholder="Phone number"
+                autoComplete="tel"
+              >
+                <div className="relative mt-2">
+                  <span className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-400">
+                    <PhoneIcon className="h-4.5 w-4.5" />
+                  </span>
+                  <input
+                    type="tel"
+                    name="phone"
+                    defaultValue={customer.phone ?? ""}
+                    placeholder="Phone number"
+                    autoComplete="tel"
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-[#f97316]/20"
+                  />
+                </div>
+              </Field>
+              <div className="sm:col-span-2">
+                <ContactMethodSelect defaultValue={profile.preferredContactMethod} />
               </div>
             </div>
+          </SectionCard>
 
-            <div className="mt-5 space-y-3">
-              {locations.length === 0 ? (
-                <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm leading-6 text-slate-500">
-                  No saved service locations yet. As you book, locations will appear here to make
-                  future rentals faster to review.
+          <section className="xl:col-span-2">
+            <SectionCard title="Address" icon={MapPinIcon}>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <Field
+                    label="Street address"
+                    name="street_address"
+                    defaultValue={customer.primary_street}
+                    placeholder="Street address"
+                    autoComplete="street-address"
+                  />
                 </div>
-              ) : (
-                locations.map((location) => (
-                  <div key={location.id} className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">{location.label}</div>
-                        <div className="mt-1 text-sm leading-6 text-slate-500">
-                          {[location.street, [location.city, location.state].filter(Boolean).join(", "), location.zip]
-                            .filter(Boolean)
-                            .join(" ")}
-                        </div>
-                      </div>
-                      {location.is_default ? (
-                        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500 ring-1 ring-slate-200">
-                          Default
-                        </span>
-                      ) : null}
-                    </div>
-                    {location.delivery_notes ? (
-                      <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
-                        {location.delivery_notes}
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="space-y-6">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Rental history snapshot</h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
-                    A quick view of the rentals currently linked to this portal account.
-                  </p>
-                </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                  {recentBookings.length} linked
-                </span>
+                <Field
+                  label="City"
+                  name="city"
+                  defaultValue={customer.primary_city}
+                  placeholder="City"
+                  autoComplete="address-level2"
+                />
+                <Field
+                  label="State"
+                  name="state"
+                  defaultValue={customer.primary_state}
+                  placeholder="State"
+                  autoComplete="address-level1"
+                />
+                <Field
+                  label="ZIP code"
+                  name="zip_code"
+                  defaultValue={customer.primary_zip}
+                  placeholder="ZIP code"
+                  autoComplete="postal-code"
+                />
               </div>
-
-              <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Total rentals
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-slate-900">{recentBookings.length}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Active rentals
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-slate-900">
-                    {
-                      recentBookings.filter((booking) =>
-                        ["confirmed", "scheduled", "delivered"].includes((booking.status ?? "").toLowerCase()),
-                      ).length
-                    }
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Saved locations
-                  </div>
-                  <div className="mt-2 text-lg font-semibold text-slate-900">{locations.length}</div>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {recentBookings.length === 0 ? (
-                  <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5 text-sm leading-6 text-slate-500">
-                    No rentals are linked to this account yet. When bookings are matched to your
-                    portal account, they will appear here automatically.
-                  </div>
-                ) : (
-                  recentBookings.slice(0, 4).map((booking) => (
-                    <div
-                      key={booking.id}
-                      className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4"
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {getPortalRentalLabel(booking.booking_ref)}
-                          </div>
-                          <div className="mt-1 text-sm leading-6 text-slate-500">
-                            {booking.customer_street || "Address pending"}
-                          </div>
-                        </div>
-                        <PortalStatusBadge stage={booking.portalStage} />
-                      </div>
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl bg-white px-3 py-3">
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                            Delivery
-                          </div>
-                          <div className="mt-1 text-sm font-semibold text-slate-900">
-                            {formatDate(booking.delivery_date)}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl bg-white px-3 py-3">
-                          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                            Latest activity
-                          </div>
-                          <div className="mt-1 text-sm leading-6 text-slate-600">
-                            {booking.latestRequestSummary || booking.nextAction}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <Link
-                          href={`/portal/rentals/${booking.id}`}
-                          className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                        >
-                          View rental
-                        </Link>
-                        {canReorderBooking(booking.status) ? (
-                          <Link
-                            href={`/book/address?reorderFrom=${encodeURIComponent(booking.id)}`}
-                            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                          >
-                            Book again
-                          </Link>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            </SectionCard>
           </section>
         </div>
-      </div>
+      </form>
     </PortalShell>
   );
 }
