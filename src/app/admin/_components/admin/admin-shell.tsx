@@ -69,7 +69,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     pathname !== "/admin/financials" &&
     !pathname.startsWith("/admin/analytics") &&
     pathname !== "/admin/settings/pricing" &&
-    pathname !== "/admin/settings/zips";
+    pathname !== "/admin/settings/zips" &&
+    pathname !== "/admin/settings/retail-site" &&
+    !pathname.startsWith("/admin/cms");
   const sidebarCollapsed = useSyncExternalStore(
     subscribeToSidebarState,
     readStoredSidebarState,

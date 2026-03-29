@@ -4,8 +4,8 @@ import {
   attachPortalAuthUserToCustomer,
   createPortalAuthClient,
   devPortalLog,
-  PORTAL_ACCESS_TOKEN_COOKIE,
-  PORTAL_REFRESH_TOKEN_COOKIE,
+  getPortalAccessTokenCookieName,
+  getPortalRefreshTokenCookieName,
 } from "@/lib/portal/auth";
 
 type SessionPayload = {
@@ -109,9 +109,14 @@ export async function POST(req: Request) {
       hasRefreshToken: !!refreshToken,
     });
 
+    const [accessTokenCookie, refreshTokenCookie] = await Promise.all([
+      getPortalAccessTokenCookieName(),
+      getPortalRefreshTokenCookieName(),
+    ]);
+
     const response = NextResponse.json({ ok: true, redirectTo: "/portal" });
 
-    response.cookies.set(PORTAL_ACCESS_TOKEN_COOKIE, accessToken, {
+    response.cookies.set(accessTokenCookie, accessToken, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -120,7 +125,7 @@ export async function POST(req: Request) {
     });
 
     if (refreshToken) {
-      response.cookies.set(PORTAL_REFRESH_TOKEN_COOKIE, refreshToken, {
+      response.cookies.set(refreshTokenCookie, refreshToken, {
         httpOnly: true,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",

@@ -1,5 +1,9 @@
 // src/app/api/availability/route.ts
 import { NextResponse } from "next/server";
+import {
+  getRetailCalendarClosureForDate,
+  getRetailSiteSettings,
+} from "@/lib/tenant/retail-site-settings";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
@@ -8,6 +12,19 @@ export async function GET(req: Request) {
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ ok: false, error: "Invalid date" }, { status: 400 });
+  }
+
+  const retailSiteSettings = await getRetailSiteSettings();
+  const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
+  if (closure.blocked) {
+    return NextResponse.json({
+      ok: true,
+      capacity: 0,
+      used: 0,
+      remaining: 0,
+      blocked: true,
+      label: closure.label,
+    });
   }
 
   const { data, error } = await supabase.rpc("get_delivery_availability", {

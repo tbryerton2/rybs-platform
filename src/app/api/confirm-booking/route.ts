@@ -8,6 +8,10 @@ import { get14YardPriceForZip } from "@/lib/pricing";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
+import {
+  getRetailCalendarClosureForDate,
+  getRetailSiteSettings,
+} from "@/lib/tenant/retail-site-settings";
 
 type ConfirmBody = {
   holdId?: string;
@@ -135,6 +139,15 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: "Invalid deliveryDate. Use YYYY-MM-DD." },
         { status: 400 }
+      );
+    }
+
+    const retailSiteSettings = await getRetailSiteSettings();
+    const closure = getRetailCalendarClosureForDate(deliveryDate, retailSiteSettings);
+    if (closure.blocked) {
+      return NextResponse.json(
+        { ok: false, error: closure.label || "That delivery date is blocked." },
+        { status: 409 }
       );
     }
 

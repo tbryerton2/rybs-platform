@@ -2,12 +2,19 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
+import {
+  getRetailCalendarClosureForDate,
+  getRetailSiteSettings,
+} from "@/lib/tenant/retail-site-settings";
+import { getServerTenantStorageKey } from "@/lib/tenant/server";
+import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import { getHoldMinutes } from "@/lib/config";
 
 
 async function getOrCreateClientId() {
   const jar = await cookies(); // ✅ await fixes "jar.get is not a function"
-  const existing = (jar.get("tcm_cid")?.value || "").trim();
+  const clientCookieKey = await getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalClientId);
+  const existing = (jar.get(clientCookieKey)?.value || "").trim();
   if (existing) return { clientId: existing, setCookie: false };
 
   const clientId =
@@ -19,14 +26,17 @@ async function getOrCreateClientId() {
 }
 
 function attachClientIdCookie(res: NextResponse, clientId: string) {
+  const cookieNamePromise = getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalClientId);
+  return cookieNamePromise.then((cookieName) => {
   // 30 days
-  res.cookies.set("tcm_cid", clientId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    res.cookies.set(cookieName, clientId, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    return res;
   });
-  return res;
 }
 
 export async function GET() {
@@ -58,6 +68,15 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: "Invalid rentalDays." },
         { status: 400 }
+      );
+    }
+
+    const retailSiteSettings = await getRetailSiteSettings();
+    const closure = getRetailCalendarClosureForDate(deliveryDate, retailSiteSettings);
+    if (closure.blocked) {
+      return NextResponse.json(
+        { ok: false, error: closure.label || "That delivery date is blocked." },
+        { status: 409 }
       );
     }
 
@@ -95,7 +114,7 @@ export async function POST(req: Request) {
         holdMinutes,
       });
 
-      return setCookie ? attachClientIdCookie(res, clientId) : res;
+      return setCookie ? await attachClientIdCookie(res, clientId) : res;
     }
 
     // 🔒 Basic rate limit: 1 new hold per 10 seconds per client
@@ -210,7 +229,7 @@ export async function POST(req: Request) {
         holdMinutes,
       });
 
-      return setCookie ? attachClientIdCookie(res, clientId) : res;
+      return setCookie ? await attachClientIdCookie(res, clientId) : res;
     }
 
     const afterRow = availAfter.data?.[0] ?? { remaining: fallbackRemaining };
@@ -226,11 +245,11 @@ export async function POST(req: Request) {
       holdMinutes,
     });
 
-    return setCookie ? attachClientIdCookie(res, clientId) : res;
+    return setCookie ? await attachClientIdCookie(res, clientId) : res;
 
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e?.message || "Hold failed." },
+      { ok: false, error: e instanceof Error ? e.message : "Hold failed." },
       { status: 500 }
     );
   }

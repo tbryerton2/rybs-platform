@@ -25,6 +25,8 @@ const iconMap = {
   portalRequests: ClipboardDocumentListIcon,
   pricing: CreditCardIcon,
   zips: MapPinIcon,
+  retailSite: BookOpenIcon,
+  cms: BookOpenIcon,
   docs: BookOpenIcon,
   system: WrenchScrewdriverIcon,
 } as const;

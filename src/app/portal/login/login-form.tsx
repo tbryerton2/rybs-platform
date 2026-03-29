@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 
-const COOLDOWN_KEY = "tcm_portal_login_cooldown_until";
+function getCooldownStorageKey() {
+  return getTenantStorageKey(TENANT_STORAGE_KEYS.portalLoginCooldownUntil);
+}
 
 function readStoredCooldown() {
   if (typeof window === "undefined") return 0;
-  const raw = window.localStorage.getItem(COOLDOWN_KEY);
+  const raw = window.localStorage.getItem(getCooldownStorageKey());
   const value = raw ? Number(raw) : 0;
   return Number.isFinite(value) ? value : 0;
 }
@@ -14,10 +17,10 @@ function readStoredCooldown() {
 function persistCooldown(until: number) {
   if (typeof window === "undefined") return;
   if (until > Date.now()) {
-    window.localStorage.setItem(COOLDOWN_KEY, String(until));
+    window.localStorage.setItem(getCooldownStorageKey(), String(until));
     return;
   }
-  window.localStorage.removeItem(COOLDOWN_KEY);
+  window.localStorage.removeItem(getCooldownStorageKey());
 }
 
 export function PortalLoginForm({

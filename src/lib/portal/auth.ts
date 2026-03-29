@@ -3,11 +3,11 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { recordEntityHistory } from "@/lib/entity-history";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getServerTenantStorageKey } from "@/lib/tenant/server";
+import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import { normalizeEmail } from "@/lib/customers";
 import { isPortalSchemaError } from "./schema";
 
-export const PORTAL_ACCESS_TOKEN_COOKIE = "tcm_portal_access_token";
-export const PORTAL_REFRESH_TOKEN_COOKIE = "tcm_portal_refresh_token";
 export const PORTAL_LOGIN_COOLDOWN_SECONDS = 60;
 
 type PortalCustomer = {
@@ -39,6 +39,14 @@ const PORTAL_CUSTOMER_FALLBACK_SELECT =
 const PORTAL_CUSTOMER_ID_ONLY_SELECT = "id";
 
 export const PORTAL_CUSTOMER_NOT_LINKED_ERROR = "PORTAL_CUSTOMER_NOT_LINKED";
+
+export async function getPortalAccessTokenCookieName() {
+  return getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalAccessToken);
+}
+
+export async function getPortalRefreshTokenCookieName() {
+  return getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalRefreshToken);
+}
 
 async function lookupPortalCustomerByAuthUserId(userId: string) {
   let lookup = await supabaseAdmin
@@ -204,14 +212,19 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
 
 export async function clearPortalSessionCookies() {
   const cookieStore = await cookies();
-  cookieStore.set(PORTAL_ACCESS_TOKEN_COOKIE, "", {
+  const [accessTokenCookie, refreshTokenCookie] = await Promise.all([
+    getPortalAccessTokenCookieName(),
+    getPortalRefreshTokenCookieName(),
+  ]);
+
+  cookieStore.set(accessTokenCookie, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     expires: new Date(0),
     path: "/",
   });
-  cookieStore.set(PORTAL_REFRESH_TOKEN_COOKIE, "", {
+  cookieStore.set(refreshTokenCookie, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -222,8 +235,12 @@ export async function clearPortalSessionCookies() {
 
 export async function setPortalSessionCookies(accessToken: string, refreshToken?: string | null) {
   const cookieStore = await cookies();
+  const [accessTokenCookie, refreshTokenCookie] = await Promise.all([
+    getPortalAccessTokenCookieName(),
+    getPortalRefreshTokenCookieName(),
+  ]);
 
-  cookieStore.set(PORTAL_ACCESS_TOKEN_COOKIE, accessToken, {
+  cookieStore.set(accessTokenCookie, accessToken, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -232,7 +249,7 @@ export async function setPortalSessionCookies(accessToken: string, refreshToken?
   });
 
   if (refreshToken) {
-    cookieStore.set(PORTAL_REFRESH_TOKEN_COOKIE, refreshToken, {
+    cookieStore.set(refreshTokenCookie, refreshToken, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -244,7 +261,8 @@ export async function setPortalSessionCookies(accessToken: string, refreshToken?
 
 export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null> {
   const cookieStore = await cookies();
-  const accessToken = cookieStore.get(PORTAL_ACCESS_TOKEN_COOKIE)?.value;
+  const accessTokenCookie = await getPortalAccessTokenCookieName();
+  const accessToken = cookieStore.get(accessTokenCookie)?.value;
 
   if (!accessToken) return null;
 

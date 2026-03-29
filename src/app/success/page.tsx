@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getOptionalPortalCustomer } from "@/lib/portal/auth";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { formatUsdFromCents } from "@/lib/money";
+import { getBookingSuccessContent } from "@/lib/tenant/content";
 
 type SuccessPageProps = {
   searchParams?: Promise<{
@@ -20,6 +21,7 @@ type SuccessPageProps = {
 export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   const params = (await searchParams) ?? {};
   const portalCustomer = await getOptionalPortalCustomer();
+  const content = await getBookingSuccessContent();
   const bookingRef = getCustomerFacingBookingLabel(params.bookingRef);
   const bookingEmail = params.email?.trim() || null;
   const portalHref = bookingEmail ? `/portal/login?email=${encodeURIComponent(bookingEmail)}` : "/portal/login";
@@ -42,26 +44,25 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
             <span className="text-2xl">✅</span>
           </div>
 
-          <h1 className="text-3xl font-semibold text-[#0F172A]">Booking confirmed</h1>
+          <h1 className="text-3xl font-semibold text-[#0F172A]">{content.title}</h1>
 
           <p className="mt-3 text-[#475569]">
-            Your dumpster has been reserved and we’ve created a new booking for you.
+            {content.description}
           </p>
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left">
-            <div className="text-sm font-semibold text-slate-900">Booking reference</div>
+            <div className="text-sm font-semibold text-slate-900">{content.bookingReferenceTitle}</div>
             <div className="mt-1 text-lg font-semibold text-slate-900">{bookingRef}</div>
             {bookingEmail ? (
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                This booking is linked to <span className="font-medium text-slate-900">{bookingEmail}</span>.
-                Use that email to access your portal and manage this booking.
+                {content.linkedBookingTemplate.replace("{email}", bookingEmail)}
               </p>
             ) : null}
           </div>
 
           {hasPricingSummary ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left">
-              <div className="text-sm font-semibold text-slate-900">Order summary</div>
+              <div className="text-sm font-semibold text-slate-900">{content.orderSummaryTitle}</div>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex items-center justify-between gap-4 text-slate-700">
                   <span>Dumpster rental</span>
@@ -94,7 +95,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
           ) : null}
 
           <p className="mt-6 text-sm text-slate-600">
-            You’ll receive a confirmation email shortly with your delivery details and booking reference.
+            {content.confirmationEmailNote}
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
@@ -103,21 +104,21 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
                 href="/portal"
                 className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-6 font-semibold text-white shadow-sm transition hover:bg-[#EA580C]"
               >
-                Go to my portal
+                {content.portalLoggedInCtaLabel}
               </Link>
             ) : (
               <Link
                 href={portalHref}
                 className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-6 font-semibold text-white shadow-sm transition hover:bg-[#EA580C]"
               >
-                Access my portal
+                {content.portalLoggedOutCtaLabel}
               </Link>
             )}
             <Link
               href="/"
               className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
             >
-              Return home
+              {content.returnHomeCtaLabel}
             </Link>
           </div>
         </div>

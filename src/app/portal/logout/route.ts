@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
-import { PORTAL_ACCESS_TOKEN_COOKIE, PORTAL_REFRESH_TOKEN_COOKIE } from "@/lib/portal/auth";
+import {
+  getPortalAccessTokenCookieName,
+  getPortalRefreshTokenCookieName,
+} from "@/lib/portal/auth";
 
 export async function GET(req: Request) {
+  const [accessTokenCookie, refreshTokenCookie] = await Promise.all([
+    getPortalAccessTokenCookieName(),
+    getPortalRefreshTokenCookieName(),
+  ]);
   const response = NextResponse.redirect(new URL("/portal/login", req.url));
 
-  response.cookies.set(PORTAL_ACCESS_TOKEN_COOKIE, "", {
+  response.cookies.set(accessTokenCookie, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -12,7 +19,7 @@ export async function GET(req: Request) {
     path: "/",
   });
 
-  response.cookies.set(PORTAL_REFRESH_TOKEN_COOKIE, "", {
+  response.cookies.set(refreshTokenCookie, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

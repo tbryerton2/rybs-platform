@@ -11,6 +11,8 @@ export type AdminNavItem = {
     | "portalRequests"
     | "pricing"
     | "zips"
+    | "retailSite"
+    | "cms"
     | "docs"
     | "system";
   exact?: boolean;
@@ -80,7 +82,17 @@ export const adminNavGroups: AdminNavGroup[] = [
         icon: "zips",
         matchers: ["/admin/settings/zips"],
       },
+      {
+        label: "Retail Site Settings",
+        href: "/admin/settings/retail-site",
+        icon: "retailSite",
+        matchers: ["/admin/settings/retail-site"],
+      },
     ],
+  },
+  {
+    label: "Content",
+    items: [{ label: "Content", href: "/admin/cms", icon: "cms", matchers: ["/admin/cms"] }],
   },
   {
     label: "Docs",
