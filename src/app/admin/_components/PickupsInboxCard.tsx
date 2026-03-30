@@ -7,7 +7,7 @@ type PickupItem = {
   customer_city: string | null;
   customer_zip: string | null;
   delivery_date: string;
-  pickup_mode: "request" | "scheduled" | null;
+  pickup_mode: "request" | "schedule" | null;
   pickup_date: string | null;
 };
 
@@ -77,7 +77,7 @@ export function PickupsInboxCard(props: {
                         </span>
                       )}
 
-                      {item.pickup_mode === "scheduled" && item.pickup_date && (
+                      {item.pickup_mode === "schedule" && item.pickup_date && (
                         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
                           {item.pickup_date}
                         </span>

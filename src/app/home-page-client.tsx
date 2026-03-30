@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { LoadingButton } from "@/components/ui/loading-button";
 
 type HomePageClientProps = {
   previewMode?: boolean;
@@ -241,13 +242,15 @@ export default function HomePageClient({
                     className="h-12 flex-1 rounded-2xl border border-transparent bg-gray-50 px-4 text-[#0F172A] shadow-inner outline-none focus:bg-white focus:ring-2 focus:ring-[#F97316]/20"
                   />
 
-                  <button
+                  <LoadingButton
                     type="submit"
-                    disabled={!zipValid || loading}
+                    loading={loading}
+                    loadingLabel="Checking..."
+                    disabled={!zipValid}
                     className="h-12 rounded-2xl bg-[#F97316] px-6 font-semibold text-white shadow-sm transition hover:bg-[#EA580C] disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]"
                   >
-                    {loading ? "Checking..." : "Check Availability"}
-                  </button>
+                    Check Availability
+                  </LoadingButton>
                 </form>
                 {zipUnsupported ? (
                   <div
@@ -455,13 +458,15 @@ export default function HomePageClient({
                   className="h-12 w-full rounded-2xl border border-transparent bg-white px-4 text-[#0F172A] shadow-sm ring-1 ring-slate-200 outline-none transition focus:ring-4 focus:ring-[#F97316]/20 sm:w-56"
                 />
 
-                <button
+                <LoadingButton
                   type="submit"
-                  disabled={!zipValid || loading}
+                  loading={loading}
+                  loadingLabel="Checking..."
+                  disabled={!zipValid}
                   className="h-12 w-full min-w-[200px] rounded-2xl bg-[#F97316] px-7 text-sm font-semibold text-white shadow-sm transition hover:bg-[#EA580C] hover:shadow-md focus:outline-none focus:ring-4 focus:ring-[#F97316]/20 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99] sm:w-auto"
                 >
-                  {loading ? "Checking..." : "Check Availability"}
-                </button>
+                  Check Availability
+                </LoadingButton>
               </form>
             </div>
           </div>

@@ -158,7 +158,6 @@ export default async function AdminCustomersPage({
     <AdminPage>
       <AdminPageHeader
         title="Customers"
-        eyebrow="Customers"
         description="Search customers by current account details and quickly review linked booking history."
         actions={
           <AdminPageHelpLink

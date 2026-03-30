@@ -500,8 +500,7 @@ export default async function ZipHeatMapPage({
     <AdminPage width="wide">
         <section className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
             <AdminPageHeader
-              title="ZIP Analytics"
-              eyebrow="ZIP analytics"
+              title="ZIP Heatmap"
               description="Compare ZIP performance across bookings, revenue, and service coverage."
               className="mb-0"
               actions={

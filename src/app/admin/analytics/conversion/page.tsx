@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
-import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import {
   ArrowTrendingDownIcon,
   ArrowTrendingUpIcon,
@@ -93,23 +93,18 @@ function FilterBar({ filters }: { filters: AnalyticsFilters }) {
   return (
     <div className="space-y-4">
       <section className={sectionCardClasses("px-6 py-6")}>
-        <div className="min-w-0">
-          <div className="inline-flex items-center rounded-full bg-[#F97316]/10 px-3 py-1 text-xs font-semibold text-[#F97316]">
-            Conversion & portal analytics
-          </div>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-            Conversion & Portal Analytics
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            See where bookings stall, how conversion is trending, and whether the customer portal is reducing manual
-            follow-up.
-          </p>
-          {ANALYTICS_DATA_MODE === "demo" ? (
-            <div className="mt-4 inline-flex max-w-full items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
-              {ANALYTICS_DATA_MODE_LABEL}
-            </div>
-          ) : null}
-        </div>
+        <AdminPageHeader
+          title="Lead Funnel"
+          description="See where bookings stall, how conversion is trending, and whether the customer portal is reducing manual follow-up."
+          className="mb-0"
+          actions={
+            ANALYTICS_DATA_MODE === "demo" ? (
+              <div className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
+                {ANALYTICS_DATA_MODE_LABEL}
+              </div>
+            ) : undefined
+          }
+        />
       </section>
 
       <section className={sectionCardClasses("px-6 py-5")}>
@@ -617,7 +612,7 @@ export default async function ConversionAnalyticsPage({
 
       <section className="mt-10 rounded-[36px] border border-slate-200/80 bg-white/80 p-6 shadow-sm lg:p-8">
         <SectionHeading
-          eyebrow="Booking conversion"
+          eyebrow="Lead Funnel"
           title="Where customers are falling out of the booking flow"
           description="This is the clearest view of booking health: how many people start, where they hesitate, and whether pricing or another step deserves attention first."
         />

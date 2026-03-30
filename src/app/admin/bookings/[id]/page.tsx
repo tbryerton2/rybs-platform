@@ -94,7 +94,6 @@ type Booking = {
   service_town: string | null;
   delivered_at: string | null;
   picked_up_at: string | null;
-  job_type: string | null;
   notes: string | null;
   placement_preference: string | null;
   placement_details: string | null;
@@ -221,6 +220,24 @@ function daysOnSiteClasses(days: number | null) {
   if (days >= 7) return "text-rose-600 font-semibold";
   if (days >= 5) return "text-amber-600 font-semibold";
   return "text-slate-900";
+}
+
+function getOperationalTypeLabel(booking: Pick<Booking, "status" | "pickup_mode" | "pickup_date">) {
+  switch (booking.status) {
+    case "confirmed":
+    case "scheduled":
+      return "Delivery";
+    case "delivered":
+      if (booking.pickup_mode === "schedule" && booking.pickup_date) return "Scheduled pickup";
+      if (booking.pickup_mode === "request") return "Pickup requested";
+      return "On-site rental";
+    case "picked_up":
+      return "Completed pickup";
+    case "cancelled":
+      return "Cancelled";
+    default:
+      return "Unknown";
+  }
 }
 
 function statusClasses(status: BookingStatus) {
@@ -389,7 +406,6 @@ export default async function AdminBookingDetailPage({
       service_town,
       delivered_at,
       picked_up_at,
-      job_type,
       notes,
       placement_preference,
       placement_details,
@@ -423,7 +439,6 @@ export default async function AdminBookingDetailPage({
       service_town,
       delivered_at,
       picked_up_at,
-      job_type,
       notes
     `;
 
@@ -455,7 +470,6 @@ export default async function AdminBookingDetailPage({
       service_town,
       delivered_at,
       picked_up_at,
-      job_type,
       notes
     `;
 
@@ -1583,7 +1597,7 @@ export default async function AdminBookingDetailPage({
                 <div className="mt-2 text-sm leading-6 text-slate-600">{nextActionLabel}</div>
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="Job type" value={booking.job_type} />
+                  <Field label="Operational type" value={getOperationalTypeLabel(booking)} />
                   <div>
                     <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
                       Days on site

@@ -36,10 +36,9 @@ type BookingRow = {
   customer_zip: string | null;
   delivery_date: string | null;
   pickup_date: string | null;
-  pickup_mode: "request" | "scheduled" | null;
+  pickup_mode: "request" | "schedule" | null;
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
   created_at: string | null;
-  job_type: "delivery" | "pickup" | "swap" | null;
   placement_preference: string | null;
   placement_details: string | null;
   access_issues: string[] | null;
@@ -737,8 +736,7 @@ export default async function AdminSchedulePage({
   return (
     <AdminPage width="wide" className="max-w-[1500px]">
       <AdminPageHeader
-        eyebrow="Schedule"
-        title="Weekly dispatch board"
+        title="Schedule"
         description={`Fleet planning is projected against ${FLEET_SIZE} dumpster${FLEET_SIZE === 1 ? "" : "s"}.`}
         className="mb-6"
         actions={

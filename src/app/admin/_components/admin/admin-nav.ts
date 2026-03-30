@@ -2,19 +2,20 @@ export type AdminNavItem = {
   label: string;
   href: string;
   icon:
-    | "home"
+    | "dashboard"
     | "bookings"
     | "schedule"
     | "customers"
     | "financials"
-    | "analytics"
     | "portalRequests"
     | "pricing"
-    | "zips"
-    | "retailSite"
-    | "cms"
-    | "docs"
-    | "system";
+    | "serviceArea"
+    | "retailSiteSettings"
+    | "retailSiteContent"
+    | "leadFunnel"
+    | "zipHeatmap"
+    | "guides"
+    | "adminTools";
   exact?: boolean;
   matchers?: string[];
 };
@@ -27,19 +28,19 @@ export type AdminNavGroup = {
 export const adminNavGroups: AdminNavGroup[] = [
   {
     label: "Dashboard",
-    items: [{ label: "Overview", href: "/admin", icon: "home", exact: true, matchers: ["/admin"] }],
+    items: [{ label: "Dashboard", href: "/admin", icon: "dashboard", exact: true, matchers: ["/admin"] }],
   },
   {
     label: "Operations",
     items: [
+      { label: "Schedule", href: "/admin/schedule", icon: "schedule", matchers: ["/admin/schedule"] },
       { label: "Bookings", href: "/admin/bookings", icon: "bookings", matchers: ["/admin/bookings"] },
       {
-        label: "Portal requests",
+        label: "Portal Requests",
         href: "/admin/portal-requests",
         icon: "portalRequests",
         matchers: ["/admin/portal-requests"],
       },
-      { label: "Schedule", href: "/admin/schedule", icon: "schedule", matchers: ["/admin/schedule"] },
     ],
   },
   {
@@ -51,24 +52,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [{ label: "Financials", href: "/admin/financials", icon: "financials", matchers: ["/admin/financials"] }],
   },
   {
-    label: "Analytics",
-    items: [
-      {
-        label: "Conversion",
-        href: "/admin/analytics/conversion",
-        icon: "analytics",
-        matchers: ["/admin/analytics/conversion"],
-      },
-      {
-        label: "ZIP Heatmap",
-        href: "/admin/analytics/zip-heatmap",
-        icon: "analytics",
-        matchers: ["/admin/analytics/zip-heatmap", "/admin/analytics/zip-map"],
-      },
-    ],
-  },
-  {
-    label: "Settings",
+    label: "Website",
     items: [
       {
         label: "Pricing",
@@ -77,30 +61,49 @@ export const adminNavGroups: AdminNavGroup[] = [
         matchers: ["/admin/settings/pricing"],
       },
       {
-        label: "Service ZIPs",
+        label: "Service Area",
         href: "/admin/settings/zips",
-        icon: "zips",
+        icon: "serviceArea",
         matchers: ["/admin/settings/zips"],
       },
       {
         label: "Retail Site Settings",
         href: "/admin/settings/retail-site",
-        icon: "retailSite",
+        icon: "retailSiteSettings",
         matchers: ["/admin/settings/retail-site"],
+      },
+      {
+        label: "Retail Site Content",
+        href: "/admin/cms",
+        icon: "retailSiteContent",
+        matchers: ["/admin/cms"],
       },
     ],
   },
   {
-    label: "Content",
-    items: [{ label: "Content", href: "/admin/cms", icon: "cms", matchers: ["/admin/cms"] }],
+    label: "Analytics",
+    items: [
+      {
+        label: "Lead Funnel",
+        href: "/admin/analytics/conversion",
+        icon: "leadFunnel",
+        matchers: ["/admin/analytics/conversion"],
+      },
+      {
+        label: "ZIP Heatmap",
+        href: "/admin/analytics/zip-heatmap",
+        icon: "zipHeatmap",
+        matchers: ["/admin/analytics/zip-heatmap", "/admin/analytics/zip-map"],
+      },
+    ],
   },
   {
-    label: "Docs",
-    items: [{ label: "Docs", href: "/admin/docs", icon: "docs", matchers: ["/admin/docs"] }],
+    label: "Guides",
+    items: [{ label: "Guides", href: "/admin/docs", icon: "guides", matchers: ["/admin/docs"] }],
   },
   {
-    label: "System",
-    items: [{ label: "System", href: "/admin/system", icon: "system", matchers: ["/admin/system"] }],
+    label: "Admin Tools",
+    items: [{ label: "Admin Tools", href: "/admin/system", icon: "adminTools", matchers: ["/admin/system"] }],
   },
 ];
 

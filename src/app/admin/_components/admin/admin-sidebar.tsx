@@ -44,19 +44,19 @@ export function AdminSidebar({
   return (
     <aside
       className={[
-        "fixed left-6 top-24 hidden h-[calc(100vh-8rem)] rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.06)] transition-[width] duration-300 lg:flex lg:flex-col",
+        "fixed left-6 top-24 hidden h-[calc(100vh-8rem)] rounded-[30px] border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/70 shadow-[0_16px_34px_rgba(15,23,42,0.065)] transition-[width] duration-300 lg:flex lg:flex-col",
         collapsed ? "w-20" : "w-72",
       ].join(" ")}
     >
-      <div className={["border-b border-slate-200", collapsed ? "px-3 pb-4 pt-5" : "px-5 pb-5 pt-6"].join(" ")}>
+      <div className={["border-b border-slate-200/80", collapsed ? "px-3 pb-3 pt-4" : "px-5 pb-[14px] pt-[18px]"].join(" ")}>
         <div className={["flex items-start", collapsed ? "justify-center" : "justify-between gap-3"].join(" ")}>
-          <div className={collapsed ? "hidden" : "min-w-0"}>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+          <div className={collapsed ? "hidden" : "min-w-0 max-w-[12.5rem]"}>
+            <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
               Tan Can Man
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-900">Admin</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Dispatch, bookings, customers, and system controls.
+            </div>
+            <h1 className="mt-2.5 text-[1.6rem] font-semibold tracking-tight text-slate-900">Admin</h1>
+            <p className="mt-1 text-sm leading-5 text-slate-500">
+              Dispatch, customers, website settings, and admin tools.
             </p>
           </div>
 
@@ -65,7 +65,7 @@ export function AdminSidebar({
             onClick={onToggle}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={[
-              "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900",
+              "inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50 focus-visible:ring-offset-2",
               collapsed ? "mx-auto" : "",
             ].join(" ")}
           >
@@ -76,20 +76,20 @@ export function AdminSidebar({
 
       <nav
         aria-label="Admin sidebar"
-        className={["flex-1 overflow-y-auto", collapsed ? "space-y-4 px-3 py-5" : "space-y-6 px-4 py-6"].join(" ")}
+        className={["flex-1 overflow-y-auto", collapsed ? "space-y-2.5 px-3 py-3.5" : "space-y-3.5 px-4 py-4"].join(" ")}
       >
         {adminNavGroups.map((group) => (
-          <div key={group.label}>
+          <div key={group.label} className="rounded-[22px]">
             <p
               className={[
-                "font-semibold uppercase tracking-[0.18em] text-slate-400 transition-opacity duration-200",
-                collapsed ? "px-0 text-center text-[10px] opacity-0" : "px-3 text-[11px] opacity-100",
+                "font-semibold uppercase tracking-[0.16em] text-slate-400 transition-opacity duration-200",
+                collapsed ? "px-0 text-center text-[10px] opacity-0" : "px-3 pb-0.5 text-[10px] opacity-100",
               ].join(" ")}
               aria-hidden={collapsed}
             >
               {group.label}
             </p>
-            <div className={collapsed ? "mt-0 space-y-2" : "mt-2 space-y-1"}>
+            <div className={collapsed ? "mt-0 space-y-1" : "mt-0.5 space-y-0.5"}>
               {group.items.map((item) => (
                 <AdminNavItem
                   key={item.href}

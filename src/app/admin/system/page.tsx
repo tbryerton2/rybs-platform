@@ -433,7 +433,7 @@ export default async function AdminSystemPage() {
   return (
     <AdminPage>
       <AdminPageHeader
-        title="System"
+        title="Admin Tools"
         description="Monitor system activity and operational health."
       />
 

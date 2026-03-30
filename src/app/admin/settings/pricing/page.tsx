@@ -180,7 +180,7 @@ export default async function AdminPricingSettingsPage({
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Pricing Settings"
+        title="Pricing"
         description="Control the default pricing rules for dumpster rentals."
       />
 

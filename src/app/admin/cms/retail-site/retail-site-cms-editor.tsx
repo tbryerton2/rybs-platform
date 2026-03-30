@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CmsEntryStatus,
   HomeFlexibleSection,
@@ -10,6 +10,7 @@ import type {
   PricingProductContentValue,
   RetailSiteCmsState,
 } from "@/lib/admin/cms";
+import { LoadingButton } from "@/components/ui/loading-button";
 
 const HOME_HERO_KEY = "content.home.hero";
 const HOME_SECTIONS_KEY = "content.home.sections";
@@ -52,6 +53,23 @@ function latestTimestamp(values: Array<string | null | undefined>) {
   return timestamps.reduce((latest, current) =>
     new Date(current).getTime() > new Date(latest).getTime() ? current : latest,
   );
+}
+
+function scrollElementIntoComfortableView(element: HTMLElement) {
+  const top = window.scrollY + element.getBoundingClientRect().top - 120;
+  window.scrollTo({
+    top: Math.max(top, 0),
+    behavior: "smooth",
+  });
+}
+
+function focusFirstEditableField(container: HTMLElement | null) {
+  if (!container) return;
+
+  const target = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+    "input:not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])",
+  );
+  target?.focus({ preventScroll: true });
 }
 
 function inputClass() {
@@ -128,11 +146,15 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const [expandedMarketingSections, setExpandedMarketingSections] = useState<Record<string, boolean>>(
     () => Object.fromEntries(cms.home.sections.value.map((section) => [section.id, true])),
   );
+  const [addingMarketingSection, setAddingMarketingSection] = useState(false);
+  const [pendingNewSectionId, setPendingNewSectionId] = useState<string | null>(null);
+  const [highlightedSectionId, setHighlightedSectionId] = useState<string | null>(null);
   const [valuesByKey, setValuesByKey] = useState<Record<string, unknown>>(initialValuesByKey);
   const [savedByKey, setSavedByKey] = useState<Record<string, unknown>>(initialValuesByKey);
   const [statusByKey, setStatusByKey] = useState<Record<string, CmsEntryStatus>>(initialStatusByKey);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "publishing">("idle");
   const [error, setError] = useState<string | null>(null);
+  const marketingSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const homeHeroValue = (valuesByKey[HOME_HERO_KEY] as HomeHeroValue | undefined) ?? cms.home.hero.value;
   const homeSectionsValue =
@@ -182,6 +204,33 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [anyDirty]);
 
+  useEffect(() => {
+    if (!pendingNewSectionId || resolvedHomeSectionId !== "marketing") return;
+
+    const sectionElement = marketingSectionRefs.current[pendingNewSectionId];
+    if (!sectionElement) return;
+
+    const frame = requestAnimationFrame(() => {
+      scrollElementIntoComfortableView(sectionElement);
+      focusFirstEditableField(sectionElement);
+      setHighlightedSectionId(pendingNewSectionId);
+      setPendingNewSectionId(null);
+      setAddingMarketingSection(false);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [pendingNewSectionId, resolvedHomeSectionId, homeSectionsValue]);
+
+  useEffect(() => {
+    if (!highlightedSectionId) return;
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedSectionId(null);
+    }, 1600);
+
+    return () => window.clearTimeout(timeout);
+  }, [highlightedSectionId]);
+
   function updateValue(key: string, value: unknown) {
     setValuesByKey((current) => ({
       ...current,
@@ -225,6 +274,8 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   }
 
   function addHomeSection(type: HomeFlexibleSection["type"]) {
+    if (addingMarketingSection) return;
+
     const nextSection: HomeFlexibleSection =
       type === "card_grid"
         ? {
@@ -243,12 +294,14 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             footnote: "",
           };
 
+    setAddingMarketingSection(true);
     updateHomeSections([...homeSectionsValue, nextSection]);
     setActiveHomeSectionId("marketing");
     setExpandedMarketingSections((current) => ({
       ...current,
       [nextSection.id]: true,
     }));
+    setPendingNewSectionId(nextSection.id);
   }
 
   function removeHomeSection(sectionId: string) {
@@ -419,13 +472,16 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 Add, remove, and edit the marketing sections shown on the Home page.
               </div>
             </div>
-            <button
+            <LoadingButton
               type="button"
               onClick={() => addHomeSection("card_grid")}
+              loading={addingMarketingSection}
+              loadingLabel="Adding..."
+              spinner={false}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Add Marketing Section
-            </button>
+            </LoadingButton>
           </div>
 
           <div className="space-y-8">
@@ -436,7 +492,15 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
               return (
                 <div
                   key={section.id}
-                  className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]"
+                  ref={(node) => {
+                    marketingSectionRefs.current[section.id] = node;
+                  }}
+                  className={[
+                    "overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition",
+                    highlightedSectionId === section.id
+                      ? "ring-2 ring-amber-200 ring-offset-2 ring-offset-white"
+                      : "",
+                  ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-3 border-b border-slate-300/70 bg-slate-100 px-5 py-4">
                     <button
@@ -465,6 +529,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                           label="Heading"
                           value={section.sectionTitle}
                           onChange={(value) => updateActiveHomeSection({ ...section, sectionTitle: value })}
+                          highlight={highlightedSectionId === section.id}
                         />
                         <TextAreaField
                           label="Section intro"
@@ -665,33 +730,39 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <LoadingButton
                   type="button"
                   onClick={() => void persistPage("save_draft")}
-                  disabled={saveState === "saving" || saveState === "publishing"}
+                  loading={saveState === "saving"}
+                  loadingLabel="Saving..."
+                  disabled={saveState === "publishing"}
                   className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   Save Draft
-                </button>
-                <button
+                </LoadingButton>
+                <LoadingButton
                   type="button"
                   onClick={() => void handlePreview()}
-                  disabled={saveState === "saving" || saveState === "publishing"}
+                  loading={saveState === "saving"}
+                  loadingLabel="Preparing..."
+                  disabled={saveState === "publishing"}
                   className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   Preview
-                </button>
-                <button
+                </LoadingButton>
+                <LoadingButton
                   type="button"
                   onClick={() => {
                     if (!window.confirm("Publish the current page to the live retail site?")) return;
                     void persistPage("publish");
                   }}
-                  disabled={saveState === "saving" || saveState === "publishing"}
+                  loading={saveState === "publishing"}
+                  loadingLabel="Publishing..."
+                  disabled={saveState === "saving"}
                   className="inline-flex h-10 items-center justify-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:bg-[#EA580C] disabled:opacity-60"
                 >
                   Publish Page
-                </button>
+                </LoadingButton>
               </div>
             </div>
 
@@ -719,33 +790,39 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
+              <LoadingButton
                 type="button"
                 onClick={() => void persistPage("save_draft")}
-                disabled={saveState === "saving" || saveState === "publishing"}
+                loading={saveState === "saving"}
+                loadingLabel="Saving..."
+                disabled={saveState === "publishing"}
                 className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
                 Save Draft
-              </button>
-              <button
+              </LoadingButton>
+              <LoadingButton
                 type="button"
                 onClick={() => void handlePreview()}
-                disabled={saveState === "saving" || saveState === "publishing"}
+                loading={saveState === "saving"}
+                loadingLabel="Preparing..."
+                disabled={saveState === "publishing"}
                 className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
                 Preview
-              </button>
-              <button
+              </LoadingButton>
+              <LoadingButton
                 type="button"
                 onClick={() => {
                   if (!window.confirm("Publish the current page to the live retail site?")) return;
                   void persistPage("publish");
                 }}
-                disabled={saveState === "saving" || saveState === "publishing"}
+                loading={saveState === "publishing"}
+                loadingLabel="Publishing..."
+                disabled={saveState === "saving"}
                 className="inline-flex h-10 items-center justify-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:bg-[#EA580C] disabled:opacity-60"
               >
                 Publish Page
-              </button>
+              </LoadingButton>
             </div>
           </div>
 
@@ -761,17 +838,24 @@ function Field({
   value,
   onChange,
   readOnly = false,
+  inputRef,
+  highlight = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   readOnly?: boolean;
+  inputRef?: React.Ref<HTMLInputElement>;
+  highlight?: boolean;
 }) {
   return (
     <label className="block space-y-2">
       <div className="text-sm font-medium text-slate-700">{label}</div>
       <input
-        className={inputClass()}
+        ref={inputRef}
+        className={[inputClass(), highlight ? "border-amber-300 bg-amber-50/40 ring-4 ring-amber-100" : ""].join(
+          " ",
+        )}
         value={value}
         readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
@@ -806,21 +890,64 @@ function ArrayField({
   items: string[];
   onChange: (items: string[]) => void;
 }) {
+  const [pendingIndex, setPendingIndex] = useState<number | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const itemRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (pendingIndex === null) return;
+
+    const itemElement = itemRefs.current[pendingIndex];
+    if (!itemElement) return;
+
+    const frame = requestAnimationFrame(() => {
+      scrollElementIntoComfortableView(itemElement);
+      focusFirstEditableField(itemElement);
+      setHighlightedIndex(pendingIndex);
+      setPendingIndex(null);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [items, pendingIndex]);
+
+  useEffect(() => {
+    if (highlightedIndex === null) return;
+
+    const timeout = window.setTimeout(() => setHighlightedIndex(null), 1600);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedIndex]);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium text-slate-700">{label}</div>
-        <button
+        <LoadingButton
           type="button"
-          onClick={() => onChange([...items, ""])}
+          onClick={() => {
+            if (pendingIndex !== null) return;
+            setPendingIndex(items.length);
+            onChange([...items, ""]);
+          }}
+          loading={pendingIndex !== null}
+          loadingLabel="Adding..."
+          spinner={false}
           className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
         >
           Add item
-        </button>
+        </LoadingButton>
       </div>
 
       {items.map((item, index) => (
-        <div key={`${label}-${index}`} className="flex items-center gap-3">
+        <div
+          key={`${label}-${index}`}
+          ref={(node) => {
+            itemRefs.current[index] = node;
+          }}
+          className={[
+            "flex items-center gap-3 rounded-2xl transition",
+            highlightedIndex === index ? "bg-amber-50/60 ring-2 ring-amber-200 ring-offset-2 ring-offset-white" : "",
+          ].join(" ")}
+        >
           <input
             className={inputClass()}
             value={item}
@@ -865,22 +992,65 @@ function RepeatableItems({
     onItemChange: (nextItem: Record<string, unknown>) => void,
   ) => React.ReactNode;
 }) {
+  const [pendingIndex, setPendingIndex] = useState<number | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const itemRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (pendingIndex === null) return;
+
+    const itemElement = itemRefs.current[pendingIndex];
+    if (!itemElement) return;
+
+    const frame = requestAnimationFrame(() => {
+      scrollElementIntoComfortableView(itemElement);
+      focusFirstEditableField(itemElement);
+      setHighlightedIndex(pendingIndex);
+      setPendingIndex(null);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [items, pendingIndex]);
+
+  useEffect(() => {
+    if (highlightedIndex === null) return;
+
+    const timeout = window.setTimeout(() => setHighlightedIndex(null), 1600);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedIndex]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium text-slate-700">{label}</div>
-        <button
+        <LoadingButton
           type="button"
-          onClick={() => onChange([...items, createItem()])}
+          onClick={() => {
+            if (pendingIndex !== null) return;
+            setPendingIndex(items.length);
+            onChange([...items, createItem()]);
+          }}
+          loading={pendingIndex !== null}
+          loadingLabel="Adding..."
+          spinner={false}
           className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
         >
           Add item
-        </button>
+        </LoadingButton>
       </div>
 
       <div className={itemsClassName}>
         {items.map((item, index) => (
-          <div key={index} className={itemClassName}>
+          <div
+            key={index}
+            ref={(node) => {
+              itemRefs.current[index] = node;
+            }}
+            className={[
+              itemClassName,
+              highlightedIndex === index ? "ring-2 ring-amber-200 ring-offset-2 ring-offset-slate-50" : "",
+            ].join(" ")}
+          >
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold text-slate-900">Item {index + 1}</div>
               {items.length > 1 ? (

@@ -19,10 +19,9 @@ type BookingRow = {
   customer_zip: string | null;
   delivery_date: string | null;
   pickup_date: string | null;
-  pickup_mode: "request" | "scheduled" | null;
+  pickup_mode: "request" | "schedule" | null;
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
   created_at: string | null;
-  job_type: "delivery" | "pickup" | "swap" | null;
   placement_preference: string | null;
   placement_details: string | null;
   access_issues: string[] | null;

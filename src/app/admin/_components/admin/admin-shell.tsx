@@ -96,7 +96,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div
           className={[
             "min-w-0 transition-[padding-left] duration-300",
-            sidebarCollapsed ? "lg:pl-[110px]" : "lg:pl-[318px]",
+            sidebarCollapsed ? "lg:pl-[112px]" : "lg:pl-[320px]",
           ].join(" ")}
         >
           <div className="min-w-0 px-4 sm:px-6 lg:px-8">

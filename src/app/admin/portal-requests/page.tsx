@@ -68,7 +68,7 @@ export default async function AdminPortalRequestsPage({
   return (
     <AdminPage className="pt-6">
       <AdminPageHeader
-        title="Portal requests"
+        title="Portal Requests"
         description="Review self-service rental requests submitted from the customer portal."
         actions={
           <>

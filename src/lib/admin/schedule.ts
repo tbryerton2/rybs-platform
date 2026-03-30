@@ -16,7 +16,6 @@ const SCHEDULE_JOB_SELECT = `
         delivery_date,
         pickup_date,
         pickup_mode,
-        job_type,
         status,
         created_at,
         ${SCHEDULE_PLACEMENT_SELECT}
@@ -32,7 +31,6 @@ const BASE_SCHEDULE_JOB_SELECT = `
         delivery_date,
         pickup_date,
         pickup_mode,
-        job_type,
         status,
         created_at
         `;
