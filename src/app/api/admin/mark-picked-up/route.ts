@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   if (id) {
     const { error } = await supabaseAdmin
       .from("bookings")
-      .update({ status: "picked_up", picked_up_at: new Date().toISOString() })
+      .update({ status: "picked_up" })
       .eq("id", id);
 
     if (error) console.error("API MARK PICKED UP ERROR:", error);

@@ -1,14 +1,20 @@
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 import {
+  ArrowPathIcon,
   CalendarDaysIcon,
   ChevronRightIcon,
   ClockIcon,
   ExclamationTriangleIcon,
+  LifebuoyIcon,
   InformationCircleIcon,
   MapPinIcon,
+  ShieldCheckIcon,
   QueueListIcon,
   TruckIcon,
+  UserPlusIcon,
+  UsersIcon,
+  WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "./_components/admin/admin-page";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -264,10 +270,10 @@ function SectionCard({
         {actionHref ? (
           <Link
             href={actionHref}
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-[#F97316] transition hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
           >
             {actionLabel ?? "View"}
-            <ChevronRightIcon className="h-3.5 w-3.5" />
+            <ChevronRightIcon className="h-4 w-4" />
           </Link>
         ) : null}
       </div>
@@ -439,14 +445,39 @@ function MiniRevenueChart({
   values: Array<{ label: string; value: number }>;
 }) {
   const maxValue = Math.max(...values.map((entry) => entry.value), 1);
+  const hasChartData = values.some((entry) => entry.value > 0);
+  const meaningfulPoints = values.filter((entry) => entry.value > 0).length;
+
+  if (!hasChartData || meaningfulPoints < 2) {
+    return (
+      <div className="rounded-[22px] bg-slate-50/60 px-4 py-6 text-center">
+        <div className="text-sm font-semibold text-slate-900">Not enough recent revenue to chart yet</div>
+        <div className="mt-1 text-xs leading-5 text-slate-500">
+          This view will show a trend once multiple recent periods have booked revenue.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-      <div className="flex h-32 items-end gap-3">
+    <div className="rounded-[22px] bg-slate-50/60 px-4 py-4">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Last 30 Days</div>
+        <div className="text-xs font-medium text-slate-500">Booked revenue by period</div>
+      </div>
+      <div className="flex h-36 items-end gap-3">
         {values.map((entry) => (
           <div key={entry.label} className="flex min-w-0 flex-1 flex-col items-center gap-3">
-            <div className="w-full rounded-t-2xl bg-gradient-to-t from-slate-900 via-slate-800 to-slate-700" style={{ height: `${Math.max((entry.value / maxValue) * 100, entry.value > 0 ? 14 : 4)}%` }} />
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{entry.label}</div>
+            <div className="text-[11px] font-semibold text-slate-500">
+              {formatUsd(entry.value, { maximumFractionDigits: 0 })}
+            </div>
+            <div
+              className="w-full rounded-t-2xl bg-gradient-to-t from-[#F97316] via-orange-500 to-orange-300 shadow-[0_8px_18px_rgba(249,115,22,0.18)]"
+              style={{ height: `${Math.max((entry.value / maxValue) * 100, 14)}%` }}
+            />
+            <div className="text-center">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{entry.label}</div>
+            </div>
           </div>
         ))}
       </div>
@@ -454,49 +485,109 @@ function MiniRevenueChart({
   );
 }
 
-function FunnelStepCard({
+function FunnelBarRow({
   label,
   value,
-  helper,
+  displayValue,
+  barWidth,
+  tone,
 }: {
   label: string;
   value: string | number;
-  helper: string;
+  displayValue?: string;
+  barWidth: number;
+  tone: "strong" | "medium" | "soft" | "light";
 }) {
+  const toneClasses =
+    tone === "strong"
+      ? {
+          fill: "bg-amber-300",
+          track: "bg-slate-100/65",
+          text: "text-slate-900",
+        }
+      : tone === "medium"
+        ? {
+            fill: "bg-orange-300",
+            track: "bg-slate-100/65",
+            text: "text-slate-900",
+          }
+        : tone === "soft"
+          ? {
+              fill: "bg-rose-300",
+              track: "bg-slate-100/65",
+              text: "text-slate-900",
+            }
+          : {
+              fill: "bg-violet-200",
+              track: "bg-slate-100/65",
+              text: "text-slate-900",
+            };
+
   return (
-    <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{value}</div>
-      <div className="mt-2 text-xs leading-5 text-slate-500">{helper}</div>
+    <div className="py-[5px] first:pt-0 last:pb-0">
+      <div className={joinClasses("rounded-2xl p-px", toneClasses.track)}>
+        <div
+          className={joinClasses(
+            "flex min-h-9 items-center justify-between rounded-[15px] px-4 py-2 shadow-[inset_0_-1px_0_rgba(15,23,42,0.06),0_1px_1px_rgba(15,23,42,0.04)]",
+            toneClasses.fill,
+            toneClasses.text,
+            tone === "strong" && "font-semibold shadow-[inset_0_-1px_0_rgba(15,23,42,0.08),0_1px_1px_rgba(15,23,42,0.05)]",
+          )}
+          style={{ width: `${Math.max(barWidth, 8)}%`, minWidth: "11rem", maxWidth: "100%" }}
+        >
+          <div className={joinClasses("truncate text-sm", tone === "strong" ? "font-semibold" : "font-medium")}>{label}</div>
+          <div className={joinClasses("ml-3 shrink-0 text-sm", tone === "strong" ? "font-semibold" : "font-medium")}>{displayValue ?? value}</div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function HealthRow({
+function DashboardListRow({
   label,
   value,
-  detail,
+  icon: Icon,
   tone = "neutral",
 }: {
   label: string;
   value: string;
-  detail: string;
-  tone?: "neutral" | "good" | "warning";
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  tone?: "neutral" | "good" | "warning" | "danger" | "info";
 }) {
+  const iconTone =
+    tone === "good"
+      ? "bg-emerald-50 text-emerald-800"
+      : tone === "warning"
+        ? "bg-amber-50 text-amber-800"
+        : tone === "danger"
+          ? "bg-rose-50 text-rose-800"
+          : tone === "info"
+            ? "bg-sky-50 text-sky-800"
+            : "bg-slate-100 text-slate-700";
+
+  const valueTone =
+    tone === "good"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : tone === "warning"
+        ? "bg-amber-50 text-amber-700 ring-amber-200"
+        : tone === "danger"
+          ? "bg-rose-50 text-rose-700 ring-rose-200"
+          : tone === "info"
+            ? "bg-sky-50 text-sky-700 ring-sky-200"
+            : "bg-slate-100 text-slate-700 ring-slate-200";
+
   return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-3">
-      <div className="min-w-0">
-        <div className="text-sm font-semibold text-slate-900">{label}</div>
-        <div className="mt-1 text-xs leading-5 text-slate-500">{detail}</div>
+    <div className="flex min-h-14 items-center justify-between gap-4 rounded-2xl px-2 py-3 first:pt-0 last:pb-0 transition-colors duration-150 hover:bg-slate-50/60">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className={joinClasses("flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl", iconTone)}>
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="text-sm font-medium text-slate-700">{label}</div>
       </div>
       <span
         className={joinClasses(
-          "inline-flex shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-          tone === "good"
-            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-            : tone === "warning"
-              ? "bg-amber-50 text-amber-700 ring-amber-200"
-              : "bg-slate-100 text-slate-700 ring-slate-200",
+          "inline-flex shrink-0 items-center justify-center rounded-full px-2.5 py-0.5 text-sm font-semibold ring-1 ring-inset",
+          valueTone,
         )}
       >
         {value}
@@ -711,6 +802,7 @@ export default async function AdminDashboardPage() {
     }))
     .sort((left, right) => right.bookings - left.bookings || right.revenue - left.revenue)
     .slice(0, 5);
+  const topAreaMaxShare = Math.max(...topAreas.map((area) => area.share), 0);
 
   const bookingCountsByCustomer = new Map<string, number>();
   for (const row of bookingCustomerIds) {
@@ -730,7 +822,6 @@ export default async function AdminDashboardPage() {
   const repeatRate = recentCustomerIds.size > 0 ? (returningCustomers / recentCustomerIds.size) * 100 : 0;
 
   const activeServiceZips = serviceAreaRows.filter((row) => row.active).length;
-  const customZipPricing = serviceAreaRows.filter((row) => row.active && row.price_14_yard_override != null).length;
 
   const snapshotCards = [
     {
@@ -866,64 +957,33 @@ export default async function AdminDashboardPage() {
           actionHref="/admin/schedule"
           actionLabel="Open Schedule"
         >
-          <div className="overflow-hidden rounded-[24px] border border-slate-200/80">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 text-left">Day</th>
-                  <th className="px-4 py-3 text-right">Deliveries</th>
-                  <th className="px-4 py-3 text-right">Pickups</th>
-                  <th className="px-4 py-3 text-right">Active</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {scheduleRows.map((row) => (
-                  <tr
-                    key={row.dayIso}
-                    className={joinClasses(
-                      "transition-colors duration-150 hover:bg-orange-50/55 focus-within:bg-orange-50/55",
-                      row.dayIso === todayStr && "bg-orange-50/40",
-                    )}
-                  >
-                    <td className="p-0">
-                      <Link
-                        href={row.href}
-                        className="block px-4 py-3 font-semibold text-slate-900 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-inset"
-                      >
-                        {row.label}
-                      </Link>
-                    </td>
-                    <td className="p-0 text-right">
-                      <Link
-                        href={row.href}
-                        tabIndex={-1}
-                        className="block px-4 py-2.5 font-semibold text-slate-900 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-inset"
-                      >
-                        {number(row.deliveries)}
-                      </Link>
-                    </td>
-                    <td className="p-0 text-right">
-                      <Link
-                        href={row.href}
-                        tabIndex={-1}
-                        className="block px-4 py-2.5 font-semibold text-slate-900 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-inset"
-                      >
-                        {number(row.pickups)}
-                      </Link>
-                    </td>
-                    <td className="p-0 text-right">
-                      <Link
-                        href={row.href}
-                        tabIndex={-1}
-                        className="block px-4 py-2.5 font-semibold text-slate-900 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-inset"
-                      >
-                        {number(row.active)}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="overflow-hidden">
+            <div className="grid grid-cols-[minmax(0,1.2fr)_88px_88px_72px] gap-3 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              <div>Day</div>
+              <div className="text-right">Deliveries</div>
+              <div className="text-right">Pickups</div>
+              <div className="text-right">Active</div>
+            </div>
+
+            <div className="divide-y divide-slate-200/80">
+              {scheduleRows.map((row) => (
+                <Link
+                  key={row.dayIso}
+                  href={row.href}
+                  className={joinClasses(
+                    "grid grid-cols-[minmax(0,1.2fr)_88px_88px_72px] items-center gap-3 px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2",
+                    row.dayIso === todayStr && "bg-orange-50/35",
+                  )}
+                >
+                  <div className={joinClasses("text-sm font-semibold", row.dayIso === todayStr ? "text-slate-950" : "text-slate-900")}>
+                    {row.label}
+                  </div>
+                  <div className="text-right text-sm font-semibold text-sky-700">{number(row.deliveries)}</div>
+                  <div className="text-right text-sm font-semibold text-amber-700">{number(row.pickups)}</div>
+                  <div className="text-right text-sm font-semibold text-indigo-700">{number(row.active)}</div>
+                </Link>
+              ))}
+            </div>
           </div>
         </SectionCard>
       </section>
@@ -931,43 +991,50 @@ export default async function AdminDashboardPage() {
       <section className="grid gap-6 xl:grid-cols-2">
         <SectionCard
           title="Recent Bookings"
-          subtitle="The latest booking activity so the office can feel the pulse of incoming business without leaving the dashboard."
+          tooltip="Recent Bookings shows the latest booking activity so the office can quickly scan new work without opening the full bookings page."
           actionHref="/admin/bookings"
           actionLabel="View All Bookings"
         >
-          <div className="space-y-3">
+          <div className="divide-y divide-slate-200/80">
             {recentBookings.length === 0 ? (
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
                 No bookings have been created yet.
               </div>
             ) : (
-              recentBookings.map((booking) => (
+              recentBookings.slice(0, 5).map((booking) => (
                 <Link
                   key={booking.id}
                   href={`/admin/bookings/${booking.id}`}
-                  className="flex items-start justify-between gap-4 rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4 transition hover:border-slate-300 hover:bg-white"
+                  className="flex items-start justify-between gap-4 px-2 py-2.5 transition-colors duration-150 first:pt-0 last:pb-0 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900">
-                        {booking.booking_ref ?? `Booking ${booking.id.slice(0, 8)}`}
-                      </span>
-                      <span className={joinClasses("rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset", statusTone(booking.status))}>
-                        {statusLabel(booking.status)}
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-6">
+                      <div className="min-w-0 flex-1">
+                        <div className="min-w-0 text-base font-semibold tracking-tight text-slate-900">
+                          {booking.customer_name ?? "Unnamed customer"}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
+                          <span
+                            className={joinClasses(
+                              "rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                              statusTone(booking.status),
+                            )}
+                          >
+                            {statusLabel(booking.status)}
+                          </span>
+                          {booking.delivery_date ? `Delivery ${formatDateLabel(booking.delivery_date)}` : "Delivery date not set"}
+                        </div>
+                        <div className="mt-1.5 truncate text-xs text-slate-500">
+                          {booking.booking_ref ?? `Booking ${booking.id.slice(0, 8)}`}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-lg font-semibold tracking-tight text-slate-900">
+                          {formatUsdFromCents(booking.total_price_cents, { maximumFractionDigits: 0 })}
+                        </div>
+                        <div className="mt-1.5 text-xs text-slate-500">{formatRelativeTime(booking.created_at)}</div>
+                      </div>
                     </div>
-                    <div className="mt-2 text-sm text-slate-700">{booking.customer_name ?? "Unnamed customer"}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {booking.delivery_date ? `Delivery ${formatDateLabel(booking.delivery_date)}` : "Delivery date not set"}
-                      {booking.customer_zip ? ` • ZIP ${booking.customer_zip}` : ""}
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 text-right">
-                    <div className="text-sm font-semibold text-slate-900">
-                      {formatUsdFromCents(booking.total_price_cents, { maximumFractionDigits: 0 })}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">{formatRelativeTime(booking.created_at)}</div>
                   </div>
                 </Link>
               ))
@@ -977,94 +1044,180 @@ export default async function AdminDashboardPage() {
 
         <SectionCard
           title="Revenue Snapshot"
-          subtitle="Business-health readout kept intentionally simple so operations still stays in front."
+          tooltip="Revenue Snapshot gives a quick read on recent booked value, collected revenue, outstanding work, and average booking size."
           actionHref="/admin/financials"
           actionLabel="Open Financials"
         >
           <MiniRevenueChart values={revenueTrend} />
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="mt-6 grid gap-x-8 gap-y-6 sm:grid-cols-2">
             {[
               {
                 label: "Booked Revenue",
                 value: formatUsd(bookedRevenue30Dollars, { maximumFractionDigits: 0 }),
-                helper: "Bookings created in the last 30 days",
+                helper: "Booked in last 30 days",
+                tones: "border-sky-200/70 bg-sky-50/55",
               },
               {
                 label: "Collected",
                 value: formatUsd(collectedRevenue30Dollars, { maximumFractionDigits: 0 }),
-                helper: "Delivered or picked up in the last 30 days",
+                helper: "Collected in last 30 days",
+                tones: "border-emerald-200/70 bg-emerald-50/55",
               },
               {
                 label: "Outstanding",
                 value: formatUsd(outstandingRevenueDollars, { maximumFractionDigits: 0 }),
-                helper: "Revenue still tied to open jobs",
+                helper: "Still tied to open jobs",
+                tones: "border-amber-300/70 bg-amber-50/70",
               },
               {
                 label: "Avg Booking",
                 value: formatUsd(avgBookingDollars, { maximumFractionDigits: 0 }),
-                helper: "Average value across recent bookings",
+                helper: "Average recent booking",
+                tones: "border-indigo-200/70 bg-indigo-50/45",
               },
             ].map((metric) => (
-              <div key={metric.label} className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
+              <div
+                key={metric.label}
+                className={joinClasses(
+                  "flex min-h-[132px] flex-col rounded-[22px] border px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+                  metric.tones,
+                )}
+              >
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{metric.label}</div>
-                <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{metric.value}</div>
-                <div className="mt-2 text-xs leading-5 text-slate-500">{metric.helper}</div>
+                <div className="mt-2 text-[1.5rem] font-semibold tracking-tight text-slate-900">{metric.value}</div>
+                <div className="mt-auto pt-3 text-xs leading-5 text-slate-500">{metric.helper}</div>
               </div>
             ))}
           </div>
         </SectionCard>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <section className="grid gap-6 xl:grid-cols-2">
         <SectionCard
           title="Booking Funnel"
-          subtitle="A simplified top-line funnel so the dashboard stays operational, not analytical."
+          tooltip="Booking Funnel shows the top-line path from booking started, to review reached, to completed, plus the overall conversion rate from started to completed."
           actionHref="/admin/analytics/conversion"
           actionLabel="View Full Analytics"
         >
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <FunnelStepCard label="Booking Started" value={number(funnelStarted)} helper="Entered the booking flow" />
-            <FunnelStepCard label="Reached Review" value={number(funnelReview)} helper="Made it to the final step" />
-            <FunnelStepCard label="Completed" value={number(funnelCompleted)} helper="Finished a booking" />
-            <FunnelStepCard label="Conversion" value={`${funnelConversion.toFixed(1)}%`} helper="Completed vs started" />
+          <div className="divide-y divide-slate-200/80">
+            <FunnelBarRow
+              label="Booking Started"
+              value={number(funnelStarted)}
+              barWidth={funnelStarted > 0 ? 100 : 8}
+              tone="strong"
+            />
+            <FunnelBarRow
+              label="Reached Review"
+              value={number(funnelReview)}
+              barWidth={funnelStarted > 0 ? (funnelReview / funnelStarted) * 100 : 8}
+              tone="medium"
+            />
+            <FunnelBarRow
+              label="Completed"
+              value={number(funnelCompleted)}
+              barWidth={funnelStarted > 0 ? (funnelCompleted / funnelStarted) * 100 : 8}
+              tone="soft"
+            />
+            <FunnelBarRow
+              label="Conversion"
+              value={funnelConversion.toFixed(1)}
+              displayValue={`${funnelConversion.toFixed(1)}%`}
+              barWidth={funnelConversion}
+              tone="light"
+            />
           </div>
 
           {ANALYTICS_DATA_MODE === "demo" ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-800">
-              Funnel metrics are currently shown from preview analytics mode until live tracking is wired up.
+            <div className="mt-2.5 inline-flex items-center gap-1.5 text-[10px] font-medium text-slate-400/90">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-300" />
+              Preview data. Live tracking is not fully enabled yet.
             </div>
           ) : null}
         </SectionCard>
 
         <SectionCard
-          title="Top Areas"
-          subtitle="Where recent demand is coming from across the service area."
+          title="Top Zip Codes"
           actionHref="/admin/analytics/zip-heatmap"
           actionLabel="View ZIP Heatmap"
         >
-          <div className="space-y-3">
+          <div className="divide-y divide-slate-200/80">
             {topAreas.length === 0 ? (
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
                 No recent ZIP activity yet.
               </div>
             ) : (
-              topAreas.map((area) => (
-                <div key={area.zip} className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">ZIP {area.zip}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {number(area.bookings)} bookings • {formatUsd(area.revenue, { maximumFractionDigits: 0 })}
+              topAreas.map((area, index) => {
+                const rankClasses =
+                  index === 0
+                    ? {
+                        badge: "bg-emerald-100 text-emerald-700",
+                        fill: "bg-emerald-300",
+                        track: "bg-slate-100/65",
+                        text: "text-slate-900",
+                      }
+                    : index === 1
+                      ? {
+                          badge: "bg-sky-100 text-sky-700",
+                          fill: "bg-sky-300",
+                          track: "bg-slate-100/65",
+                          text: "text-slate-900",
+                        }
+                      : index === 2
+                        ? {
+                            badge: "bg-violet-100 text-violet-700",
+                            fill: "bg-violet-200",
+                            track: "bg-slate-100/65",
+                            text: "text-slate-900",
+                          }
+                        : index === 3
+                          ? {
+                              badge: "bg-orange-100 text-orange-700",
+                              fill: "bg-orange-200",
+                              track: "bg-slate-100/65",
+                              text: "text-slate-900",
+                            }
+                          : {
+                            badge: "bg-amber-100 text-amber-700",
+                            fill: "bg-amber-200",
+                            track: "bg-slate-100/65",
+                            text: "text-slate-900",
+                          };
+
+                return (
+                  <div key={area.zip} className="py-[5px] first:pt-0 last:pb-0">
+                    <div className={joinClasses("rounded-2xl p-px", rankClasses.track)}>
+                      <div
+                        className={joinClasses(
+                          "flex min-h-9 items-center justify-between rounded-[15px] px-4 py-2 shadow-[inset_0_-1px_0_rgba(15,23,42,0.06),0_1px_1px_rgba(15,23,42,0.04)]",
+                          rankClasses.fill,
+                          rankClasses.text,
+                        )}
+                        style={{
+                          width: `${topAreaMaxShare > 0 ? Math.max((area.share / topAreaMaxShare) * 100, 8) : 8}%`,
+                          minWidth: "13rem",
+                          maxWidth: "100%",
+                        }}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={joinClasses(
+                              "inline-flex min-w-[1.75rem] shrink-0 items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                              rankClasses.badge,
+                            )}
+                          >
+                            #{index + 1}
+                          </span>
+                          <div className="truncate text-sm font-medium">
+                            ZIP {area.zip} • {number(area.bookings)} bookings • {formatUsd(area.revenue, { maximumFractionDigits: 0 })}
+                          </div>
+                        </div>
+                        <div className="ml-3 shrink-0 text-sm font-semibold">{area.share.toFixed(0)}%</div>
                       </div>
                     </div>
-                    <div className="text-sm font-semibold text-slate-700">{area.share.toFixed(0)}%</div>
                   </div>
-                  <div className="mt-3 h-2 rounded-full bg-slate-200">
-                    <div className="h-2 rounded-full bg-slate-900" style={{ width: `${Math.max(area.share, 8)}%` }} />
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </SectionCard>
@@ -1073,52 +1226,48 @@ export default async function AdminDashboardPage() {
       <section className="grid gap-6 xl:grid-cols-3">
         <SectionCard
           title="Customer Activity"
-          subtitle="Recent customer mix and repeat business in the last 30 days."
+          tooltip="Customer Activity shows the mix of new and returning customers in the last 30 days. New Customers are newly created customer records, Returning are recent customers with more than one booking, and Repeat Rate is the returning share of recent booking customers."
           className="h-full"
         >
-          <div className="grid gap-3">
+          <div className="divide-y divide-slate-200/80">
             {[
-              { label: "New Customers", value: number(newCustomers), helper: "Customer records created in the last 30 days" },
-              { label: "Returning", value: number(returningCustomers), helper: "Recent customers with more than one booking on record" },
-              { label: "Repeat Rate", value: `${repeatRate.toFixed(0)}%`, helper: "Returning share of recent booking customers" },
+              { label: "New Customers", value: number(newCustomers), icon: UserPlusIcon, tone: "info" as const },
+              { label: "Returning", value: number(returningCustomers), icon: UsersIcon, tone: "neutral" as const },
+              { label: "Repeat Rate", value: `${repeatRate.toFixed(0)}%`, icon: ArrowPathIcon, tone: "info" as const },
             ].map((metric) => (
-              <div key={metric.label} className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{metric.label}</div>
-                <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{metric.value}</div>
-                <div className="mt-2 text-xs leading-5 text-slate-500">{metric.helper}</div>
-              </div>
+              <DashboardListRow key={metric.label} label={metric.label} value={metric.value} icon={metric.icon} tone={metric.tone} />
             ))}
           </div>
         </SectionCard>
 
         <SectionCard
           title="Exceptions & Risks"
-          subtitle="Broader issues that increase business risk even if they are not the next click."
+          tooltip="Exceptions & Risks shows broader business issues that may need follow-up. Past-Due Rentals are overdue pickups, Long On-Site Rentals are rentals still on site for 8 or more days, Open Requests 24h+ are customer requests aging more than a day, and Missing Job Info are active bookings missing core job details."
           className="h-full"
         >
-          <div className="space-y-3">
-            <HealthRow
+          <div className="divide-y divide-slate-200/80">
+            <DashboardListRow
               label="Past-Due Rentals"
               value={number(overduePickups.length)}
-              detail="Delivered rentals whose pickup date is already behind us."
-              tone={overduePickups.length > 0 ? "warning" : "neutral"}
+              icon={ExclamationTriangleIcon}
+              tone={overduePickups.length > 0 ? "danger" : "neutral"}
             />
-            <HealthRow
+            <DashboardListRow
               label="Long On-Site Rentals"
               value={number(longOnSiteRentals.length)}
-              detail="Rentals that have been on site for 8+ days."
+              icon={ClockIcon}
               tone={longOnSiteRentals.length > 0 ? "warning" : "neutral"}
             />
-            <HealthRow
+            <DashboardListRow
               label="Open Requests 24h+"
               value={number(requestsSitting24h.length)}
-              detail="Customer requests aging long enough to create service risk."
+              icon={LifebuoyIcon}
               tone={requestsSitting24h.length > 0 ? "warning" : "neutral"}
             />
-            <HealthRow
+            <DashboardListRow
               label="Missing Job Info"
               value={number(bookingsMissingRequiredInfo.length)}
-              detail="Bookings missing customer name, ZIP, or delivery date."
+              icon={QueueListIcon}
               tone={bookingsMissingRequiredInfo.length > 0 ? "warning" : "neutral"}
             />
           </div>
@@ -1126,34 +1275,32 @@ export default async function AdminDashboardPage() {
 
         <SectionCard
           title="System Health"
-          subtitle="Subdued system checks so operators see issues without turning the page into a diagnostics console."
+          tooltip="System Health monitors the status of key admin systems. Payment Flow shows whether checkout is simulated or live, Analytics Tracking shows the dashboard analytics mode, Service Area shows how many active ZIPs are configured, and Pricing Defaults shows the current default rental and overage pricing."
           className="h-full"
         >
-          <div className="space-y-3">
-            <HealthRow
+          <div className="divide-y divide-slate-200/80">
+            <DashboardListRow
               label="Payment Flow"
               value="Simulated"
-              detail="Checkout is still using simulated payment capture rather than a live processor."
+              icon={WrenchScrewdriverIcon}
               tone="warning"
             />
-            <HealthRow
+            <DashboardListRow
               label="Analytics Tracking"
               value={ANALYTICS_DATA_MODE === "demo" ? "Preview Mode" : "Live"}
-              detail="Dashboard funnel data is currently sourced from the existing analytics mode."
+              icon={QueueListIcon}
               tone={ANALYTICS_DATA_MODE === "demo" ? "warning" : "good"}
             />
-            <HealthRow
+            <DashboardListRow
               label="Service Area"
               value={`${number(activeServiceZips)} Active ZIPs`}
-              detail={`${number(customZipPricing)} ZIPs have custom pricing overrides configured.`}
+              icon={MapPinIcon}
               tone="good"
             />
-            <HealthRow
+            <DashboardListRow
               label="Pricing Defaults"
               value={formatUsd(pricingSettings.standardRentalPrice, { maximumFractionDigits: 0 })}
-              detail={`${pricingSettings.includedRentalDays} included days • ${formatUsd(pricingSettings.dailyOveragePrice, {
-                maximumFractionDigits: 0,
-              })} daily overage`}
+              icon={ShieldCheckIcon}
               tone="good"
             />
           </div>

@@ -6,12 +6,14 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd } from "@/lib/money";
 import { ZipAnalyticsStatCard } from "../zip-analytics-stat-card";
 import { ZipAnalyticsViewTabs } from "../zip-analytics-view-tabs";
+import { ClickableTableRow } from "./clickable-table-row";
 import {
   CubeIcon,
   CurrencyDollarIcon,
   MapPinIcon,
   FireIcon,
   TrophyIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/solid";
 
 type SearchParams = {
@@ -53,6 +55,7 @@ type ZipAnalyticsRow = {
 };
 
 const RANGE_OPTIONS = [
+  { key: "1d", label: "Last 1 day", days: 1 },
   { key: "7d", label: "Last 7 days", days: 7 },
   { key: "30d", label: "Last 30 days", days: 30 },
   { key: "90d", label: "Last 90 days", days: 90 },
@@ -69,6 +72,23 @@ function startDateFromDays(days: number | null) {
   const date = new Date();
   date.setDate(date.getDate() - days);
   return date.toISOString();
+}
+
+function isWithinSelectedRange(
+  value: string | null | undefined,
+  days: number | null,
+  referenceDate: Date
+) {
+  if (!value) return false;
+  if (!days) return true;
+
+  const inputDate = new Date(value);
+  if (Number.isNaN(inputDate.getTime())) return false;
+
+  const rangeStart = new Date(referenceDate);
+  rangeStart.setDate(rangeStart.getDate() - days);
+
+  return inputDate >= rangeStart && inputDate <= referenceDate;
 }
 
 function number(value: number) {
@@ -218,7 +238,7 @@ function BookingCountCell({
 
 function RangeTabs({ activeRange }: { activeRange: string }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
       {RANGE_OPTIONS.map((option) => {
         const active = option.key === activeRange;
 
@@ -227,10 +247,10 @@ function RangeTabs({ activeRange }: { activeRange: string }) {
             key={option.key}
             href={`/admin/analytics/zip-heatmap?range=${option.key}`}
             className={[
-              "inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold transition",
+              "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition",
               active
-                ? "bg-[#F97316] text-white shadow-sm"
-                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
+                ? "border border-orange-200 bg-orange-50 text-[#F97316]"
+                : "border border-slate-200/80 bg-white/80 text-slate-600 hover:border-slate-300 hover:text-slate-900",
             ].join(" ")}
           >
             {option.label}
@@ -376,9 +396,10 @@ function SortableHeader({
 export default async function ZipHeatMapPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: SearchParams | Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
+  const sp = await Promise.resolve(searchParams);
+  const now = new Date();
   const selectedRange = getRangeMeta(sp?.range);
   const selectedSort = getSortKey(sp?.sort);
   const selectedDir = getSortDir(sp?.dir);
@@ -409,7 +430,10 @@ export default async function ZipHeatMapPage({
   if (bookingsError) throw new Error(bookingsError.message);
 
   const zipRows = (zipSettings ?? []) as ZipSettingRow[];
-  const bookingRows = (bookings ?? []) as BookingRow[];
+  const rawBookingRows = (bookings ?? []) as BookingRow[];
+  const bookingRows = rawBookingRows.filter((booking) =>
+    isWithinSelectedRange(booking.created_at, selectedRange.days, now)
+  );
 
   const settingsByZip = new Map<string, ZipSettingRow>();
   for (const row of zipRows) {
@@ -486,98 +510,98 @@ export default async function ZipHeatMapPage({
   const topZipByRevenue =
     [...rows].sort((a, b) => b.revenue - a.revenue).find((row) => row.revenue > 0) ?? null;
 
-  const activeZeroBookingZips = rows.filter(
-    (row) => row.existsInSettings && row.active === true && row.bookingCount === 0
-  );
-
-  const customPricingZips = rows.filter((row) => row.existsInSettings && row.pricingMode === "custom");
-  const unsupportedBookingZips = rows.filter((row) => !row.existsInSettings && row.bookingCount > 0);
-
   const maxBookings = getMaxBookingCount(rows);
   const maxRevenue = getMaxRevenue(rows);
 
   return (
-    <AdminPage width="wide">
-        <section className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
-            <AdminPageHeader
-              title="ZIP Heatmap"
-              description="Compare ZIP performance across bookings, revenue, and service coverage."
-              className="mb-0"
-              actions={
-                <div className="flex flex-col items-start gap-4 xl:items-end">
-                  <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
-                    {selectedRange.label}
-                  </div>
-                  <div className="text-sm text-slate-500 xl:text-right">
-                    Filter ZIP performance by booking created date.
-                  </div>
-                  <RangeTabs activeRange={selectedRange.key} />
-                </div>
-              }
-            />
-            <div className="mt-4">
-              <ZipAnalyticsViewTabs active="heat" />
-            </div>
-        </section>
+    <AdminPage width="wide" className="space-y-6">
+      <AdminPageHeader
+        title="ZIP Heatmap"
+        description="Compare ZIP performance across bookings, revenue, and service coverage."
+        className="mb-0"
+        actions={
+          <div className="pt-2 lg:pt-0">
+            <ZipAnalyticsViewTabs active="heat" />
+          </div>
+        }
+      />
 
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <ZipAnalyticsStatCard
-                    label="Total bookings"
-                    value={number(totalBookings)}
-                    hint="Non-cancelled bookings in selected period"
-                    icon={CubeIcon}
-                    accent="orange"
-                />
+      <section className="-mt-3">
+        <div className="flex flex-col gap-2 lg:items-end">
+          <RangeTabs activeRange={selectedRange.key} />
+        </div>
+      </section>
 
-                <ZipAnalyticsStatCard
-                    label="Total revenue"
-                    value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
-                    hint="Collected from booking totals"
-                    icon={CurrencyDollarIcon}
-                    accent="emerald"
-                />
+      <section>
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold uppercase tracking-[0.16em] text-slate-700">
+              Snapshot
+            </h2>
+          </div>
+        </div>
 
-                <ZipAnalyticsStatCard
-                    label="Active ZIPs with bookings"
-                    value={number(activeZipsWithBookings)}
-                    hint="Supported ZIPs producing work"
-                    icon={MapPinIcon}
-                    accent="slate"
-                />
+        <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <ZipAnalyticsStatCard
+            label="Total bookings"
+            value={number(totalBookings)}
+            hint="bookings in selected period"
+            icon={CubeIcon}
+            accent="orange"
+          />
 
-                <ZipAnalyticsStatCard
-                    label="Top ZIP by bookings"
-                    value={topZipByBookings ? topZipByBookings.zip : "—"}
-                    hint={
-                        topZipByBookings
-                        ? `${number(topZipByBookings.bookingCount)} bookings`
-                        : "No bookings in range"
-                    }
-                    icon={FireIcon}
-                    accent="orange"
-                />
+          <ZipAnalyticsStatCard
+            label="Total revenue"
+            value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
+            hint="booking totals"
+            icon={CurrencyDollarIcon}
+            accent="emerald"
+          />
 
-                <ZipAnalyticsStatCard
-                    label="Top ZIP by revenue"
-                    value={topZipByRevenue ? topZipByRevenue.zip : "—"}
-                    hint={
-                        topZipByRevenue
-                        ? formatUsd(topZipByRevenue.revenue, { maximumFractionDigits: 0 })
-                        : "No revenue in range"
-                    }
-                    icon={TrophyIcon}
-                    accent="emerald"
-                />
-            </div>
+          <ZipAnalyticsStatCard
+            label="Active ZIPs with bookings"
+            value={number(activeZipsWithBookings)}
+            hint="Supported ZIPs producing work"
+            icon={MapPinIcon}
+            accent="slate"
+          />
 
-            <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-                <div className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-sm">
+          <ZipAnalyticsStatCard
+            label="Top ZIP by bookings"
+            value={topZipByBookings ? topZipByBookings.zip : "—"}
+            hint={
+              topZipByBookings
+                ? `${number(topZipByBookings.bookingCount)} bookings`
+                : "No bookings in range"
+            }
+            icon={FireIcon}
+            accent="orange"
+          />
+
+          <ZipAnalyticsStatCard
+            label="Top ZIP by revenue"
+            value={topZipByRevenue ? topZipByRevenue.zip : "—"}
+            hint={
+              topZipByRevenue
+                ? formatUsd(topZipByRevenue.revenue, { maximumFractionDigits: 0 })
+                : "No revenue in range"
+            }
+            icon={TrophyIcon}
+            accent="emerald"
+          />
+        </div>
+      </section>
+
+      <div className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-6 py-5">
                     <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-slate-900">ZIP performance</h2>
                         <p className="mt-1 text-sm text-slate-500">
                         Ranked by booking count. Stronger ZIPs are shaded more heavily.
+                        </p>
+                        <p className="mt-2 text-sm text-slate-500">
+                        Click any row to view or edit ZIP details.
                         </p>
                     </div>
                     <div className="text-sm text-slate-500">
@@ -621,6 +645,9 @@ export default async function ZipHeatMapPage({
                           />
                         </th>
                         <th className="px-6 py-4 text-center">Pricing</th>
+                        <th className="px-6 py-4 text-right">
+                          <span className="sr-only">Open details</span>
+                        </th>
                         </tr>
                     </thead>
 
@@ -631,36 +658,41 @@ export default async function ZipHeatMapPage({
                             getHeatLevel(row.revenue, maxRevenue)
                         );
 
-                        const zipCell = row.zipSettingId ? (
-                            <Link
-                            href={`/admin/settings/zips/${row.zipSettingId}`}
-                            className="inline-flex items-center gap-2 text-sm font-semibold text-[#F97316] hover:text-orange-600 hover:underline"
-                            >
-                            {row.zip}
-                            </Link>
-                        ) : (
-                            <span className="text-sm font-semibold text-slate-900">{row.zip}</span>
-                        );
+                        const rowHref = row.zipSettingId ? `/admin/settings/zips/${row.zipSettingId}` : null;
 
                         return (
-                            <tr
+                            <ClickableTableRow
                                 key={row.zip}
-                                className={`${getRowHeatClasses(heatLevel)} transition hover:bg-slate-50`}
+                                href={rowHref}
+                                ariaLabel={rowHref ? `Open ZIP ${row.zip} details` : undefined}
+                                className={[
+                                  getRowHeatClasses(heatLevel),
+                                  rowHref
+                                    ? "group cursor-pointer transition hover:bg-orange-100/90 focus-visible:bg-orange-100/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/35 focus-visible:ring-inset"
+                                    : "transition hover:bg-slate-50",
+                                ].join(" ")}
                             >
                             <td className="px-6 py-3 align-top">
-                                <div>
-                                {zipCell}
-                                {!row.existsInSettings ? (
-                                    <div className="mt-1 text-xs font-medium text-amber-700">
-                                    Outside current ZIP settings
-                                    </div>
-                                ) : null}
+                                <div
+                                  className={[
+                                    "text-sm font-semibold transition",
+                                    rowHref
+                                      ? "text-[#F97316] group-hover:text-orange-600 group-focus-visible:text-orange-600"
+                                      : "text-slate-900",
+                                  ].join(" ")}
+                                >
+                                  {row.zip}
                                 </div>
+                                {!row.existsInSettings ? (
+                                  <div className="mt-1 text-xs font-medium text-amber-700">
+                                    Outside current ZIP settings
+                                  </div>
+                                ) : null}
                             </td>
 
                             <td className="px-6 py-3 align-top">
-                                <div className="text-sm font-medium text-slate-900">{row.town ?? "—"}</div>
-                                <div className="mt-1 text-sm text-slate-500">{row.county ?? "—"}</div>
+                              <div className="text-sm font-medium text-slate-900">{row.town ?? "—"}</div>
+                              <div className="mt-1 text-sm text-slate-500">{row.county ?? "—"}</div>
                             </td>
 
                             <td className="px-6 py-3 align-top text-center">
@@ -697,13 +729,27 @@ export default async function ZipHeatMapPage({
                                 </div>
                               </div>
                             </td>
-                          </tr>
+                            <td className="px-6 py-3 align-middle text-right">
+                              <div className="flex min-h-[74px] items-center justify-end">
+                                {rowHref ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="inline-flex items-center justify-center rounded-full p-2 text-slate-500 transition group-hover:translate-x-0.5 group-hover:scale-110 group-hover:text-slate-900 group-focus-visible:translate-x-0.5 group-focus-visible:scale-110 group-focus-visible:text-slate-900"
+                                  >
+                                    <ChevronRightIcon className="h-6 w-6" />
+                                  </span>
+                                ) : (
+                                  <span className="text-sm text-slate-400">Unavailable</span>
+                                )}
+                              </div>
+                            </td>
+                          </ClickableTableRow>
                         );
                         })}
 
                         {rows.length === 0 ? (
                         <tr>
-                            <td colSpan={7} className="px-6 py-14 text-center text-sm text-slate-500">
+                            <td colSpan={8} className="px-6 py-14 text-center text-sm text-slate-500">
                             No ZIP analytics available for this period.
                             </td>
                         </tr>
@@ -711,113 +757,7 @@ export default async function ZipHeatMapPage({
                     </tbody>
                     </table>
                 </div>
-                </div>
-
-                <div className="space-y-6">
-                <div className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-slate-900">Key insights</h2>
-                    <div className="mt-4 space-y-3">
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Most bookings
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {topZipByBookings
-                            ? `${topZipByBookings.zip} • ${number(topZipByBookings.bookingCount)} bookings`
-                            : "No bookings in this period"}
-                        </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Highest revenue
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {topZipByRevenue
-                            ? `${topZipByRevenue.zip} • ${formatUsd(topZipByRevenue.revenue, { maximumFractionDigits: 0 })}`
-                            : "No revenue in this period"}
-                        </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Active ZIPs with zero bookings
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {number(activeZeroBookingZips.length)}
-                        </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Custom pricing ZIPs
-                        </div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {number(customPricingZips.length)}
-                        </div>
-                    </div>
-                    </div>
-                </div>
-
-                <div className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm">
-                    <h2 className="text-lg font-semibold text-slate-900">Watch list</h2>
-
-                    <div className="mt-5">
-                    <div className="text-sm font-semibold text-slate-900">Active ZIPs with no bookings</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {activeZeroBookingZips.length > 0 ? (
-                        activeZeroBookingZips.slice(0, 12).map((row) => (
-                            <span
-                            key={row.zip}
-                            className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200"
-                            >
-                            {row.zip}
-                            </span>
-                        ))
-                        ) : (
-                        <span className="text-sm text-slate-500">None in this period.</span>
-                        )}
-                    </div>
-                    </div>
-
-                    <div className="mt-6">
-                    <div className="text-sm font-semibold text-slate-900">ZIPs using custom pricing</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {customPricingZips.length > 0 ? (
-                        customPricingZips.slice(0, 12).map((row) => (
-                            <span
-                            key={row.zip}
-                            className="inline-flex items-center rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200"
-                            >
-                            {row.zip}
-                            </span>
-                        ))
-                        ) : (
-                        <span className="text-sm text-slate-500">No custom pricing set.</span>
-                        )}
-                    </div>
-                    </div>
-
-                    <div className="mt-6">
-                    <div className="text-sm font-semibold text-slate-900">Bookings from unsupported ZIPs</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {unsupportedBookingZips.length > 0 ? (
-                        unsupportedBookingZips.slice(0, 12).map((row) => (
-                            <span
-                            key={row.zip}
-                            className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200"
-                            >
-                            {row.zip}
-                            </span>
-                        ))
-                        ) : (
-                        <span className="text-sm text-slate-500">None in this period.</span>
-                        )}
-                    </div>
-                    </div>
-                </div>
-                </div>
-            </div>
+      </div>
     </AdminPage>
   );
 }

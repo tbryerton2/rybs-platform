@@ -95,7 +95,7 @@ function RangeTabs({
   metric: MetricKey;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
       {RANGE_OPTIONS.map((option) => {
         const active = option.key === activeRange;
         return (
@@ -103,10 +103,10 @@ function RangeTabs({
             key={option.key}
             href={`/admin/analytics/zip-map?range=${option.key}&metric=${metric}`}
             className={[
-              "inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold transition",
+              "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition",
               active
-                ? "bg-[#F97316] text-white shadow-sm"
-                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
+                ? "border border-orange-200 bg-orange-50 text-[#F97316]"
+                : "border border-slate-200/80 bg-white/80 text-slate-600 hover:border-slate-300 hover:text-slate-900",
             ].join(" ")}
           >
             {option.label}
@@ -232,41 +232,45 @@ export default async function ZipMapPage({
       .find((row) => row.bookingCount > 0) ?? null;
 
   return (
-      <AdminPage width="wide">
-        <section className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm sm:p-8">
-          <AdminPageHeader
-            title="ZIP Heatmap"
-            description="Compare ZIP performance across bookings, revenue, and service coverage."
-            className="mb-0"
-            actions={
-              <div className="flex flex-col items-start gap-4 xl:items-end">
-                <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
-                  {selectedRange.label}
-                </div>
-                <div className="text-sm text-slate-500 xl:text-right">
-                  Filter ZIP map activity by booking created date.
-                </div>
-                <RangeTabs activeRange={selectedRange.key} metric={selectedMetric} />
-              </div>
-            }
-          />
-          <div className="mt-4">
+    <AdminPage width="wide" className="space-y-6">
+      <AdminPageHeader
+        title="ZIP Heatmap"
+        description="Compare ZIP performance across bookings, revenue, and service coverage."
+        className="mb-0"
+        actions={
+          <div className="pt-2 lg:pt-0">
             <ZipAnalyticsViewTabs active="map" />
           </div>
-        </section>
+        }
+      />
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="-mt-3">
+        <div className="flex flex-col gap-2 lg:items-end">
+          <RangeTabs activeRange={selectedRange.key} metric={selectedMetric} />
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold uppercase tracking-[0.16em] text-slate-700">
+              Snapshot
+            </h2>
+          </div>
+        </div>
+
+        <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-5">
           <ZipAnalyticsStatCard
             label="Total bookings"
             value={number(totalBookings)}
-            hint="Mapped ZIPs in selected period"
+            hint="Mapped ZIP bookings"
             icon={CubeIcon}
             accent="orange"
           />
           <ZipAnalyticsStatCard
             label="Total revenue"
             value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
-            hint="From service ZIPs in selected period"
+            hint="Mapped ZIP booking totals"
             icon={CurrencyDollarIcon}
             accent="emerald"
           />
@@ -292,8 +296,9 @@ export default async function ZipMapPage({
             accent="emerald"
           />
         </div>
+      </section>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div
             id="zip-map"
             className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-sm"
@@ -343,7 +348,7 @@ export default async function ZipMapPage({
               </div>
             </div>
           </div>
-        </div>
+      </div>
     </AdminPage>
   );
 }

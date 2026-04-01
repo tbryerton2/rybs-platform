@@ -255,7 +255,6 @@ export async function quickMarkDeliveredAction(formData: FormData) {
     .from("bookings")
     .update({
       status: "delivered",
-      delivered_at: new Date().toISOString(),
     })
     .eq("id", id);
 
@@ -295,7 +294,6 @@ export async function quickMarkPickedUpAction(formData: FormData) {
     .from("bookings")
     .update({
       status: "picked_up",
-      picked_up_at: new Date().toISOString(),
     })
     .eq("id", id);
 

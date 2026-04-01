@@ -92,8 +92,6 @@ type Booking = {
   tax_cents: number | null;
   service_county: string | null;
   service_town: string | null;
-  delivered_at: string | null;
-  picked_up_at: string | null;
   notes: string | null;
   placement_preference: string | null;
   placement_details: string | null;
@@ -144,6 +142,16 @@ type CustomerHistoryEntry = {
   change_reason: string | null;
   created_at: string;
 };
+
+function getLatestStatusTimestamp(
+  history: BookingHistoryEntry[],
+  status: Extract<BookingStatus, "delivered" | "picked_up">,
+) {
+  return (
+    history.find((entry) => entry.field_name === "status" && entry.new_value === status)?.created_at ??
+    null
+  );
+}
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -402,10 +410,17 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      base_rental_price_cents,
+      included_rental_days,
+      rental_duration_days,
+      extra_days,
+      daily_overage_price_cents,
+      extra_days_charge_cents,
+      subtotal_cents,
+      taxable_subtotal_cents,
+      tax_cents,
       service_county,
       service_town,
-      delivered_at,
-      picked_up_at,
       notes,
       placement_preference,
       placement_details,
@@ -435,10 +450,17 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      base_rental_price_cents,
+      included_rental_days,
+      rental_duration_days,
+      extra_days,
+      daily_overage_price_cents,
+      extra_days_charge_cents,
+      subtotal_cents,
+      taxable_subtotal_cents,
+      tax_cents,
       service_county,
       service_town,
-      delivered_at,
-      picked_up_at,
       notes
     `;
 
@@ -468,8 +490,6 @@ export default async function AdminBookingDetailPage({
       tax_cents,
       service_county,
       service_town,
-      delivered_at,
-      picked_up_at,
       notes
     `;
 
@@ -636,6 +656,8 @@ export default async function AdminBookingDetailPage({
   const linkedCustomerHistory = isBookingSchemaError(linkedCustomerHistoryResult.error)
     ? []
     : ((linkedCustomerHistoryResult.data ?? []) as CustomerHistoryEntry[]);
+  const deliveredAt = getLatestStatusTimestamp(bookingHistory, "delivered");
+  const pickedUpAt = getLatestStatusTimestamp(bookingHistory, "picked_up");
   const accountEmailDiffers =
     !!linkedCustomer?.email &&
     !!booking.customer_email &&
@@ -681,9 +703,9 @@ export default async function AdminBookingDetailPage({
 
   const createdDone = isFilled(booking.created_at);
   const deliveryScheduledDone = isFilled(booking.delivery_date);
-  const deliveredDone = isFilled(booking.delivered_at) || booking.status === "delivered" || booking.status === "picked_up";
+  const deliveredDone = isFilled(deliveredAt) || booking.status === "delivered" || booking.status === "picked_up";
   const pickupScheduledDone = isFilled(booking.pickup_date) && booking.pickup_mode === "schedule";
-  const pickedUpDone = isFilled(booking.picked_up_at) || booking.status === "picked_up";
+  const pickedUpDone = isFilled(pickedUpAt) || booking.status === "picked_up";
   const pickupPlanning = buildPickupPlanningModel({
     deliveryDate: booking.delivery_date,
     pickupDate: booking.pickup_date,
@@ -695,9 +717,9 @@ export default async function AdminBookingDetailPage({
       ? pickupPlanning.scheduledPickupDate
       : "";
   const daysOnSite =
-  booking.status === "delivered"
-    ? getDaysOnSite(booking.delivered_at, booking.delivery_date)
-    : null;
+    booking.status === "delivered"
+      ? getDaysOnSite(deliveredAt, booking.delivery_date)
+      : null;
   const placement = sanitizePlacementDetails({
     placementPreference: booking.placement_preference,
     placementDetails: booking.placement_details,
@@ -726,8 +748,8 @@ export default async function AdminBookingDetailPage({
         ? `Awaiting delivery on ${formatDate(booking.delivery_date)}`
         : "Awaiting delivery scheduling"
       : booking.status === "picked_up"
-        ? booking.picked_up_at
-          ? `Completed • picked up ${formatDateTime(booking.picked_up_at)}`
+        ? pickedUpAt
+          ? `Completed • picked up ${formatDateTime(pickedUpAt)}`
           : "Completed"
         : booking.status === "cancelled"
           ? "Cancelled"
@@ -1005,7 +1027,7 @@ export default async function AdminBookingDetailPage({
 
           <TimelineItem
             label="Delivered"
-            value={formatDateTime(booking.delivered_at)}
+            value={formatDateTime(deliveredAt)}
             done={deliveredDone}
             active={booking.status === "delivered" && !pickedUpDone}
           />
@@ -1030,7 +1052,7 @@ export default async function AdminBookingDetailPage({
 
           <TimelineItem
             label="Picked up"
-            value={formatDateTime(booking.picked_up_at)}
+            value={formatDateTime(pickedUpAt)}
             done={pickedUpDone}
             isLast
           />
@@ -1641,8 +1663,8 @@ export default async function AdminBookingDetailPage({
                   Lifecycle timestamps
                 </div>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                  <Field label="Delivered at" value={formatDateTime(booking.delivered_at)} />
-                  <Field label="Picked up at" value={formatDateTime(booking.picked_up_at)} />
+                  <Field label="Delivered at" value={formatDateTime(deliveredAt)} />
+                  <Field label="Picked up at" value={formatDateTime(pickedUpAt)} />
                 </div>
               </div>
 

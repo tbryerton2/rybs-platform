@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   if (id) {
     const { error } = await supabaseAdmin
       .from("bookings")
-      .update({ status: "delivered", delivered_at: new Date().toISOString() })
+      .update({ status: "delivered" })
       .eq("id", id);
 
     if (error) console.error("API MARK DELIVERED ERROR:", error);
