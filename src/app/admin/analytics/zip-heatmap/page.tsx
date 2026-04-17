@@ -169,17 +169,11 @@ function getHeatLevel(value: number, max: number) {
 }
 
 function getRowHeatClasses(level: number) {
-  if (level >= 0.85) {
-    return "bg-[#F97316]/10";
-  }
   if (level >= 0.6) {
-    return "bg-orange-50/80";
-  }
-  if (level >= 0.35) {
-    return "bg-amber-50/70";
+    return "bg-slate-50/70";
   }
   if (level > 0) {
-    return "bg-slate-50/70";
+    return "bg-white";
   }
   return "bg-white";
 }
@@ -202,7 +196,7 @@ function RevenueCell({
 
       <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-emerald-500"
+          className="h-full rounded-full bg-slate-400"
           style={{ width: `${width}%` }}
         />
       </div>
@@ -228,7 +222,7 @@ function BookingCountCell({
 
       <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-[#F97316]"
+          className="h-full rounded-full bg-slate-500"
           style={{ width: `${width}%` }}
         />
       </div>
@@ -264,7 +258,7 @@ function RangeTabs({ activeRange }: { activeRange: string }) {
 function StatusBadge({ active }: { active: boolean | null }) {
   if (active === true) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
+      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
         Active
       </span>
     );
@@ -279,7 +273,7 @@ function StatusBadge({ active }: { active: boolean | null }) {
   }
 
   return (
-    <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700">
+    <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-slate-500">
         Unknown
       </span>
   );
@@ -288,7 +282,7 @@ function StatusBadge({ active }: { active: boolean | null }) {
 function IntensityBadge({ level }: { level: number }) {
   if (level >= 0.85) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-orange-200 bg-orange-50 px-3 text-[11px] font-semibold text-orange-700">
+      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-300 bg-slate-100 px-3 text-[11px] font-semibold text-slate-700">
         Very high
       </span>
     );
@@ -296,7 +290,7 @@ function IntensityBadge({ level }: { level: number }) {
 
   if (level >= 0.6) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-3 text-[11px] font-semibold text-amber-700">
+      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-300 bg-slate-100 px-3 text-[11px] font-semibold text-slate-700">
         High
       </span>
     );
@@ -304,7 +298,7 @@ function IntensityBadge({ level }: { level: number }) {
 
   if (level >= 0.35) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-yellow-200 bg-yellow-50 px-3 text-[11px] font-semibold text-yellow-700">
+      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[11px] font-semibold text-slate-600">
         Moderate
       </span>
     );
@@ -312,7 +306,7 @@ function IntensityBadge({ level }: { level: number }) {
 
   if (level > 0) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-sky-200 bg-sky-50 px-3 text-[11px] font-semibold text-sky-700">
+      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600">
         Low
       </span>
     );
@@ -328,7 +322,7 @@ function IntensityBadge({ level }: { level: number }) {
 function PricingBadge({ mode }: { mode: "default" | "custom" }) {
   if (mode === "custom") {
     return (
-      <span className="inline-flex min-w-[96px] items-center justify-center rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-semibold text-orange-700">
+      <span className="inline-flex min-w-[96px] items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700">
         Custom pricing
       </span>
     );
@@ -361,33 +355,18 @@ function SortableHeader({
     <Link
       href={`/admin/analytics/zip-heatmap?range=${range}&sort=${sortKey}&dir=${nextDir}`}
       className={[
-        "group inline-flex items-center justify-center gap-1.5 rounded-md px-1.5 py-1 transition",
-        active ? "text-slate-900" : "text-slate-500 hover:text-slate-700",
+        "inline-flex items-center gap-1.5 rounded-full transition hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
+        active ? "text-slate-900" : "text-slate-500",
       ].join(" ")}
     >
       <span className="leading-none">{label}</span>
-
-      <span className="flex flex-col items-center justify-center leading-none">
-        <span
-          className={[
-            "block h-[8px] text-[8px] leading-none",
-            active && currentDir === "asc"
-              ? "text-slate-700"
-              : "text-slate-300 group-hover:text-slate-500"
-          ].join(" ")}
-        >
-          ▲
-        </span>
-        <span
-          className={[
-            "-mt-[2px] block h-[8px] text-[8px] leading-none",
-            active && currentDir === "desc"
-              ? "text-slate-700"
-              : "text-slate-300 group-hover:text-slate-500"
-          ].join(" ")}
-        >
-          ▼
-        </span>
+      <span
+        aria-hidden="true"
+        className={`text-[11px] leading-none ${
+          active ? "text-slate-700" : "text-slate-400"
+        }`}
+      >
+        {active ? (currentDir === "asc" ? "↑" : "↓") : "↕"}
       </span>
     </Link>
   );
@@ -516,7 +495,7 @@ export default async function ZipHeatMapPage({
   return (
     <AdminPage width="wide" className="space-y-6">
       <AdminPageHeader
-        title="ZIP Heatmap"
+        title="Heatmap"
         description="Compare ZIP performance across bookings, revenue, and service coverage."
         className="mb-0"
         actions={
@@ -611,8 +590,8 @@ export default async function ZipHeatMapPage({
                 </div>
 
                 <div className="max-h-[900px] overflow-auto">
-                    <table className="min-w-full">
-                    <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur">
+                    <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur">
                         <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <th className="px-6 py-4">ZIP</th>
                         <th className="px-6 py-4">Location</th>
@@ -651,7 +630,7 @@ export default async function ZipHeatMapPage({
                         </tr>
                     </thead>
 
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody className="divide-y divide-slate-200 bg-white">
                         {rows.map((row) => {
                         const heatLevel = Math.max(
                             getHeatLevel(row.bookingCount, maxBookings),
@@ -668,7 +647,7 @@ export default async function ZipHeatMapPage({
                                 className={[
                                   getRowHeatClasses(heatLevel),
                                   rowHref
-                                    ? "group cursor-pointer transition hover:bg-orange-100/90 focus-visible:bg-orange-100/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/35 focus-visible:ring-inset"
+                                    ? "group cursor-pointer transition hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-inset"
                                     : "transition hover:bg-slate-50",
                                 ].join(" ")}
                             >
@@ -677,14 +656,14 @@ export default async function ZipHeatMapPage({
                                   className={[
                                     "text-sm font-semibold transition",
                                     rowHref
-                                      ? "text-[#F97316] group-hover:text-orange-600 group-focus-visible:text-orange-600"
+                                      ? "text-slate-900 group-hover:text-slate-950 group-focus-visible:text-slate-950"
                                       : "text-slate-900",
                                   ].join(" ")}
                                 >
                                   {row.zip}
                                 </div>
                                 {!row.existsInSettings ? (
-                                  <div className="mt-1 text-xs font-medium text-amber-700">
+                                  <div className="mt-1 text-xs font-medium text-slate-500">
                                     Outside current ZIP settings
                                   </div>
                                 ) : null}
@@ -716,7 +695,7 @@ export default async function ZipHeatMapPage({
 
                             <td className="px-6 py-3 align-middle text-center">
                               <div className="flex min-h-[74px] items-center justify-center">
-                                <span className="inline-flex min-w-[64px] items-center justify-center rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm">
+                                <span className="inline-flex min-w-[64px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900">
                                   {row.bookingCount > 0 ? formatUsd(row.avgBookingValue, { maximumFractionDigits: 0 }) : "—"}
                                 </span>
                               </div>
@@ -734,7 +713,7 @@ export default async function ZipHeatMapPage({
                                 {rowHref ? (
                                   <span
                                     aria-hidden="true"
-                                    className="inline-flex items-center justify-center rounded-full p-2 text-slate-500 transition group-hover:translate-x-0.5 group-hover:scale-110 group-hover:text-slate-900 group-focus-visible:translate-x-0.5 group-focus-visible:scale-110 group-focus-visible:text-slate-900"
+                                    className="inline-flex items-center justify-center rounded-full p-2 text-slate-400 transition group-hover:translate-x-0.5 group-hover:scale-110 group-hover:text-slate-700 group-focus-visible:translate-x-0.5 group-focus-visible:scale-110 group-focus-visible:text-slate-700"
                                   >
                                     <ChevronRightIcon className="h-6 w-6" />
                                   </span>

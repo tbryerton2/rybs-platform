@@ -8,7 +8,7 @@ export default async function AdminCmsPage() {
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Retail Site Content"
+        title="Content"
         description="Manage retail-site content by page, save drafts safely, preview changes, and publish when ready."
       />
 

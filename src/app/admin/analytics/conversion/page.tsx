@@ -94,7 +94,7 @@ function FilterBar({ filters }: { filters: AnalyticsFilters }) {
     <div className="space-y-4">
       <section className={sectionCardClasses("px-6 py-6")}>
         <AdminPageHeader
-          title="Lead Funnel"
+          title="Website Analytics"
           description="See where bookings stall, how conversion is trending, and whether the customer portal is reducing manual follow-up."
           className="mb-0"
           actions={
@@ -612,7 +612,7 @@ export default async function ConversionAnalyticsPage({
 
       <section className="mt-10 rounded-[36px] border border-slate-200/80 bg-white/80 p-6 shadow-sm lg:p-8">
         <SectionHeading
-          eyebrow="Lead Funnel"
+          eyebrow="Website Analytics"
           title="Where customers are falling out of the booking flow"
           description="This is the clearest view of booking health: how many people start, where they hesitate, and whether pricing or another step deserves attention first."
         />

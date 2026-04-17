@@ -3,6 +3,7 @@ import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
 } from "@/lib/tenant/retail-site-settings";
+import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabase } from "@/lib/supabase";
 
 function isYmd(value: string) {
@@ -39,6 +40,7 @@ async function getAvailabilityEntry(
   date: string,
   today: string,
   blockedLabel: string | null,
+  standardRentalDays: number,
 ): Promise<CalendarAvailabilityResult> {
   if (blockedLabel) {
     return {
@@ -53,7 +55,7 @@ async function getAvailabilityEntry(
 
   const { data, error } = await supabase.rpc("get_delivery_availability", {
     p_delivery_date: date,
-    p_days: 7,
+    p_days: standardRentalDays,
   });
 
   if (error) {
@@ -99,6 +101,7 @@ export async function GET(req: Request) {
 
   try {
     const retailSiteSettings = await getRetailSiteSettings();
+    const pricingSettings = await getPricingSettingsSnapshot();
     const dates = Array.from({ length: days }, (_, index) => addDaysYmd(start, index));
     const results: CalendarAvailabilityResult[] = [];
 
@@ -107,7 +110,12 @@ export async function GET(req: Request) {
       const batchResults = await Promise.all(
         batch.map((date) => {
           const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
-          return getAvailabilityEntry(date, today, closure.blocked ? closure.label : null);
+          return getAvailabilityEntry(
+            date,
+            today,
+            closure.blocked ? closure.label : null,
+            pricingSettings.standardRentalDays,
+          );
         }),
       );
       results.push(...batchResults);

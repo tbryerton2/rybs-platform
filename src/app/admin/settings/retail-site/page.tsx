@@ -11,7 +11,7 @@ export default async function AdminRetailSiteSettingsPage() {
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Retail Site Settings"
+        title="Settings"
         description="Control header behavior, section visibility, and blocked delivery dates."
       />
 

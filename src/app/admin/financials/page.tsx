@@ -2,12 +2,17 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import Link from "next/link";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { BookingResultsSection } from "@/app/admin/financials/booking-results-section";
+import { FinancialFiltersCard } from "@/app/admin/financials/financial-filters-card";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type SortKey = "customer" | "zip" | "city" | "delivery" | "pickup" | "status" | "price";
+type SortDirection = "asc" | "desc";
+type ResultsView = "table" | "chart";
+type Granularity = "daily" | "weekly" | "monthly" | "annual";
 
 type PageProps = {
   searchParams?: Promise<SearchParams>;
@@ -121,6 +126,10 @@ function buildHref(params: {
   end?: string;
   zip?: string;
   status?: string;
+  sort?: SortKey;
+  dir?: SortDirection;
+  view?: ResultsView;
+  granularity?: Granularity;
 }) {
   const qs = new URLSearchParams();
 
@@ -129,9 +138,23 @@ function buildHref(params: {
   if (params.end) qs.set("end", params.end);
   if (params.zip) qs.set("zip", params.zip);
   if (params.status) qs.set("status", params.status);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.dir) qs.set("dir", params.dir);
+  if (params.view) qs.set("view", params.view);
+  if (params.granularity) qs.set("granularity", params.granularity);
 
   const str = qs.toString();
   return str ? `/admin/financials?${str}` : "/admin/financials";
+}
+
+function isPresetRangeActive(
+  preset: string,
+  todayISO: string,
+  startDate: string,
+  endDate: string
+) {
+  const dates = getPresetDates(preset, todayISO);
+  return (dates.start ?? "") === startDate && (dates.end ?? "") === endDate;
 }
 
 function statusBadgeClasses(status: BookingStatus) {
@@ -168,8 +191,57 @@ function prettyStatus(status: BookingStatus) {
   }
 }
 
-function cardShell(extra = "") {
-  return `rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200/70 ${extra}`;
+function summaryCardShell(
+  tone: "green" | "blue" | "violet" | "amber" | "teal",
+  extra = ""
+) {
+  const toneClasses =
+    tone === "green"
+      ? "border-emerald-200/70 bg-emerald-50/55"
+      : tone === "blue"
+        ? "border-sky-200/70 bg-sky-50/55"
+        : tone === "violet"
+          ? "border-violet-200/70 bg-violet-50/50"
+          : tone === "amber"
+            ? "border-amber-200/70 bg-amber-50/55"
+            : "border-teal-200/70 bg-teal-50/55";
+
+  return `rounded-[28px] border shadow-sm ${toneClasses} ${extra}`;
+}
+
+function compareNullableText(a: string | null, b: string | null) {
+  return (a ?? "").localeCompare(b ?? "", undefined, { sensitivity: "base" });
+}
+
+function compareNullableDate(a: string | null, b: string | null) {
+  return (a ?? "").localeCompare(b ?? "");
+}
+
+function compareNullableNumber(a: number | null, b: number | null) {
+  return (a ?? 0) - (b ?? 0);
+}
+
+function daysBetween(startIso: string, endIso: string) {
+  const start = new Date(`${startIso}T00:00:00`);
+  const end = new Date(`${endIso}T00:00:00`);
+  const diff = end.getTime() - start.getTime();
+  return Number.isNaN(diff) ? 0 : Math.max(Math.round(diff / (1000 * 60 * 60 * 24)) + 1, 0);
+}
+
+function startOfWeekISO(isoDate: string) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  const day = date.getUTCDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setUTCDate(date.getUTCDate() + diff);
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfMonthISO(isoDate: string) {
+  return `${isoDate.slice(0, 7)}-01`;
+}
+
+function startOfYearISO(isoDate: string) {
+  return `${isoDate.slice(0, 4)}-01-01`;
 }
 
 export default async function FinancialsPage({ searchParams }: PageProps) {
@@ -179,14 +251,42 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   const monthStart = getMonthStartISO(todayISO);
   const monthEnd = getMonthEndISO(todayISO);
   const last30Start = addDaysISO(todayISO, -29);
+  const presetRanges = [
+    { key: "7d", ...getPresetDates("7d", todayISO) },
+    { key: "30d", ...getPresetDates("30d", todayISO) },
+    { key: "month", ...getPresetDates("month", todayISO) },
+  ];
 
   const preset = sp(resolvedSearchParams, "preset") ?? "30d";
   const zipFilter = (sp(resolvedSearchParams, "zip") ?? "").trim();
   const statusScope = (sp(resolvedSearchParams, "status") ?? "revenue").trim();
+  const formStartDate = sp(resolvedSearchParams, "start") ?? "";
+  const formEndDate = sp(resolvedSearchParams, "end") ?? "";
+  const requestedSort = sp(resolvedSearchParams, "sort");
+  const requestedDir = sp(resolvedSearchParams, "dir");
+  const requestedView = sp(resolvedSearchParams, "view");
+  const requestedGranularity = sp(resolvedSearchParams, "granularity");
+  const sortKey: SortKey =
+    requestedSort === "customer" ||
+    requestedSort === "zip" ||
+    requestedSort === "city" ||
+    requestedSort === "delivery" ||
+    requestedSort === "pickup" ||
+    requestedSort === "status" ||
+    requestedSort === "price"
+      ? requestedSort
+      : "delivery";
+  const sortDirection: SortDirection = requestedDir === "asc" ? "asc" : "desc";
+  const currentView: ResultsView = requestedView === "chart" ? "chart" : "table";
 
   const presetDates = getPresetDates(preset, todayISO);
-  const startDate = sp(resolvedSearchParams, "start") ?? presetDates.start ?? "";
-  const endDate = sp(resolvedSearchParams, "end") ?? presetDates.end ?? "";
+  const startDate = formStartDate || presetDates.start || "";
+  const endDate = formEndDate || presetDates.end || "";
+  const advancedFiltersActive =
+    formStartDate.length > 0 ||
+    formEndDate.length > 0 ||
+    zipFilter.length > 0 ||
+    statusScope !== "revenue";
 
   const tableStatuses =
     statusScope === "all-active" ? ALL_ACTIVE_STATUSES : REVENUE_STATUSES;
@@ -294,88 +394,6 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   const topZipAllTime =
     [...revenueByZipAllTime.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
 
-  const filteredRevenueRows = tableRows.filter((row) =>
-    REVENUE_STATUSES.includes(row.status)
-  );
-
-  const filteredRevenue = filteredRevenueRows.reduce(
-    (sum, row) => sum + (centsToDollars(row.total_price_cents) ?? 0),
-    0
-  );
-
-  const filteredRevenueByZip = new Map<
-    string,
-    { zip: string; revenue: number; jobs: number }
-  >();
-
-  const filteredRevenueByMonth = new Map<
-    string,
-    { label: string; revenue: number; jobs: number }
-  >();
-
-  const filteredRevenueByCustomer = new Map<
-    string,
-    { customer: string; revenue: number; jobs: number }
-  >();
-
-  for (const row of filteredRevenueRows) {
-    const revenue = centsToDollars(row.total_price_cents) ?? 0;
-
-    const zip = row.customer_zip?.trim();
-    if (zip) {
-      const existing = filteredRevenueByZip.get(zip) ?? {
-        zip,
-        revenue: 0,
-        jobs: 0,
-      };
-      existing.revenue += revenue;
-      existing.jobs += 1;
-      filteredRevenueByZip.set(zip, existing);
-    }
-
-    const monthKey = row.delivery_date ? row.delivery_date.slice(0, 7) : null;
-    if (monthKey) {
-      const dt = new Date(`${monthKey}-01T00:00:00`);
-      const label = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        month: "short",
-        year: "numeric",
-      }).format(dt);
-
-      const existing = filteredRevenueByMonth.get(monthKey) ?? {
-        label,
-        revenue: 0,
-        jobs: 0,
-      };
-      existing.revenue += revenue;
-      existing.jobs += 1;
-      filteredRevenueByMonth.set(monthKey, existing);
-    }
-
-    const customer = row.customer_name?.trim() || "Unnamed customer";
-    const customerExisting = filteredRevenueByCustomer.get(customer) ?? {
-      customer,
-      revenue: 0,
-      jobs: 0,
-    };
-    customerExisting.revenue += revenue;
-    customerExisting.jobs += 1;
-    filteredRevenueByCustomer.set(customer, customerExisting);
-  }
-
-  const topZipBreakdown = [...filteredRevenueByZip.values()]
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-
-  const monthlyBreakdown = [...filteredRevenueByMonth.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([, value]) => value)
-    .slice(-6);
-
-  const topCustomers = [...filteredRevenueByCustomer.values()]
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5);
-
   const zipOptions = Array.from(
     new Set(
       zipOptionRows
@@ -383,16 +401,166 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         .filter((value): value is string => Boolean(value))
     )
   ).sort((a, b) => a.localeCompare(b));
+  const sortedTableRows = [...tableRows].sort((left, right) => {
+    const comparison =
+      sortKey === "customer"
+        ? compareNullableText(left.customer_name, right.customer_name)
+        : sortKey === "zip"
+          ? compareNullableText(left.customer_zip, right.customer_zip)
+          : sortKey === "city"
+            ? compareNullableText(left.customer_city, right.customer_city)
+            : sortKey === "delivery"
+              ? compareNullableDate(left.delivery_date, right.delivery_date)
+              : sortKey === "pickup"
+                ? compareNullableDate(left.pickup_date, right.pickup_date)
+                : sortKey === "status"
+                  ? compareNullableText(prettyStatus(left.status), prettyStatus(right.status))
+                  : compareNullableNumber(left.total_price_cents, right.total_price_cents);
+
+    if (comparison !== 0) {
+      return sortDirection === "asc" ? comparison : -comparison;
+    }
+
+    return left.id.localeCompare(right.id);
+  });
+  const defaultGranularity: Granularity =
+    !startDate || !endDate
+      ? "monthly"
+      : daysBetween(startDate, endDate) <= 31
+        ? "daily"
+        : daysBetween(startDate, endDate) <= 120
+          ? "weekly"
+          : "monthly";
+  const currentGranularity: Granularity =
+    requestedGranularity === "daily" ||
+    requestedGranularity === "weekly" ||
+    requestedGranularity === "monthly" ||
+    requestedGranularity === "annual"
+      ? requestedGranularity
+      : defaultGranularity;
+  const chartBuckets = new Map<
+    string,
+    { key: string; label: string; fullLabel: string; value: number; bookings: number }
+  >();
+
+  for (const row of tableRows) {
+    if (!row.delivery_date) continue;
+
+    const bucketKey =
+      currentGranularity === "daily"
+        ? row.delivery_date
+        : currentGranularity === "weekly"
+          ? startOfWeekISO(row.delivery_date)
+          : currentGranularity === "monthly"
+            ? startOfMonthISO(row.delivery_date)
+            : startOfYearISO(row.delivery_date);
+    const date = new Date(`${bucketKey}T00:00:00`);
+    const label =
+      currentGranularity === "daily"
+        ? new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            timeZone: "America/New_York",
+          }).format(date)
+        : currentGranularity === "weekly"
+          ? new Intl.DateTimeFormat("en-US", {
+              month: "short",
+              day: "numeric",
+              timeZone: "America/New_York",
+            }).format(date)
+          : currentGranularity === "monthly"
+            ? new Intl.DateTimeFormat("en-US", {
+                month: "short",
+                year: "2-digit",
+                timeZone: "America/New_York",
+              }).format(date)
+            : new Intl.DateTimeFormat("en-US", {
+                year: "numeric",
+                timeZone: "America/New_York",
+              }).format(date);
+    const fullLabel =
+      currentGranularity === "weekly"
+        ? `Week of ${new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            timeZone: "America/New_York",
+          }).format(date)}`
+        : currentGranularity === "monthly"
+          ? new Intl.DateTimeFormat("en-US", {
+              month: "long",
+              year: "numeric",
+              timeZone: "America/New_York",
+            }).format(date)
+          : currentGranularity === "annual"
+            ? new Intl.DateTimeFormat("en-US", {
+                year: "numeric",
+                timeZone: "America/New_York",
+              }).format(date)
+            : new Intl.DateTimeFormat("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              timeZone: "America/New_York",
+            }).format(date);
+    const existing = chartBuckets.get(bucketKey) ?? {
+      key: bucketKey,
+      label,
+      fullLabel,
+      value: 0,
+      bookings: 0,
+    };
+
+    existing.value += centsToDollars(row.total_price_cents) ?? 0;
+    existing.bookings += 1;
+    chartBuckets.set(bucketKey, existing);
+  }
+
+  const chartPoints = [...chartBuckets.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const totalChartValue = tableRows.reduce(
+    (sum, row) => sum + (centsToDollars(row.total_price_cents) ?? 0),
+    0
+  );
+  const averageChartValue = tableRows.length > 0 ? totalChartValue / tableRows.length : 0;
+  const sortColumns = [
+    { key: "customer" as const, label: "Customer", align: "left" as const },
+    { key: "zip" as const, label: "ZIP", align: "left" as const },
+    { key: "city" as const, label: "City", align: "left" as const },
+    { key: "delivery" as const, label: "Delivery", align: "left" as const },
+    { key: "pickup" as const, label: "Pickup", align: "left" as const },
+    { key: "status" as const, label: "Status", align: "left" as const },
+    { key: "price" as const, label: "Price", align: "right" as const },
+  ].map((column) => {
+    const active = sortKey === column.key;
+    const nextDir: SortDirection = active && sortDirection === "asc" ? "desc" : "asc";
+
+    return {
+      ...column,
+      active,
+      direction: active ? sortDirection : nextDir,
+      href: `${buildHref({
+        preset,
+        start: formStartDate || undefined,
+        end: formEndDate || undefined,
+        zip: zipFilter || undefined,
+        status: statusScope,
+        sort: column.key,
+        dir: nextDir,
+        view: currentView,
+        granularity: currentGranularity,
+      })}#booking-results`,
+    };
+  });
 
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Financials"
+        title="Revenue"
         description="Track revenue, booking value, and business performance."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <div className={cardShell("p-5")}>
+        <div className={summaryCardShell("green", "p-5")}>
           <p className="text-sm font-medium text-slate-500">Revenue this month</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {formatUsd(revenueThisMonth, { maximumFractionDigits: 0 })}
@@ -402,7 +570,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <div className={cardShell("p-5")}>
+        <div className={summaryCardShell("blue", "p-5")}>
           <p className="text-sm font-medium text-slate-500">Revenue last 30 days</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {formatUsd(revenueLast30Days, { maximumFractionDigits: 0 })}
@@ -412,7 +580,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <div className={cardShell("p-5")}>
+        <div className={summaryCardShell("violet", "p-5")}>
           <p className="text-sm font-medium text-slate-500">Average booking value</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {formatUsd(averageBookingValue, { maximumFractionDigits: 0 })}
@@ -422,7 +590,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <div className={cardShell("p-5")}>
+        <div className={summaryCardShell("amber", "p-5")}>
           <p className="text-sm font-medium text-slate-500">
             Revenue-producing jobs
           </p>
@@ -434,7 +602,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
           </p>
         </div>
 
-        <div className={cardShell("p-5")}>
+        <div className={summaryCardShell("teal", "p-5")}>
           <p className="text-sm font-medium text-slate-500">Highest value ZIP</p>
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
             {topZipAllTime?.[0] ?? "—"}
@@ -445,312 +613,152 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         </div>
       </section>
 
-      <section className={cardShell("mt-8 p-6")}>
-        <div className="flex flex-col gap-5">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Filters</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Narrow the revenue table and breakdowns by date, ZIP, and job state.
-            </p>
-          </div>
+      <FinancialFiltersCard
+        preset={preset}
+        startDate={formStartDate}
+        endDate={formEndDate}
+        zipFilter={zipFilter}
+        statusScope={statusScope}
+        currentView={currentView}
+        currentGranularity={currentGranularity}
+        zipOptions={zipOptions}
+        presetRanges={presetRanges}
+        advancedDefaultOpen={advancedFiltersActive}
+        quickRanges={[
+          {
+            key: "7d",
+            label: "Last 7 days",
+            href: `${buildHref({
+              preset: "7d",
+              zip: zipFilter || undefined,
+              status: statusScope,
+              sort: sortKey,
+              dir: sortDirection,
+              view: currentView,
+              granularity: currentGranularity,
+            })}#filters`,
+            active: isPresetRangeActive("7d", todayISO, startDate, endDate),
+          },
+          {
+            key: "30d",
+            label: "Last 30 days",
+            href: `${buildHref({
+              preset: "30d",
+              zip: zipFilter || undefined,
+              status: statusScope,
+              sort: sortKey,
+              dir: sortDirection,
+              view: currentView,
+              granularity: currentGranularity,
+            })}#filters`,
+            active: isPresetRangeActive("30d", todayISO, startDate, endDate),
+          },
+          {
+            key: "month",
+            label: "This month",
+            href: `${buildHref({
+              preset: "month",
+              zip: zipFilter || undefined,
+              status: statusScope,
+              sort: sortKey,
+              dir: sortDirection,
+              view: currentView,
+              granularity: currentGranularity,
+            })}#filters`,
+            active: isPresetRangeActive("month", todayISO, startDate, endDate),
+          },
+          {
+            key: "all",
+            label: "All time",
+            href: `${buildHref({
+              preset: "all",
+              zip: zipFilter || undefined,
+              status: statusScope,
+              sort: sortKey,
+              dir: sortDirection,
+              view: currentView,
+              granularity: currentGranularity,
+            })}#filters`,
+            active: startDate === "" && endDate === "",
+          },
+        ]}
+      />
 
-          <div className="flex flex-wrap gap-2">
-            {[
-              { key: "7d", label: "Last 7 days" },
-              { key: "30d", label: "Last 30 days" },
-              { key: "month", label: "This month" },
-              { key: "all", label: "All time" },
-            ].map((item) => {
-              const active = preset === item.key;
-
-              return (
-                <Link
-                  key={item.key}
-                  href={buildHref({
-                    preset: item.key,
-                    zip: zipFilter || undefined,
-                    status: statusScope,
-                  })}
-                  className={`inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition ${
-                    active
-                      ? "bg-[#F97316] text-white shadow-sm"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-
-          <form method="GET" className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <input type="hidden" name="preset" value={preset} />
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-700">
-                Start date
-              </span>
-              <input
-                type="date"
-                name="start"
-                defaultValue={startDate}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316]"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-700">
-                End date
-              </span>
-              <input
-                type="date"
-                name="end"
-                defaultValue={endDate}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316]"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-700">ZIP</span>
-              <select
-                name="zip"
-                defaultValue={zipFilter}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316]"
-              >
-                <option value="">All ZIPs</option>
-                {zipOptions.map((zip) => (
-                  <option key={zip} value={zip}>
-                    {zip}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-slate-700">
-                Status scope
-              </span>
-              <select
-                name="status"
-                defaultValue={statusScope}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316]"
-              >
-                <option value="revenue">Revenue only</option>
-                <option value="all-active">All active jobs</option>
-              </select>
-            </label>
-
-            <div className="flex items-end gap-3">
-              <button
-                type="submit"
-                className="inline-flex h-[50px] items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600"
-              >
-                Apply filters
-              </button>
-
-              <Link
-                href="/admin/financials"
-                className="inline-flex h-[50px] items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Reset
-              </Link>
-            </div>
-          </form>
-        </div>
-      </section>
-
-      <section className="mt-8 grid gap-4 xl:grid-cols-3">
-        <div className={cardShell("p-6")}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Filtered revenue</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Revenue represented by the current table selection
-              </p>
-            </div>
-            <div className="rounded-2xl bg-orange-50 px-3 py-2 text-sm font-semibold text-[#F97316]">
-              {formatUsd(filteredRevenue, { maximumFractionDigits: 0 })}
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {topZipBreakdown.length === 0 ? (
-              <p className="text-sm text-slate-500">No ZIP revenue data for this filter.</p>
-            ) : (
-              topZipBreakdown.map((item) => (
-                <div
-                  key={item.zip}
-                  className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{item.zip}</p>
-                    <p className="text-xs text-slate-500">
-                      {item.jobs} {item.jobs === 1 ? "job" : "jobs"}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {formatUsd(item.revenue, { maximumFractionDigits: 0 })}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className={cardShell("p-6")}>
-          <h2 className="text-lg font-semibold text-slate-900">Revenue by month</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Last 6 delivery months in the current filter
-          </p>
-
-          <div className="mt-5 space-y-3">
-            {monthlyBreakdown.length === 0 ? (
-              <p className="text-sm text-slate-500">No monthly revenue data yet.</p>
-            ) : (
-              monthlyBreakdown.map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                    <p className="text-xs text-slate-500">
-                      {item.jobs} {item.jobs === 1 ? "job" : "jobs"}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {formatUsd(item.revenue, { maximumFractionDigits: 0 })}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className={cardShell("p-6")}>
-          <h2 className="text-lg font-semibold text-slate-900">Top customers</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Highest spend based on current filtered revenue jobs
-          </p>
-
-          <div className="mt-5 space-y-3">
-            {topCustomers.length === 0 ? (
-              <p className="text-sm text-slate-500">No customer revenue data yet.</p>
-            ) : (
-              topCustomers.map((item) => (
-                <div
-                  key={item.customer}
-                  className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {item.customer}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {item.jobs} {item.jobs === 1 ? "job" : "jobs"}
-                    </p>
-                  </div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {formatUsd(item.revenue, { maximumFractionDigits: 0 })}
-                  </p>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className={cardShell("mt-8 overflow-hidden")}>
-        <div className="border-b border-slate-200/80 px-6 py-5">
-          <h2 className="text-lg font-semibold text-slate-900">Revenue table</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Jobs contributing to financial visibility based on the current filters.
-          </p>
-        </div>
-
-        {tableRows.length === 0 ? (
-          <div className="px-6 py-12 text-sm text-slate-500">
-            No bookings matched the current filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50/80">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Customer
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    ZIP
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    City
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Delivery
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Pickup
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Price
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {tableRows.map((row) => {
-                  return (
-                    <tr key={row.id} className="hover:bg-slate-50 transition">
-                      <td className="px-6 py-4 text-sm font-semibold text-slate-900">
-                        {row.customer_name || "Unnamed customer"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-700">
-                        {row.customer_zip || "—"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-700">
-                        {row.customer_city || "—"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-700">
-                        {formatDate(row.delivery_date)}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-700">
-                        {formatDate(row.pickup_date)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(
-                            row.status
-                          )}`}
-                        >
-                          {prettyStatus(row.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-slate-900">
-                        {formatUsdFromCents(row.total_price_cents, { maximumFractionDigits: 0 })}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <Link
-                          href={`/admin/bookings/${row.id}`}
-                          className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                        >
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <BookingResultsSection
+        rows={sortedTableRows.map((row) => ({
+          id: row.id,
+          customerName: row.customer_name || "Unnamed customer",
+          customerZip: row.customer_zip || "—",
+          customerCity: row.customer_city || "—",
+          deliveryDate: formatDate(row.delivery_date),
+          pickupDate: formatDate(row.pickup_date),
+          statusLabel: prettyStatus(row.status),
+          statusTone: statusBadgeClasses(row.status),
+          priceLabel: formatUsdFromCents(row.total_price_cents, {
+            maximumFractionDigits: 0,
+          }),
+          detailHref: `/admin/bookings/${row.id}`,
+        }))}
+        sortColumns={sortColumns}
+        chartPoints={chartPoints}
+        currentView={currentView}
+        tableHref={`${buildHref({
+          preset,
+          start: formStartDate || undefined,
+          end: formEndDate || undefined,
+          zip: zipFilter || undefined,
+          status: statusScope,
+          sort: sortKey,
+          dir: sortDirection,
+          view: "table",
+          granularity: currentGranularity,
+        })}#booking-results`}
+        chartHref={`${buildHref({
+          preset,
+          start: formStartDate || undefined,
+          end: formEndDate || undefined,
+          zip: zipFilter || undefined,
+          status: statusScope,
+          sort: sortKey,
+          dir: sortDirection,
+          view: "chart",
+          granularity: currentGranularity,
+        })}#booking-results`}
+        currentGranularity={currentGranularity}
+        granularityOptions={
+          [
+            { key: "daily" as const, label: "Daily" },
+            { key: "weekly" as const, label: "Weekly" },
+            { key: "monthly" as const, label: "Monthly" },
+            { key: "annual" as const, label: "Annual" },
+          ].map((option) => ({
+            ...option,
+            href: `${buildHref({
+              preset,
+              start: formStartDate || undefined,
+              end: formEndDate || undefined,
+              zip: zipFilter || undefined,
+              status: statusScope,
+              sort: sortKey,
+              dir: sortDirection,
+              view: "chart",
+              granularity: option.key,
+            })}#booking-results`,
+          }))
+        }
+        totalValueLabel={formatUsd(totalChartValue, { maximumFractionDigits: 0 })}
+        bookingsLabel={numberFmt(tableRows.length)}
+        averageValueLabel={formatUsd(averageChartValue, { maximumFractionDigits: 0 })}
+        bucketLabel={
+          currentGranularity === "daily"
+            ? "Daily"
+            : currentGranularity === "weekly"
+              ? "Weekly"
+              : currentGranularity === "monthly"
+                ? "Monthly"
+                : "Annual"
+        }
+      />
 
       <div className="mt-6 rounded-[24px] border border-orange-100 bg-orange-50/70 px-5 py-4 text-sm text-slate-700">
         V1 financials are based on the booking total stored on each job record and

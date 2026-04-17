@@ -314,7 +314,7 @@ const HOME_FAQ_FALLBACK: HomeFaqContent = {
     {
       question: "How long can I keep the dumpster?",
       answer:
-        "Most rentals include a standard rental period (we’ll confirm when you book). If you need extra time, just text us — extensions are easy.",
+        "Every booking includes a standard rental period. If you need extra time, we can review extra days and any added charges.",
     },
     {
       question: "Where can you place the dumpster?",
@@ -340,7 +340,8 @@ const PRICING_INTRO_FALLBACK: PricingIntroContent = {
 };
 
 const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
-  productBody: "Flat-rate pricing includes delivery, pickup, and standard weight allowance.",
+  productBody:
+    "Base pricing includes delivery, pickup, the standard rental period, and the standard weight allowance.",
   dimensionLabel: "7' × 14' × 4'",
   featureList: ["Driveway friendly", "Up to 3 tons included", "Flexible rental period"],
   includedHeading: "What’s included in your rental",
@@ -349,10 +350,10 @@ const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
   includedItems: [
     "Delivery & pickup included",
     "Up to 3 tons included",
-    "Flexible rental period",
+    "Standard rental period included",
     "No hidden fees",
   ],
-  footnote: "Overage charges apply only if weight allowance is exceeded.",
+  footnote: "Extra days and weight overages are billed only when they apply.",
 };
 
 const SUPPORT_MARKETING_FALLBACK: SupportMarketingContent = {
@@ -440,7 +441,7 @@ const BOOKING_SUMMARY_FALLBACK: BookingSummaryContent = {
   locationEmptyText: "No ZIP saved yet. Please go back and validate your ZIP.",
   totalLabel: "Flat-rate total (prepay)",
   includedTitle: "What’s included",
-  includedItems: ["Delivery & pickup", "7-day rental", "2.5 tons included"],
+  includedItems: ["Delivery & pickup", "Standard rental period included", "2.5 tons included"],
   weightPolicyTitle: "Included Weight Policy",
   weightPolicyBody: "Your flat rate includes up to 2.5 tons. Overages are billed only if exceeded.",
   weightPolicyFootnote: "Most homeowners stay under the included weight.",
@@ -457,10 +458,10 @@ const BOOKING_CONFIRM_FALLBACK: BookingConfirmContent = {
   capLoadingText: "Checking availability limits…",
   deliveryTimeNote: "We’ll contact you with the exact delivery time.",
   pickupWindowTemplate: "Pickup must be scheduled between {min} and {max}. Dates outside this window are unavailable.",
-  pickupLaterTitle: "I’ll schedule pickup later",
-  pickupLaterDescription: "You’ll get a confirmation link where you can request pickup anytime.",
-  pickupNowTitle: "Schedule a pickup date now",
-  pickupEarliestPrefix: "Earliest pickup:",
+  pickupLaterTitle: "Included rental period",
+  pickupLaterDescription: "Your pickup date is scheduled as part of booking.",
+  pickupNowTitle: "Choose a pickup date",
+  pickupEarliestPrefix: "Earliest allowed pickup:",
 };
 
 const BOOKING_CHECKOUT_FALLBACK: BookingCheckoutContent = {

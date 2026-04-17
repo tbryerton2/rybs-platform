@@ -1,7 +1,8 @@
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
+import { getManagedDumpsterFleetSize } from "@/lib/admin/equipment";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export const FLEET_SIZE = 3;
+export const FLEET_SIZE = getManagedDumpsterFleetSize();
 
 const SCHEDULE_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
@@ -17,6 +18,7 @@ const SCHEDULE_JOB_SELECT = `
         pickup_date,
         pickup_mode,
         status,
+        notes,
         created_at,
         ${SCHEDULE_PLACEMENT_SELECT}
         `;
@@ -32,6 +34,7 @@ const BASE_SCHEDULE_JOB_SELECT = `
         pickup_date,
         pickup_mode,
         status,
+        notes,
         created_at
         `;
 

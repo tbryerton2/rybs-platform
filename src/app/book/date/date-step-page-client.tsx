@@ -1,7 +1,7 @@
 // src/app/book/date/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { BookingPriceQuote } from "@/lib/booking-pricing";
 import { getHoldMinutes } from "@/lib/config";
@@ -133,7 +133,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
   const highlightedEarliestDate = nextAvailableDate;
 
-  async function loadCalendarRange(start: string, days = 186) {
+  const loadCalendarRange = useCallback(async (start: string, days = 186) => {
     setCalendarLoading(true);
     setCalendarError(null);
 
@@ -159,11 +159,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     } finally {
       setCalendarLoading(false);
     }
-  }
+  }, [content.availabilityError]);
 
   useEffect(() => {
     void loadCalendarRange(calendarRangeStart);
-  }, [calendarRangeStart]);
+  }, [calendarRangeStart, loadCalendarRange]);
 
   const selectedCalendarEntry = useMemo(
     () => calendarEntries.find((entry) => entry.date === normalizedDate) || null,
@@ -398,16 +398,16 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     setHold({ state: "creating" });
 
     let zip = "";
-    let bodyRentalDays = cap ? cap.maxDaysAllowed : 7;
+    let bodyRentalDays = cap ? cap.maxDaysAllowed : 1;
     try {
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
       zip = (existing.zip || "").trim(); // assuming Step 1 saved it as `zip`
-      const includedRentalDays = existing.priceQuote?.includedRentalDays ?? 7;
-      bodyRentalDays = cap ? cap.maxDaysAllowed : includedRentalDays;
+      const standardRentalDays = existing.priceQuote?.standardRentalDays ?? 1;
+      bodyRentalDays = cap ? cap.maxDaysAllowed : standardRentalDays;
     } catch {
       zip = "";
-      bodyRentalDays = cap ? cap.maxDaysAllowed : 7;
+      bodyRentalDays = cap ? cap.maxDaysAllowed : 1;
     }
 
     try {
@@ -571,7 +571,9 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                       </span>
                       {selectedCalendarEntry.state === "limited"
                         ? ` — only ${selectedCalendarEntry.remaining} dumpster left for delivery.`
-                        : ` — ${availability.remaining} dumpster${availability.remaining === 1 ? "" : "s"} available for delivery.`}
+                        : availability.state === "ok"
+                          ? ` — ${availability.remaining} dumpster${availability.remaining === 1 ? "" : "s"} available for delivery.`
+                          : ""}
                     </>
                   ) : null}
                 </div>

@@ -17,7 +17,22 @@ export async function get14YardPriceForZip(
   const zip = sanitizeZip(inputZip);
   const zipValid = zip.length === 5;
   const pricingSettings = await getPricingSettingsSnapshot();
-  const defaultPrice = pricingSettings.standardRentalPrice;
+  const defaultPrice = pricingSettings.basePrice;
+  const buildQuote = (price: number, overridePrice: number | null, pricingSource: "zip_override" | "global_default") =>
+    buildBookingPriceQuote({
+      zip,
+      deliveryDate: bookingInput?.deliveryDate,
+      pickupDate: bookingInput?.pickupDate,
+      pickupMode: bookingInput?.pickupMode,
+      basePrice: price,
+      defaultBasePrice: defaultPrice,
+      standardRentalDays: pricingSettings.standardRentalDays,
+      dailyOveragePrice: pricingSettings.dailyOveragePrice,
+      maxRentalDays: pricingSettings.maxRentalDays,
+      allowExtendedRentalAtBooking: pricingSettings.allowExtendedRentalAtBooking,
+      overrideBasePrice: overridePrice,
+      pricingSource,
+    });
 
   if (!zipValid) {
     return {
@@ -27,7 +42,8 @@ export async function get14YardPriceForZip(
       defaultPrice,
       overridePrice: null as number | null,
       pricingSource: "global_default" as const,
-      priceQuote: null,
+      priceQuote: buildQuote(defaultPrice, null, "global_default"),
+      rentalValidationError: null as string | null,
       pricingSettings,
       serviceable: null as boolean | null,
     };
@@ -51,7 +67,8 @@ export async function get14YardPriceForZip(
       defaultPrice,
       overridePrice: null,
       pricingSource: "global_default" as const,
-      priceQuote: null,
+      priceQuote: buildQuote(defaultPrice, null, "global_default"),
+      rentalValidationError: null,
       pricingSettings,
       serviceable: false,
     };
@@ -63,6 +80,7 @@ export async function get14YardPriceForZip(
   const hasOverride = Number.isFinite(overridePrice) && overridePrice! > 0;
   const price = hasOverride ? Math.round(overridePrice!) : defaultPrice;
   const pricingSource = hasOverride ? "zip_override" : "global_default";
+  const priceQuote = buildQuote(price, hasOverride ? Math.round(overridePrice!) : null, pricingSource);
 
   return {
     zip,
@@ -71,18 +89,8 @@ export async function get14YardPriceForZip(
     defaultPrice,
     overridePrice: hasOverride ? Math.round(overridePrice!) : null,
     pricingSource,
-    priceQuote: buildBookingPriceQuote({
-      zip,
-      deliveryDate: bookingInput?.deliveryDate,
-      pickupDate: bookingInput?.pickupDate,
-      pickupMode: bookingInput?.pickupMode,
-      rentalPrice: price,
-      defaultRentalPrice: defaultPrice,
-      includedRentalDays: pricingSettings.includedRentalDays,
-      dailyOveragePrice: pricingSettings.dailyOveragePrice,
-      overrideRentalPrice: hasOverride ? overridePrice : null,
-      pricingSource,
-    }),
+    priceQuote,
+    rentalValidationError: priceQuote.validationError,
     pricingSettings,
     serviceable: true,
   };

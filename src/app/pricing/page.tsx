@@ -1,4 +1,5 @@
 import { get14YardPriceForZip, sanitizeZip } from "@/lib/pricing";
+import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import {
   getPricingIntroContent,
   getPricingPromisesContent,
@@ -17,8 +18,9 @@ export default async function PricingPage({
   const zipValid = zip.length === 5;
   const preview = sp?.preview === "1";
 
-  const [{ price }, pricingIntro, pricingPromises] = await Promise.all([
+  const [{ price }, pricingSettings, pricingIntro, pricingPromises] = await Promise.all([
     get14YardPriceForZip(zip),
+    getPricingSettingsSnapshot(),
     getPricingIntroContent({ preview }),
     getPricingPromisesContent({ preview }),
   ]);
@@ -73,6 +75,30 @@ export default async function PricingPage({
               <p className="mt-2 text-slate-600">
                 {pricingPromises.productBody}
               </p>
+
+              <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50/70 p-4 text-sm text-slate-700">
+                <div className="font-semibold text-slate-900">
+                  Includes up to {pricingSettings.standardRentalDays} day{pricingSettings.standardRentalDays === 1 ? "" : "s"}
+                </div>
+                <div className="mt-1">
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                    maximumFractionDigits: 0,
+                  }).format(pricingSettings.dailyOveragePrice)}{" "}
+                  per extra day after day {pricingSettings.standardRentalDays}.
+                </div>
+                {pricingSettings.maxRentalDays ? (
+                  <div className="mt-1">
+                    Maximum rental length: {pricingSettings.maxRentalDays} days.
+                  </div>
+                ) : null}
+                <div className="mt-1">
+                  {pricingSettings.allowExtendedRentalAtBooking
+                    ? "Customers can request extra days during online booking."
+                    : "Online booking is limited to the included rental period."}
+                </div>
+              </div>
 
               <ul className="mt-6 space-y-3 text-sm text-slate-600">
                 <li>• {pricingPromises.dimensionLabel.replace(/'/g, "\u0027")}</li>

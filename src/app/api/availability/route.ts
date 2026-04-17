@@ -4,6 +4,7 @@ import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
 } from "@/lib/tenant/retail-site-settings";
+import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
@@ -15,6 +16,7 @@ export async function GET(req: Request) {
   }
 
   const retailSiteSettings = await getRetailSiteSettings();
+  const pricingSettings = await getPricingSettingsSnapshot();
   const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
   if (closure.blocked) {
     return NextResponse.json({
@@ -29,7 +31,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabase.rpc("get_delivery_availability", {
     p_delivery_date: date,
-    p_days: 7,
+    p_days: pricingSettings.standardRentalDays,
   });
 
   if (error) {

@@ -1,102 +1,260 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { isMissingPricingSettingsRentalPeriodColumnsError } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+export type PricingSettingsFormValues = {
+  basePrice: string;
+  standardRentalDays: string;
+  dailyOveragePrice: string;
+  maxRentalDays: string;
+  allowExtendedRentalAtBooking: boolean;
+  includedTons: string;
+  tonOveragePrice: string;
+};
+
+export type PricingSettingsFieldErrors = Partial<
+  Record<
+    | "basePrice"
+    | "standardRentalDays"
+    | "dailyOveragePrice"
+    | "maxRentalDays"
+    | "allowExtendedRentalAtBooking"
+    | "includedTons"
+    | "tonOveragePrice",
+    string
+  >
+>;
+
+export type PricingSettingsFormState = {
+  success: boolean;
+  message: string;
+  error?: string;
+  fieldErrors: PricingSettingsFieldErrors;
+  values: PricingSettingsFormValues;
+  messageKey: number;
+};
 
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value : "";
 }
 
-function parseCurrency(value: string, fieldLabel: string) {
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${fieldLabel} is required`);
+function asBoolean(value: FormDataEntryValue | null) {
+  return value === "on" || value === "true";
+}
 
-  const parsed = Number(normalized);
+function normalizeCurrency(value: string) {
+  return value.trim();
+}
+
+function buildValues(formData: FormData): PricingSettingsFormValues {
+  return {
+    basePrice: normalizeCurrency(asString(formData.get("basePrice"))),
+    standardRentalDays: asString(formData.get("standardRentalDays")).trim(),
+    dailyOveragePrice: normalizeCurrency(asString(formData.get("dailyOveragePrice"))),
+    maxRentalDays: asString(formData.get("maxRentalDays")).trim(),
+    allowExtendedRentalAtBooking: asBoolean(formData.get("allowExtendedRentalAtBooking")),
+    includedTons: asString(formData.get("includedTons")).trim(),
+    tonOveragePrice: normalizeCurrency(asString(formData.get("tonOveragePrice"))),
+  };
+}
+
+function invalidState(
+  values: PricingSettingsFormValues,
+  fieldErrors: PricingSettingsFieldErrors,
+  error = "Please fix the highlighted pricing fields."
+): PricingSettingsFormState {
+  return {
+    success: false,
+    message: "",
+    error,
+    fieldErrors,
+    values,
+    messageKey: Date.now(),
+  };
+}
+
+function parseCurrency(
+  rawValue: string,
+  fieldName: keyof PricingSettingsFieldErrors,
+  fieldLabel: string,
+  fieldErrors: PricingSettingsFieldErrors,
+) {
+  if (!rawValue) {
+    fieldErrors[fieldName] = `${fieldLabel} is required.`;
+    return null;
+  }
+
+  const parsed = Number(rawValue);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${fieldLabel} must be a valid non-negative number`);
+    fieldErrors[fieldName] = `${fieldLabel} must be 0 or more.`;
+    return null;
   }
 
   return Number(parsed.toFixed(2));
 }
 
-function parseInteger(value: string, fieldLabel: string) {
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${fieldLabel} is required`);
+function parseRequiredInteger(
+  rawValue: string,
+  fieldName: keyof PricingSettingsFieldErrors,
+  fieldLabel: string,
+  fieldErrors: PricingSettingsFieldErrors,
+) {
+  if (!rawValue) {
+    fieldErrors[fieldName] = `${fieldLabel} is required.`;
+    return null;
+  }
 
-  const parsed = Number(normalized);
+  const parsed = Number(rawValue);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${fieldLabel} must be a whole number greater than 0`);
+    fieldErrors[fieldName] = `${fieldLabel} must be a whole number of at least 1.`;
+    return null;
   }
 
   return parsed;
 }
 
-function parseDecimal(value: string, fieldLabel: string) {
-  const normalized = value.trim();
-  if (!normalized) throw new Error(`${fieldLabel} is required`);
+function parseOptionalInteger(
+  rawValue: string,
+  fieldName: keyof PricingSettingsFieldErrors,
+  fieldLabel: string,
+  fieldErrors: PricingSettingsFieldErrors,
+) {
+  if (!rawValue) return null;
 
-  const parsed = Number(normalized);
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed)) {
+    fieldErrors[fieldName] = `${fieldLabel} must be a whole number.`;
+    return null;
+  }
+
+  return parsed;
+}
+
+function parseDecimal(
+  rawValue: string,
+  fieldName: keyof PricingSettingsFieldErrors,
+  fieldLabel: string,
+  fieldErrors: PricingSettingsFieldErrors,
+) {
+  if (!rawValue) {
+    fieldErrors[fieldName] = `${fieldLabel} is required.`;
+    return null;
+  }
+
+  const parsed = Number(rawValue);
   if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error(`${fieldLabel} must be a valid non-negative number`);
+    fieldErrors[fieldName] = `${fieldLabel} must be 0 or more.`;
+    return null;
   }
 
   return Number(parsed.toFixed(2));
 }
 
-export async function updatePricingSettingsAction(formData: FormData) {
-  const id = asString(formData.get("id"));
+export async function updatePricingSettingsAction(
+  prevState: PricingSettingsFormState,
+  formData: FormData
+): Promise<PricingSettingsFormState> {
+  const id = asString(formData.get("id")).trim();
+  const values = buildValues(formData);
 
-  if (!id) throw new Error("Missing pricing settings id");
+  if (!id) {
+    return {
+      ...prevState,
+      success: false,
+      error: "Missing pricing settings record.",
+      message: "",
+      messageKey: Date.now(),
+    };
+  }
 
-  const standardRentalPrice = parseCurrency(
-    asString(formData.get("standard_rental_price")),
-    "Standard rental price"
+  const fieldErrors: PricingSettingsFieldErrors = {};
+
+  const basePrice = parseCurrency(values.basePrice, "basePrice", "Base price", fieldErrors);
+  const standardRentalDays = parseRequiredInteger(
+    values.standardRentalDays,
+    "standardRentalDays",
+    "Standard rental period",
+    fieldErrors,
   );
-
-  const scheduledPickupPrice = parseCurrency(
-    asString(formData.get("scheduled_pickup_price")),
-    "Scheduled pickup price"
-  );
-
-  const includedRentalDays = parseInteger(
-    asString(formData.get("included_rental_days")),
-    "Included rental days"
-  );
-
-  const includedTons = parseDecimal(
-    asString(formData.get("included_tons")),
-    "Included tons"
-  );
-
   const dailyOveragePrice = parseCurrency(
-    asString(formData.get("daily_overage_price")),
-    "Daily overage price"
+    values.dailyOveragePrice,
+    "dailyOveragePrice",
+    "Daily overage rate",
+    fieldErrors,
   );
-
+  const maxRentalDays = parseOptionalInteger(
+    values.maxRentalDays,
+    "maxRentalDays",
+    "Maximum rental length",
+    fieldErrors,
+  );
+  const includedTons = parseDecimal(values.includedTons, "includedTons", "Included tons", fieldErrors);
   const tonOveragePrice = parseCurrency(
-    asString(formData.get("ton_overage_price")),
-    "Weight overage price"
+    values.tonOveragePrice,
+    "tonOveragePrice",
+    "Price per ton over",
+    fieldErrors,
   );
 
-  if (scheduledPickupPrice > standardRentalPrice) {
-    throw new Error("Scheduled pickup price cannot be greater than standard rental price");
+  if (
+    maxRentalDays !== null &&
+    standardRentalDays !== null &&
+    maxRentalDays < standardRentalDays
+  ) {
+    fieldErrors.maxRentalDays =
+      "Maximum rental length must be at least as long as the standard rental period.";
+  }
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return invalidState(values, fieldErrors);
   }
 
   const { error } = await supabaseAdmin
     .from("pricing_settings")
     .update({
-      standard_rental_price: standardRentalPrice,
-      scheduled_pickup_price: scheduledPickupPrice,
-      included_rental_days: includedRentalDays,
-      included_tons: includedTons,
+      standard_rental_price: basePrice,
+      scheduled_pickup_price: basePrice,
+      included_rental_days: standardRentalDays,
       daily_overage_price: dailyOveragePrice,
+      max_rental_days: maxRentalDays,
+      allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
+      included_tons: includedTons,
       ton_overage_price: tonOveragePrice,
     })
     .eq("id", id);
 
-  if (error) throw new Error(error.message);
+  if (error && isMissingPricingSettingsRentalPeriodColumnsError(error)) {
+    return {
+      success: false,
+      message: "",
+      error:
+        "Your database needs the latest pricing settings update before these changes can be saved. Apply migration 202604150101_pricing_settings_rental_period_model and try again.",
+      fieldErrors: {},
+      values,
+      messageKey: Date.now(),
+    };
+  }
+
+  if (error) {
+    return {
+      success: false,
+      message: "",
+      error: error.message,
+      fieldErrors: {},
+      values,
+      messageKey: Date.now(),
+    };
+  }
 
   revalidatePath("/admin/settings/pricing");
-  redirect("/admin/settings/pricing?saved=1");
+
+  return {
+    success: true,
+    message: "Pricing settings updated.",
+    fieldErrors: {},
+    values,
+    messageKey: Date.now(),
+  };
 }

@@ -98,7 +98,7 @@ cross join (
           ),
           jsonb_build_object(
             'question', 'How long can I keep the dumpster?',
-            'answer', 'Most rentals include a standard rental period (we’ll confirm when you book). If you need extra time, just text us — extensions are easy.'
+            'answer', 'Every booking includes a standard rental period. If you need extra time, we can review extra days and any added charges.'
           ),
           jsonb_build_object(
             'question', 'Where can you place the dumpster?',
@@ -125,7 +125,7 @@ cross join (
     (
       'content.pricing.promises',
       jsonb_build_object(
-        'productBody', 'Flat-rate pricing includes delivery, pickup, and standard weight allowance.',
+        'productBody', 'Base pricing includes delivery, pickup, the standard rental period, and the standard weight allowance.',
         'dimensionLabel', '7'' × 14'' × 4''',
         'featureList', jsonb_build_array(
           'Driveway friendly',
@@ -136,12 +136,12 @@ cross join (
         'includedPricePrefix', 'All included in the',
         'includedPriceSuffix', 'flat rate',
         'includedItems', jsonb_build_array(
-          'Delivery & pickup included',
-          'Up to 3 tons included',
-          'Flexible rental period',
-          'No hidden fees'
+            'Delivery & pickup included',
+            'Up to 3 tons included',
+            'Standard rental period included',
+            'No hidden fees'
         ),
-        'footnote', 'Overage charges apply only if weight allowance is exceeded.'
+        'footnote', 'Extra days and weight overages are billed only when they apply.'
       )
     ),
     (

@@ -114,7 +114,7 @@ export function buildPickupPlanningModel(input: {
     scheduledPickupDate,
     expectedAvailableDate,
     expectedAvailabilityHelper: expectedAvailableDate
-      ? `Based on the standard ${defaultRentalDays}-day rental assumption`
+      ? `Based on the configured ${defaultRentalDays}-day rental window`
       : null,
     risk,
     riskLabel,

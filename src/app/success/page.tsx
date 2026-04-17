@@ -10,6 +10,10 @@ type SuccessPageProps = {
     bookingRef?: string;
     email?: string;
     rentalPriceCents?: string;
+    standardRentalDays?: string;
+    bookedRentalDays?: string;
+    maxRentalDays?: string;
+    allowExtendedRentalAtBooking?: string;
     dailyOveragePriceCents?: string;
     extraDays?: string;
     extraDaysChargeCents?: string;
@@ -26,6 +30,10 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   const bookingEmail = params.email?.trim() || null;
   const portalHref = bookingEmail ? `/portal/login?email=${encodeURIComponent(bookingEmail)}` : "/portal/login";
   const rentalPriceCents = Number(params.rentalPriceCents);
+  const standardRentalDays = Number(params.standardRentalDays);
+  const bookedRentalDays = Number(params.bookedRentalDays);
+  const maxRentalDays = Number(params.maxRentalDays);
+  const allowExtendedRentalAtBooking = params.allowExtendedRentalAtBooking === "1";
   const dailyOveragePriceCents = Number(params.dailyOveragePriceCents);
   const extraDays = Number(params.extraDays);
   const extraDaysChargeCents = Number(params.extraDaysChargeCents);
@@ -65,7 +73,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
               <div className="text-sm font-semibold text-slate-900">{content.orderSummaryTitle}</div>
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex items-center justify-between gap-4 text-slate-700">
-                  <span>Dumpster rental</span>
+                  <span>Base price</span>
                   <span className="font-semibold text-slate-900">
                     {formatUsdFromCents(rentalPriceCents)}
                   </span>
@@ -90,6 +98,22 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
                   <span>Total</span>
                   <span>{formatUsdFromCents(totalCents)}</span>
                 </div>
+                {Number.isFinite(standardRentalDays) && standardRentalDays > 0 ? (
+                  <div className="pt-2 text-xs text-slate-500">
+                    {`Includes up to ${standardRentalDays} days. `}
+                    {Number.isFinite(dailyOveragePriceCents)
+                      ? `${formatUsdFromCents(dailyOveragePriceCents)} per extra day after day ${standardRentalDays}. `
+                      : ""}
+                    {Number.isFinite(maxRentalDays) && maxRentalDays > 0
+                      ? `Maximum rental length: ${maxRentalDays} days. `
+                      : ""}
+                    {!allowExtendedRentalAtBooking
+                      ? "Online booking was limited to the included rental period."
+                      : Number.isFinite(bookedRentalDays) && bookedRentalDays > standardRentalDays
+                        ? `Booked for ${bookedRentalDays} days total.`
+                        : ""}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}

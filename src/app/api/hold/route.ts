@@ -1,6 +1,9 @@
 // src/app/api/hold/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getManagedDumpsterFleetSize } from "@/lib/admin/equipment";
+import { addDaysYmd, getRentalPeriodDetails } from "@/lib/booking-pricing";
+import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabase } from "@/lib/supabase";
 import {
   getRetailCalendarClosureForDate,
@@ -52,10 +55,11 @@ export async function POST(req: Request) {
     const deliveryDate = (body?.deliveryDate || "").trim();
     const rentalDaysRaw = body?.rentalDays;
     const zip = (body?.zip || "").trim();
-    const rentalDays =
+    const pricingSettings = await getPricingSettingsSnapshot();
+    const requestedRentalDays =
       Number.isFinite(Number(rentalDaysRaw)) && Number(rentalDaysRaw) > 0
         ? Math.floor(Number(rentalDaysRaw))
-        : 7;
+        : pricingSettings.standardRentalDays;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) {
       return NextResponse.json(
@@ -64,9 +68,20 @@ export async function POST(req: Request) {
       );
     }
 
-    if (rentalDays < 1 || rentalDays > 30) {
+    const requestedPickupDate = addDaysYmd(deliveryDate, requestedRentalDays);
+    const rentalPeriod = getRentalPeriodDetails({
+      deliveryDate,
+      pickupDate: requestedPickupDate,
+      pickupMode: "date",
+      standardRentalDays: pricingSettings.standardRentalDays,
+      dailyOveragePrice: pricingSettings.dailyOveragePrice,
+      maxRentalDays: pricingSettings.maxRentalDays,
+      allowExtendedRentalAtBooking: pricingSettings.allowExtendedRentalAtBooking,
+    });
+
+    if (rentalPeriod.validationError || rentalPeriod.bookedRentalDays == null) {
       return NextResponse.json(
-        { ok: false, error: "Invalid rentalDays." },
+        { ok: false, error: rentalPeriod.validationError || "Invalid rental length." },
         { status: 400 }
       );
     }
@@ -157,7 +172,7 @@ export async function POST(req: Request) {
     // 2) Check current remaining capacity for this date
     const availRes = await supabase.rpc("get_delivery_availability", {
       p_delivery_date: deliveryDate,
-      p_days: rentalDays,
+      p_days: rentalPeriod.bookedRentalDays,
     });
 
     console.log("HOLD AVAIL RESPONSE:", availRes.data);
@@ -169,7 +184,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const row = availRes.data?.[0] ?? { capacity: 3, used: 0, remaining: 3 };
+    const fleetSize = getManagedDumpsterFleetSize();
+    const row = availRes.data?.[0] ?? { capacity: fleetSize, used: 0, remaining: fleetSize };
     const remaining = Number(row.remaining ?? 0);
 
     if (!Number.isFinite(remaining) || remaining <= 0) {
@@ -212,7 +228,7 @@ export async function POST(req: Request) {
     // 4) Re-check remaining after hold (nice UX)
     const availAfter = await supabase.rpc("get_delivery_availability", {
       p_delivery_date: deliveryDate,
-      p_days: rentalDays,
+      p_days: rentalPeriod.bookedRentalDays,
     });
 
     const fallbackRemaining = Math.max(0, remaining - 1);

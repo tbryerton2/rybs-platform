@@ -1,9 +1,9 @@
 // src/lib/config.ts
 
 /**
- * Central place for owner-configurable defaults.
- * For now: hardcoded.
- * Later: read from DB/admin settings.
+ * Admin-facing operational fallback only.
+ * Real customer pricing and booking duration rules come from pricing_settings.
+ * Keep this aligned with the bootstrap pricing default so fresh tenants behave coherently.
  */
 
 export function getDefaultRentalDays(): number {

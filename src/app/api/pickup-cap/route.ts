@@ -1,19 +1,10 @@
 import { NextResponse } from "next/server";
 import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabase } from "@/lib/supabase";
+import { addDaysYmd, getMaximumBookablePickupDate } from "@/lib/booking-pricing";
 
 function isYMD(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test((s || "").trim());
-}
-
-function addDaysYMD(ymd: string, days: number) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  const yy = dt.getUTCFullYear();
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
 }
 
 export async function GET(req: Request) {
@@ -25,7 +16,7 @@ export async function GET(req: Request) {
   }
 
   const pricingSettings = await getPricingSettingsSnapshot();
-  const defaultEnd = addDaysYMD(deliveryDate, pricingSettings.includedRentalDays);
+  const defaultEnd = addDaysYmd(deliveryDate, pricingSettings.standardRentalDays);
 
   // Find earliest tight date >= deliveryDate where used >= 3
   const { data, error } = await supabase.rpc("next_tight_date", { start_date: deliveryDate });
@@ -44,11 +35,13 @@ export async function GET(req: Request) {
   const maxPickupDate = nextTight; // same-day flip allowed
   const maxDaysAllowed =
     Math.max(0, Math.round((Date.parse(maxPickupDate) - Date.parse(deliveryDate)) / 86400000));
+  const maxBookablePickupDate = getMaximumBookablePickupDate(deliveryDate, pricingSettings, maxPickupDate);
 
   return NextResponse.json({
     ok: true,
     capped: true,
     maxPickupDate,
     maxDaysAllowed,
+    maxBookablePickupDate,
   });
 }

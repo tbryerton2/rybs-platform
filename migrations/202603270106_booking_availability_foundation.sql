@@ -44,7 +44,7 @@ $$;
 
 create or replace function public.get_delivery_availability(
   p_delivery_date date,
-  p_days integer default 7
+  p_days integer default null
 )
 returns table (
   capacity integer,
@@ -71,9 +71,10 @@ as $$
   candidate_window as (
     select generate_series(
       p_delivery_date,
-      p_delivery_date + greatest(coalesce(p_days, 7), 1),
+      p_delivery_date + greatest(coalesce(p_days, settings.default_rental_days), 1),
       interval '1 day'
     )::date as day
+    from settings
   ),
   booking_usage as (
     select

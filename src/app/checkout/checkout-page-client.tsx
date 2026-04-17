@@ -48,8 +48,6 @@ type BookingDraft = {
   holdExpiresAt?: string;
   priceQuote?: BookingPriceQuote | null;
 
-  rentalDays?: number; // default fallback = 7
-
   pickupMode?: "unspecified" | "date";
   pickupDate?: string; // YYYY-MM-DD (optional)
   reorderSourceBookingId?: string;
@@ -200,7 +198,10 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
         if (cancelled) return;
 
         if (!res.ok || !json?.serviced || !json?.priceQuote) {
-          setError("We couldn’t load the latest pricing for this ZIP. Please go back and recheck the service address.");
+          setError(
+            json?.error ||
+              "We couldn’t load the latest pricing for this ZIP. Please go back and recheck the service address.",
+          );
           return;
         }
 
@@ -233,14 +234,15 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   );
 
   const pickupLabel = useMemo(() => {
-    const mode = draft.pickupMode || "unspecified";
     const pd = (draft.pickupDate || "").trim();
 
-    if (mode === "date" && isYMD(pd)) return formatDateLong(pd);
+    if (isYMD(pd)) return formatDateLong(pd);
 
-    // IMPORTANT: we are NOT showing the “default 7-day” assumption to the user.
-    return "Schedule later (from confirmation link)";
-  }, [draft.pickupMode, draft.pickupDate]);
+    const fallbackPickupDate = (draft.priceQuote?.effectivePickupDate || draft.priceQuote?.standardPickupDate || "").trim();
+    if (isYMD(fallbackPickupDate)) return formatDateLong(fallbackPickupDate);
+
+    return "—";
+  }, [draft.pickupDate, draft.priceQuote?.effectivePickupDate, draft.priceQuote?.standardPickupDate]);
 
   const placementDetails = useMemo(
     () =>
@@ -378,7 +380,11 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
         ...(bookingRef ? { bookingRef } : {}),
         ...(bookingEmail ? { email: bookingEmail } : {}),
         rentalPriceCents: String(baseRentalCents),
-        dailyOveragePriceCents: String(draft.priceQuote.dailyOveragePrice * 100),
+        standardRentalDays: String(draft.priceQuote.standardRentalDays),
+        bookedRentalDays: String(draft.priceQuote.bookedRentalDays ?? draft.priceQuote.standardRentalDays),
+        maxRentalDays: draft.priceQuote.maxRentalDays != null ? String(draft.priceQuote.maxRentalDays) : "",
+        allowExtendedRentalAtBooking: draft.priceQuote.allowExtendedRentalAtBooking ? "1" : "0",
+        dailyOveragePriceCents: String(draft.priceQuote.dailyOveragePriceCents),
         extraDays: String(draft.priceQuote.extraDays),
         extraDaysChargeCents: String(extraDaysChargeCents),
         salesTaxCents: String(salesTaxCents),
@@ -432,7 +438,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
               <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Dumpster rental</span>
+                  <span className="text-slate-600">Base price</span>
                   <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
                     {quoteLoading ? "Calculating..." : fmtMoney(baseRentalCents)}
                   </span>
@@ -441,7 +447,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                 {draft.priceQuote?.extraDays ? (
                   <div className="mt-2 flex items-center justify-between text-sm">
                     <span className="text-slate-600">
-                      Extra days ({draft.priceQuote.extraDays} x {fmtMoney(draft.priceQuote.dailyOveragePrice * 100)})
+                      Extra days ({draft.priceQuote.extraDays} x {fmtMoney(draft.priceQuote.dailyOveragePriceCents)})
                     </span>
                     <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
                       {quoteLoading ? "Calculating..." : fmtMoney(extraDaysChargeCents)}
@@ -473,9 +479,16 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
               {draft.priceQuote ? (
                 <div className="mt-3 text-xs text-slate-500">
-                  {draft.priceQuote.extraDays > 0
-                    ? `This rental runs ${draft.priceQuote.rentalDurationDays} days, which is ${draft.priceQuote.extraDays} day${draft.priceQuote.extraDays === 1 ? "" : "s"} beyond the included ${draft.priceQuote.includedRentalDays}-day rental period.`
-                    : `This quote includes up to ${draft.priceQuote.includedRentalDays} rental days before daily overage charges apply.`}
+                  {`Includes up to ${draft.priceQuote.standardRentalDays} days. `}
+                  {`${fmtMoney(draft.priceQuote.dailyOveragePriceCents)} per extra day after day ${draft.priceQuote.standardRentalDays}. `}
+                  {draft.priceQuote.maxRentalDays
+                    ? `Maximum rental length: ${draft.priceQuote.maxRentalDays} days. `
+                    : ""}
+                  {!draft.priceQuote.allowExtendedRentalAtBooking
+                    ? "Online booking is limited to the included rental period."
+                    : draft.priceQuote.extraDays > 0
+                      ? `This booking includes ${draft.priceQuote.extraDays} extra day${draft.priceQuote.extraDays === 1 ? "" : "s"}.`
+                      : ""}
                 </div>
               ) : null}
 

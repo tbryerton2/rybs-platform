@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "seed:qa-local": "docker exec -i supabase_db_tin-can-man psql -U postgres -d postgres < supabase/seed.sql",
     "trim:zcta": "node scripts/trim-zcta-geojson.mjs",
     "backfill:booking-customers": "node scripts/backfill-booking-customers.mjs"
   },

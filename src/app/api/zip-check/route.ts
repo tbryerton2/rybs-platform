@@ -24,6 +24,21 @@ export async function GET(req: Request) {
     pickupMode: pickupMode === "date" ? "date" : "unspecified",
   });
 
+  if (pricing.rentalValidationError) {
+    return NextResponse.json(
+      {
+        ok: false,
+        serviced: true,
+        zip: data.zip,
+        county: data.county,
+        town: data.town,
+        error: pricing.rentalValidationError,
+        priceQuote: pricing.priceQuote,
+      },
+      { status: 409 },
+    );
+  }
+
   return NextResponse.json({
     ok: true,
     serviced: true,

@@ -30,7 +30,7 @@ export default function AdminDocsPage() {
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Guides"
+        title="Help Guides"
         description="Internal guides for running the business."
         className="mb-6"
       />

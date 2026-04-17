@@ -6,12 +6,18 @@ export type AdminNavItem = {
     | "bookings"
     | "schedule"
     | "customers"
+    | "employees"
     | "financials"
+    | "expenses"
+    | "taxes"
+    | "dumpsters"
+    | "trucksTrailers"
     | "portalRequests"
     | "pricing"
     | "serviceArea"
     | "retailSiteSettings"
     | "retailSiteContent"
+    | "reports"
     | "leadFunnel"
     | "zipHeatmap"
     | "guides"
@@ -27,7 +33,7 @@ export type AdminNavGroup = {
 
 export const adminNavGroups: AdminNavGroup[] = [
   {
-    label: "Dashboard",
+    label: "Home",
     items: [{ label: "Dashboard", href: "/admin", icon: "dashboard", exact: true, matchers: ["/admin"] }],
   },
   {
@@ -35,48 +41,38 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       { label: "Schedule", href: "/admin/schedule", icon: "schedule", matchers: ["/admin/schedule"] },
       { label: "Bookings", href: "/admin/bookings", icon: "bookings", matchers: ["/admin/bookings"] },
-      {
-        label: "Portal Requests",
-        href: "/admin/portal-requests",
-        icon: "portalRequests",
-        matchers: ["/admin/portal-requests"],
-      },
     ],
   },
   {
-    label: "Customers",
-    items: [{ label: "Customers", href: "/admin/customers", icon: "customers", matchers: ["/admin/customers"] }],
+    label: "People",
+    items: [
+      { label: "Customers", href: "/admin/customers", icon: "customers", matchers: ["/admin/customers"] },
+      { label: "Employees", href: "/admin/employees", icon: "employees", matchers: ["/admin/employees"] },
+    ],
   },
   {
     label: "Financials",
-    items: [{ label: "Financials", href: "/admin/financials", icon: "financials", matchers: ["/admin/financials"] }],
+    items: [
+      { label: "Pricing", href: "/admin/settings/pricing", icon: "pricing", matchers: ["/admin/settings/pricing"] },
+      { label: "Revenue", href: "/admin/financials", icon: "financials", matchers: ["/admin/financials"] },
+      { label: "Expenses", href: "/admin/expenses", icon: "expenses", matchers: ["/admin/expenses"] },
+      { label: "Taxes", href: "/admin/taxes", icon: "taxes", matchers: ["/admin/taxes"] },
+    ],
   },
   {
-    label: "Website",
+    label: "Equipment",
     items: [
       {
-        label: "Pricing",
-        href: "/admin/settings/pricing",
-        icon: "pricing",
-        matchers: ["/admin/settings/pricing"],
+        label: "Dumpsters",
+        href: "/admin/equipment/dumpsters",
+        icon: "dumpsters",
+        matchers: ["/admin/equipment/dumpsters"],
       },
       {
-        label: "Service Area",
-        href: "/admin/settings/zips",
-        icon: "serviceArea",
-        matchers: ["/admin/settings/zips"],
-      },
-      {
-        label: "Retail Site Settings",
-        href: "/admin/settings/retail-site",
-        icon: "retailSiteSettings",
-        matchers: ["/admin/settings/retail-site"],
-      },
-      {
-        label: "Retail Site Content",
-        href: "/admin/cms",
-        icon: "retailSiteContent",
-        matchers: ["/admin/cms"],
+        label: "Trucks & Trailers",
+        href: "/admin/equipment/trucks-trailers",
+        icon: "trucksTrailers",
+        matchers: ["/admin/equipment/trucks-trailers"],
       },
     ],
   },
@@ -84,13 +80,19 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Analytics",
     items: [
       {
-        label: "Lead Funnel",
+        label: "Reports",
+        href: "/admin/analytics/reports",
+        icon: "reports",
+        matchers: ["/admin/analytics/reports"],
+      },
+      {
+        label: "Website Analytics",
         href: "/admin/analytics/conversion",
         icon: "leadFunnel",
         matchers: ["/admin/analytics/conversion"],
       },
       {
-        label: "ZIP Heatmap",
+        label: "Heatmap",
         href: "/admin/analytics/zip-heatmap",
         icon: "zipHeatmap",
         matchers: ["/admin/analytics/zip-heatmap", "/admin/analytics/zip-map"],
@@ -98,8 +100,31 @@ export const adminNavGroups: AdminNavGroup[] = [
     ],
   },
   {
-    label: "Guides",
-    items: [{ label: "Guides", href: "/admin/docs", icon: "guides", matchers: ["/admin/docs"] }],
+    label: "Website",
+    items: [
+      {
+        label: "Service Area",
+        href: "/admin/settings/zips",
+        icon: "serviceArea",
+        matchers: ["/admin/settings/zips"],
+      },
+      {
+        label: "Settings",
+        href: "/admin/settings/retail-site",
+        icon: "retailSiteSettings",
+        matchers: ["/admin/settings/retail-site"],
+      },
+      {
+        label: "Content",
+        href: "/admin/cms",
+        icon: "retailSiteContent",
+        matchers: ["/admin/cms"],
+      },
+    ],
+  },
+  {
+    label: "Support",
+    items: [{ label: "Help Guides", href: "/admin/docs", icon: "guides", matchers: ["/admin/docs"] }],
   },
   {
     label: "Admin Tools",

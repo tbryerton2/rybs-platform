@@ -1,5 +1,6 @@
 // src/app/api/confirm-booking/route.ts
 import { NextResponse } from "next/server";
+import { getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { createBookingRecord } from "@/lib/booking-records";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabase } from "@/lib/supabase";
@@ -67,16 +68,6 @@ function isYMD(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test((s || "").trim());
 }
 
-function addDaysYMD(ymd: string, days: number) {
-  const [y, m, d] = ymd.split("-").map((n) => Number(n));
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  const yy = dt.getUTCFullYear();
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -95,9 +86,9 @@ export async function POST(req: Request) {
     const totalPriceCents = Number(body.totalPriceCents);
     const fallbackTotalDollars = Number(body.totalDollars);
     const normalizedTotalPriceCents =
-      Number.isFinite(totalPriceCents) && totalPriceCents > 0
+      Number.isFinite(totalPriceCents) && totalPriceCents >= 0
         ? Math.round(totalPriceCents)
-        : Number.isFinite(fallbackTotalDollars) && fallbackTotalDollars > 0
+        : Number.isFinite(fallbackTotalDollars) && fallbackTotalDollars >= 0
         ? Math.round(fallbackTotalDollars * 100)
         : null;
 
@@ -206,6 +197,55 @@ export async function POST(req: Request) {
       );
     }
 
+    if (pricing.rentalValidationError) {
+      await supabase
+        .from("booking_holds")
+        .update({ status: "active" })
+        .eq("id", holdId)
+        .eq("status", "converting");
+
+      return NextResponse.json(
+        { ok: false, error: pricing.rentalValidationError },
+        { status: 409 },
+      );
+    }
+
+    const rentalPeriod = getRentalPeriodDetails({
+      deliveryDate,
+      pickupDate,
+      pickupMode,
+      standardRentalDays: pricing.pricingSettings.standardRentalDays,
+      dailyOveragePrice: pricing.pricingSettings.dailyOveragePrice,
+      maxRentalDays: pricing.pricingSettings.maxRentalDays,
+      allowExtendedRentalAtBooking: pricing.pricingSettings.allowExtendedRentalAtBooking,
+    });
+
+    if (rentalPeriod.validationError || rentalPeriod.effectivePickupDate == null) {
+      await supabase
+        .from("booking_holds")
+        .update({ status: "active" })
+        .eq("id", holdId)
+        .eq("status", "converting");
+
+      return NextResponse.json(
+        { ok: false, error: rentalPeriod.validationError || "Invalid rental period." },
+        { status: 409 },
+      );
+    }
+
+    if (pricing.priceQuote.totalCents !== normalizedTotalPriceCents) {
+      await supabase
+        .from("booking_holds")
+        .update({ status: "active" })
+        .eq("id", holdId)
+        .eq("status", "converting");
+
+      return NextResponse.json(
+        { ok: false, error: "Pricing changed. Please review the updated total before booking." },
+        { status: 409 },
+      );
+    }
+
     const effectivePickup = pricing.priceQuote.effectivePickupDate;
 
     if (!effectivePickup) {
@@ -221,59 +261,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Find the earliest day offset where availability drops to 0 within a reasonable horizon.
-    // (30 is arbitrary safety; feel free to change.)
-    let capPickupDate: string | null = null;
-
-    for (let days = 1; days <= 30; days++) {
-      const avail = await supabase.rpc("get_delivery_availability", {
-        p_delivery_date: deliveryDate,
-        p_days: days,
-      });
-
-      if (avail.error) {
-        // revert hold (best effort) since we already claimed it
-        await supabase
-          .from("booking_holds")
-          .update({ status: "active" })
-          .eq("id", holdId)
-          .eq("status", "converting");
-
-        return NextResponse.json({ ok: false, error: avail.error.message }, { status: 500 });
-      }
-
-      const row = avail.data?.[0];
-      if (!row) continue;
-
-      const capacity = Number(row.capacity ?? 3);
-      const used = Number(row.used ?? 0);
-      const remaining = Math.max(0, capacity - used);
-
-      if (remaining <= 0) {
-        capPickupDate = addDaysYMD(deliveryDate, days);
-        break;
-      }
-    }
-
-    // If there is a cap and the booking pickup runs past it -> reject
-    if (capPickupDate && effectivePickup > capPickupDate) {
-      // revert hold (best effort) since we already claimed it
-      await supabase
-        .from("booking_holds")
-        .update({ status: "active" })
-        .eq("id", holdId)
-        .eq("status", "converting");
-
-      return NextResponse.json(
-        {
-          ok: false,
-          error: `That pickup date is too late. Pickup must be on or before ${capPickupDate}.`,
-          maxPickupDate: capPickupDate,
-        },
-        { status: 409 }
-      );
-    }
-
     let createdBooking;
     try {
       createdBooking = await createBookingRecord({
@@ -281,7 +268,7 @@ export async function POST(req: Request) {
         booking: {
           delivery_date: deliveryDate,
           pickup_date: effectivePickup || null,
-          pickup_mode: pickupMode === "date" ? "schedule" : "request",
+          pickup_mode: "schedule",
           status: "confirmed",
           total_price_cents: pricing.priceQuote.totalCents,
         },
@@ -310,11 +297,14 @@ export async function POST(req: Request) {
           included_rental_days: pricing.priceQuote.includedRentalDays,
           rental_duration_days: pricing.priceQuote.rentalDurationDays,
           extra_days: pricing.priceQuote.extraDays,
-          daily_overage_price_cents: pricing.priceQuote.dailyOveragePrice * 100,
+          daily_overage_price_cents: pricing.priceQuote.dailyOveragePriceCents,
           extra_days_charge_cents: pricing.priceQuote.extraDaysChargeCents,
           subtotal_cents: pricing.priceQuote.subtotalCents,
           taxable_subtotal_cents: pricing.priceQuote.taxableSubtotalCents,
           tax_cents: pricing.priceQuote.salesTaxCents,
+          max_rental_days_snapshot: pricing.priceQuote.maxRentalDays,
+          allow_extended_rental_at_booking_snapshot:
+            pricing.priceQuote.allowExtendedRentalAtBooking,
         },
       });
     } catch (insertError) {

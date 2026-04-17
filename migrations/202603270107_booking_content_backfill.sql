@@ -101,7 +101,7 @@ cross join (
         'locationEmptyText', 'No ZIP saved yet. Please go back and validate your ZIP.',
         'totalLabel', 'Flat-rate total (prepay)',
         'includedTitle', 'What’s included',
-        'includedItems', to_jsonb(array['Delivery & pickup', '7-day rental', '2.5 tons included']::text[]),
+        'includedItems', to_jsonb(array['Delivery & pickup', 'Standard rental period included', '2.5 tons included']::text[]),
         'weightPolicyTitle', 'Included Weight Policy',
         'weightPolicyBody', 'Your flat rate includes up to 2.5 tons. Overages are billed only if exceeded.',
         'weightPolicyFootnote', 'Most homeowners stay under the included weight.',

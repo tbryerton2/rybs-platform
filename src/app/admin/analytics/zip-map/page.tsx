@@ -234,7 +234,7 @@ export default async function ZipMapPage({
   return (
     <AdminPage width="wide" className="space-y-6">
       <AdminPageHeader
-        title="ZIP Heatmap"
+        title="Heatmap"
         description="Compare ZIP performance across bookings, revenue, and service coverage."
         className="mb-0"
         actions={

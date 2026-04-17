@@ -38,6 +38,7 @@ type BookingRow = {
   pickup_date: string | null;
   pickup_mode: "request" | "schedule" | null;
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
+  notes: string | null;
   created_at: string | null;
   placement_preference: string | null;
   placement_details: string | null;
@@ -114,12 +115,20 @@ function formatWeekRange(start: Date, end: Date) {
 }
 
 function formatDayLabel(date: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "short",
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    timeZone: "UTC",
+  })
+    .format(date)
+    .replace(".", "")
+    .toUpperCase();
+
+  const day = new Intl.DateTimeFormat("en-US", {
     day: "numeric",
     timeZone: "UTC",
   }).format(date);
+
+  return `${weekday} ${day}`;
 }
 
 function formatShortDate(iso?: string | null) {

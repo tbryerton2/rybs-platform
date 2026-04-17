@@ -70,7 +70,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           href="/admin/docs"
           className="inline-flex items-center text-sm font-medium text-[#F97316] hover:text-orange-600"
         >
-          ← Back to Guides
+          ← Back to Help Guides
         </Link>
       </div>
 

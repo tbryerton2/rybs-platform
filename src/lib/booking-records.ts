@@ -51,6 +51,8 @@ type CreateBookingRecordInput = {
     subtotal_cents?: number | null;
     taxable_subtotal_cents?: number | null;
     tax_cents?: number | null;
+    max_rental_days_snapshot?: number | null;
+    allow_extended_rental_at_booking_snapshot?: boolean | null;
   };
 };
 
@@ -113,6 +115,9 @@ export async function createBookingRecord({
     subtotal_cents: pricing?.subtotal_cents ?? null,
     taxable_subtotal_cents: pricing?.taxable_subtotal_cents ?? null,
     tax_cents: pricing?.tax_cents ?? null,
+    max_rental_days_snapshot: pricing?.max_rental_days_snapshot ?? null,
+    allow_extended_rental_at_booking_snapshot:
+      pricing?.allow_extended_rental_at_booking_snapshot ?? null,
   };
 
   const insertWithPlacementRow = placement ? { ...baseInsertRow, ...placement } : baseInsertRow;

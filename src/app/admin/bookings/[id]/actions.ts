@@ -30,6 +30,37 @@ function redirectWithPlacementError(id: string, error: string) {
   redirect(`/admin/bookings/${id}?placementError=${encodeURIComponent(error)}#placement-access`);
 }
 
+function redirectWithOperationalControlsError(id: string, error: string) {
+  redirect(`/admin/bookings/${id}?placementError=${encodeURIComponent(error)}#booking-operational-controls`);
+}
+
+function normalizeOperationalFieldValue(fieldName: string, value: unknown) {
+  if (fieldName === "access_issues") {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : String(item ?? "").trim()))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+
+  if (value == null) return null;
+  if (Array.isArray(value)) return value;
+  if (typeof value === "object") return value;
+  return value;
+}
+
+function operationalFieldChanged(fieldName: string, currentValue: unknown, nextValue: unknown) {
+  return (
+    JSON.stringify(normalizeOperationalFieldValue(fieldName, currentValue)) !==
+    JSON.stringify(normalizeOperationalFieldValue(fieldName, nextValue))
+  );
+}
+
 export async function updateNotesAction(formData: FormData) {
   const id = asString(formData.get("id"));
   const notes = emptyToNull(asString(formData.get("notes")));
@@ -236,6 +267,134 @@ export async function updatePlacementDetailsAction(formData: FormData) {
   revalidatePath("/admin");
 
   redirect(`/admin/bookings/${id}?saved=placement#placement-access`);
+}
+
+export async function updateOperationalControlsAction(formData: FormData) {
+  const id = asString(formData.get("id"));
+  const status = asString(formData.get("status")) as BookingStatus;
+  const delivery_date = emptyToNull(asString(formData.get("delivery_date")));
+  const pickup_date = emptyToNull(asString(formData.get("pickup_date")));
+  const placementSchemaAvailable = asString(formData.get("placement_schema_available")) === "true";
+
+  if (!id) throw new Error("Missing booking id");
+  if (!status) throw new Error("Missing status");
+
+  const placement = placementSchemaAvailable
+    ? sanitizePlacementDetails({
+        placementPreference: asString(formData.get("placement_preference")),
+        placementDetails: asString(formData.get("placement_details")),
+        accessIssues: formData.getAll("access_issues"),
+        gateInstructions: asString(formData.get("gate_instructions")),
+        deliveryPresence: asString(formData.get("delivery_presence")),
+        alternateContactName: asString(formData.get("alternate_contact_name")),
+        alternateContactPhone: asString(formData.get("alternate_contact_phone")),
+        placementPhotoUrl: asString(formData.get("placement_photo_url")),
+        specialDeliveryInstructions: asString(formData.get("special_delivery_instructions")),
+      })
+    : null;
+
+  if (placement) {
+    const validationError = validatePlacementDetails(placement);
+    if (validationError) {
+      redirectWithOperationalControlsError(id, validationError);
+    }
+  }
+
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select(
+      placementSchemaAvailable
+        ? "status, delivery_date, pickup_mode, pickup_date, placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions"
+        : "status, delivery_date, pickup_mode, pickup_date",
+    )
+    .eq("id", id)
+    .single();
+
+  if (current.error) throw new Error(current.error.message);
+
+  const pickup_mode = pickup_date ? "schedule" : "request";
+  const updates: Record<string, unknown> = {
+    status,
+    delivery_date,
+    pickup_mode,
+    pickup_date: pickup_mode === "schedule" ? pickup_date : null,
+  };
+
+  if (placement) {
+    updates.placement_preference = placement.placementPreference;
+    updates.placement_details = placement.placementDetails;
+    updates.access_issues = placement.accessIssues;
+    updates.gate_instructions = placement.gateInstructions;
+    updates.delivery_presence = placement.deliveryPresence;
+    updates.alternate_contact_name = placement.alternateContactName;
+    updates.alternate_contact_phone = placement.alternateContactPhone;
+    updates.placement_photo_url = placement.placementPhotoUrl;
+    updates.special_delivery_instructions = placement.specialDeliveryInstructions;
+  }
+
+  const fieldsToCheck = placement
+    ? [
+        "status",
+        "delivery_date",
+        "pickup_mode",
+        "pickup_date",
+        "placement_preference",
+        "placement_details",
+        "access_issues",
+        "gate_instructions",
+        "delivery_presence",
+        "alternate_contact_name",
+        "alternate_contact_phone",
+        "placement_photo_url",
+        "special_delivery_instructions",
+      ]
+    : ["status", "delivery_date", "pickup_mode", "pickup_date"];
+
+  const changedUpdates = Object.fromEntries(
+    Object.entries(updates).filter(([fieldName, nextValue]) =>
+      operationalFieldChanged(fieldName, current.data[fieldName], nextValue),
+    ),
+  );
+
+  if (Object.keys(changedUpdates).length === 0) {
+    revalidatePath(`/admin/bookings/${id}`);
+    revalidatePath("/admin/bookings");
+    revalidatePath("/admin/schedule");
+    revalidatePath("/admin");
+    redirect(`/admin/bookings/${id}#booking-operational-controls`);
+  }
+
+  const { error } = await supabaseAdmin
+    .from("bookings")
+    .update(changedUpdates)
+    .eq("id", id);
+
+  if (error) {
+    if (isBookingSchemaError(error)) {
+      redirectWithOperationalControlsError(id, bookingPlacementSchemaMessage());
+    }
+
+    redirectWithOperationalControlsError(id, error.message);
+  }
+
+  await recordEntityHistory(
+    supabaseAdmin,
+    diffEntityFields(
+      "booking",
+      id,
+      current.data,
+      changedUpdates,
+      fieldsToCheck.filter((fieldName) => fieldName in changedUpdates),
+      { changedByType: "admin", changeReason: "Updated operational controls" },
+    ),
+  );
+
+  revalidatePath(`/admin/bookings/${id}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/schedule");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${id}?saved=operational-controls#booking-operational-controls`);
 }
 
 
