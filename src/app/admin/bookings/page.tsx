@@ -7,14 +7,15 @@ import {
   ArrowDownTrayIcon,
   CalendarDaysIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ClockIcon,
   InformationCircleIcon,
   MagnifyingGlassIcon,
   Squares2X2Icon,
   TruckIcon,
-  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
+import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
 import { CopyBookingRefButton } from "@/app/admin/bookings/CopyBookingRefButton";
@@ -122,7 +123,16 @@ type BookingViewModel = {
 
 type Filters = {
   q: string;
-  quickView: "all" | "needs_attention" | "overdue_confirmed" | "overdue_pickups" | "active" | "holds";
+  quickView:
+    | "all"
+    | "needs_attention"
+    | "overdue_confirmed"
+    | "overdue_pickups"
+    | "active"
+    | "holds"
+    | "upcoming_deliveries"
+    | "upcoming_pickups"
+    | "recently_created";
   status: string;
   bucket: BookingBucket;
   dateField: DateField;
@@ -134,6 +144,8 @@ type Filters = {
   customFrom: string;
   customTo: string;
 };
+
+type QuickViewPresetKey = Filters["quickView"];
 
 const BOOKING_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
@@ -172,26 +184,6 @@ function pillBase(className: string) {
 
 function cardShell(extra = "") {
   return `rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200/70 ${extra}`;
-}
-
-function summaryCardShell(
-  tone: "green" | "blue" | "violet" | "amber" | "teal" | "rose",
-  extra = "",
-) {
-  const toneClasses =
-    tone === "green"
-      ? "border-emerald-200/70 bg-emerald-50/55"
-      : tone === "blue"
-        ? "border-sky-200/70 bg-sky-50/55"
-        : tone === "violet"
-          ? "border-violet-200/70 bg-violet-50/50"
-          : tone === "amber"
-            ? "border-amber-200/70 bg-amber-50/55"
-            : tone === "teal"
-              ? "border-teal-200/70 bg-teal-50/55"
-              : "border-rose-200/70 bg-rose-50/55";
-
-  return `rounded-[28px] border shadow-sm ${toneClasses} ${extra}`;
 }
 
 function logAdminBookingsError(context: string, error: unknown) {
@@ -267,6 +259,23 @@ function formatDateTimeLabel(value?: string | null) {
 
 function normalizePhone(value: string | null | undefined) {
   return (value ?? "").replace(/\D/g, "");
+}
+
+function formatBookingTablePhone(value: string | null | undefined) {
+  const raw = value?.trim();
+  if (!raw) return "";
+
+  const digits = normalizePhone(raw);
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    const local = digits.slice(1);
+    return `1 (${local.slice(0, 3)}) ${local.slice(3, 6)}-${local.slice(6)}`;
+  }
+
+  return raw;
 }
 
 function normalizeSearchTerm(value: string) {
@@ -916,6 +925,24 @@ function filterByQuickView(vm: BookingViewModel, quickView: string) {
       return vm.isOverduePickup;
     case "active":
       return vm.activeBucket === "active";
+    case "upcoming_deliveries":
+      return (
+        vm.activeBucket === "upcoming" &&
+        typeof vm.booking.delivery_date === "string" &&
+        !!getExplicitDateRange("next_7_days", "", "").to &&
+        vm.booking.delivery_date >= todayISOET() &&
+        vm.booking.delivery_date <= getExplicitDateRange("next_7_days", "", "").to
+      );
+    case "upcoming_pickups":
+      return (
+        vm.booking.pickup_mode === "schedule" &&
+        typeof vm.booking.pickup_date === "string" &&
+        !!getExplicitDateRange("next_7_days", "", "").to &&
+        vm.booking.pickup_date >= todayISOET() &&
+        vm.booking.pickup_date <= getExplicitDateRange("next_7_days", "", "").to
+      );
+    case "recently_created":
+      return isRecentlyCreated(vm.booking.created_at);
     case "holds":
       return false;
     case "all":
@@ -924,81 +951,90 @@ function filterByQuickView(vm: BookingViewModel, quickView: string) {
   }
 }
 
-function buildScopeLabel(filters: Filters, totalCount: number) {
+function buildScopeMeta(filters: Filters, totalCount: number) {
   const { from, to, label } = getExplicitDateRange(filters.datePreset, filters.customFrom, filters.customTo);
   if (filters.bucket === "holds") {
-    if (filters.q && !from && !to) return `Searching active holds for “${filters.q}”`;
-    if (label) return `Showing active holds with ${filters.dateField === "created_at" ? "Created date" : "Delivery date"}: ${label}`;
-    return "Showing active booking holds";
+    if (filters.q && !from && !to) return { label: `Searching active holds for “${filters.q}”` };
+    if (label) {
+      return {
+        label: `Showing active holds with ${filters.dateField === "created_at" ? "Created date" : "Delivery date"}: ${label}`,
+      };
+    }
+    return { label: "Showing bookings with active holds" };
+  }
+  if (filters.quickView === "needs_attention") {
+    return {
+      label: filters.q
+        ? `Searching bookings that need attention for “${filters.q}”`
+        : "Showing bookings that need attention",
+    };
   }
   if (filters.quickView === "overdue_confirmed") {
-    return filters.q
-      ? `Searching overdue confirmed bookings for “${filters.q}”`
-      : "Showing overdue confirmed bookings";
+    return {
+      label: filters.q
+        ? `Searching bookings with overdue deliveries for “${filters.q}”`
+        : "Showing bookings with overdue deliveries",
+    };
   }
   if (filters.quickView === "overdue_pickups") {
-    return filters.q
-      ? `Searching overdue pickup bookings for “${filters.q}”`
-      : "Showing overdue pickup bookings";
+    return {
+      label: filters.q
+        ? `Searching bookings with overdue pickups for “${filters.q}”`
+        : "Showing bookings with overdue pickups",
+    };
+  }
+  if (filters.quickView === "active") {
+    return {
+      label: filters.q
+        ? `Searching active / on-site bookings for “${filters.q}”`
+        : "Showing active / on-site bookings",
+    };
+  }
+  if (filters.quickView === "upcoming_deliveries") {
+    return {
+      label: filters.q
+        ? `Searching bookings with deliveries in the next 7 days for “${filters.q}”`
+        : "Showing bookings with deliveries in the next 7 days",
+    };
+  }
+  if (filters.quickView === "upcoming_pickups") {
+    return {
+      label: filters.q
+        ? `Searching bookings with pickups in the next 7 days for “${filters.q}”`
+        : "Showing bookings with pickups in the next 7 days",
+    };
+  }
+  if (filters.quickView === "recently_created") {
+    return {
+      label: filters.q
+        ? `Searching bookings created in the last 7 days for “${filters.q}”`
+        : "Showing bookings created in the last 7 days",
+    };
   }
   if (filters.q && !from && !to) {
-    return `Searching all bookings for “${filters.q}”`;
+    return { label: `Searching all bookings for “${filters.q}”` };
   }
 
   const dateFieldLabel =
     filters.dateField === "created_at" ? "Created date" : filters.dateField === "pickup_date" ? "Pickup date" : "Delivery date";
 
   if (label) {
-    return filters.q
-      ? `Searching bookings for “${filters.q}” with ${dateFieldLabel}: ${label}`
-      : `Showing bookings with ${dateFieldLabel}: ${label}`;
+    return {
+      label: filters.q
+        ? `Searching bookings for “${filters.q}” with ${dateFieldLabel}: ${label}`
+        : `Showing bookings with ${dateFieldLabel}: ${label}`,
+    };
   }
 
   if (filters.bucket !== "all") {
-    return `Showing ${filters.bucket.replace(/_/g, " ")} bookings`;
+    return { label: `Showing ${filters.bucket.replace(/_/g, " ")} bookings` };
   }
 
   if (filters.q) {
-    return `Searching all ${totalCount} loaded bookings for “${filters.q}”`;
+    return { label: `Searching all ${totalCount} loaded bookings for “${filters.q}”` };
   }
 
-  return "Showing all bookings";
-}
-
-function buildFilterChips(filters: Filters, keepPanelOpen = false) {
-  const chips: Array<{ key: string; label: string; href: string }> = [];
-
-  const pushParams = (exclude: string) => {
-    const next = new URLSearchParams();
-    if (filters.q && exclude !== "q") next.set("q", filters.q);
-    if (filters.quickView !== "all" && exclude !== "quickView") next.set("view", filters.quickView);
-    if (filters.status !== "all" && exclude !== "status") next.set("status", filters.status);
-    if (filters.bucket !== "all" && exclude !== "bucket") next.set("bucket", filters.bucket);
-    if (filters.dateField !== "delivery_date" && exclude !== "dateField") next.set("dateField", filters.dateField);
-    if (filters.datePreset !== "all" && exclude !== "datePreset") next.set("datePreset", filters.datePreset);
-    if (filters.city && exclude !== "city") next.set("city", filters.city);
-    if (filters.zip && exclude !== "zip") next.set("zip", filters.zip);
-    if (filters.sort !== "updated_desc" && exclude !== "sort") next.set("sort", filters.sort);
-    if (filters.pageSize !== 50 && exclude !== "pageSize") next.set("pageSize", String(filters.pageSize));
-    if (filters.datePreset === "custom" && filters.customFrom && exclude !== "customFrom") next.set("from", filters.customFrom);
-    if (filters.datePreset === "custom" && filters.customTo && exclude !== "customTo") next.set("to", filters.customTo);
-    if (keepPanelOpen) next.set("filtersPanel", "open");
-    return `/admin/bookings${next.toString() ? `?${next.toString()}` : ""}`;
-  };
-
-  if (filters.q) chips.push({ key: "q", label: `Search: ${filters.q}`, href: pushParams("q") });
-  if (filters.quickView !== "all") chips.push({ key: "quickView", label: `View: ${filters.quickView.replace(/_/g, " ")}`, href: pushParams("quickView") });
-  if (filters.status !== "all") chips.push({ key: "status", label: `Status: ${filters.status}`, href: pushParams("status") });
-  if (filters.bucket !== "all") chips.push({ key: "bucket", label: `Bucket: ${filters.bucket.replace(/_/g, " ")}`, href: pushParams("bucket") });
-  if (filters.city) chips.push({ key: "city", label: `City: ${filters.city}`, href: pushParams("city") });
-  if (filters.zip) chips.push({ key: "zip", label: `ZIP: ${filters.zip}`, href: pushParams("zip") });
-  if (filters.datePreset !== "all") {
-    const dateLabel = getExplicitDateRange(filters.datePreset, filters.customFrom, filters.customTo).label ?? "Custom range";
-    chips.push({ key: "date", label: `${filters.dateField.replace("_", " ")}: ${dateLabel}`, href: pushParams("datePreset") });
-  }
-  if (filters.sort !== "updated_desc") chips.push({ key: "sort", label: `Sort: ${SORT_OPTIONS.find((option) => option.value === filters.sort)?.label ?? filters.sort}`, href: pushParams("sort") });
-  if (filters.pageSize !== 50) chips.push({ key: "pageSize", label: `Page size: ${filters.pageSize}`, href: pushParams("pageSize") });
-  return chips;
+  return { label: "Showing all bookings" };
 }
 
 function hasActiveFilters(filters: Filters) {
@@ -1017,37 +1053,105 @@ function hasActiveFilters(filters: Filters) {
   );
 }
 
+function buildQuickViewPresetFilters(baseFilters: Filters, quickView: QuickViewPresetKey): Filters {
+  const defaults: Filters = {
+    ...baseFilters,
+    q: "",
+    quickView,
+    status: "all",
+    bucket: "all",
+    dateField: "delivery_date",
+    datePreset: "all",
+    city: "",
+    zip: "",
+    sort: "updated_desc",
+    customFrom: "",
+    customTo: "",
+  };
+
+  switch (quickView) {
+    case "active":
+      return { ...defaults, bucket: "active" };
+    case "holds":
+      return { ...defaults, bucket: "holds" };
+    case "upcoming_deliveries":
+      return { ...defaults, dateField: "delivery_date", datePreset: "next_7_days", sort: "delivery_asc" };
+    case "upcoming_pickups":
+      return { ...defaults, dateField: "pickup_date", datePreset: "next_7_days", sort: "pickup_asc" };
+    case "recently_created":
+      return { ...defaults, dateField: "created_at", datePreset: RECENTLY_CREATED_DATE_PRESET, sort: "updated_desc" };
+    case "all":
+    case "needs_attention":
+    case "overdue_confirmed":
+    case "overdue_pickups":
+    default:
+      return defaults;
+  }
+}
+
+function isQuickViewPresetActive(filters: Filters, quickView: QuickViewPresetKey) {
+  const preset = buildQuickViewPresetFilters(filters, quickView);
+  return (
+    filters.q === preset.q &&
+    filters.quickView === preset.quickView &&
+    filters.status === preset.status &&
+    filters.bucket === preset.bucket &&
+    filters.dateField === preset.dateField &&
+    filters.datePreset === preset.datePreset &&
+    filters.city === preset.city &&
+    filters.zip === preset.zip &&
+    filters.sort === preset.sort &&
+    filters.customFrom === preset.customFrom &&
+    filters.customTo === preset.customTo
+  );
+}
+
+function getQuickViewHref(
+  filters: Filters,
+  quickView: QuickViewPresetKey,
+  keepPanelOpen: boolean | "closed" = false,
+  page = 1,
+) {
+  return buildScopedHref(buildQuickViewPresetFilters(filters, quickView), {}, page, keepPanelOpen);
+}
+
 function getSummaryHref(
   kind: "needs_attention" | "active" | "upcoming" | "upcoming_pickups" | "recent" | "holds",
   pageSize: Filters["pageSize"] = 50,
-  keepPanelOpen = false,
+  keepPanelOpen: boolean | "closed" = false,
 ) {
-  const next = new URLSearchParams();
-  if (pageSize !== 50) next.set("pageSize", String(pageSize));
-  if (kind === "needs_attention") next.set("bucket", "needs_attention");
-  if (kind === "active") next.set("bucket", "active");
-  if (kind === "holds") next.set("bucket", "holds");
-  if (kind === "upcoming") {
-    next.set("bucket", "upcoming");
-    next.set("dateField", "delivery_date");
-    next.set("datePreset", "next_7_days");
-    next.set("sort", "delivery_asc");
-  }
-  if (kind === "upcoming_pickups") {
-    next.set("dateField", "pickup_date");
-    next.set("datePreset", "next_7_days");
-    next.set("sort", "pickup_asc");
-  }
-  if (kind === "recent") {
-    next.set("dateField", "created_at");
-    next.set("datePreset", RECENTLY_CREATED_DATE_PRESET);
-    next.set("sort", "updated_desc");
-  }
-  if (keepPanelOpen) next.set("filtersPanel", "open");
-  return `/admin/bookings?${next.toString()}`;
+  const presetKey =
+    kind === "upcoming"
+      ? "upcoming_deliveries"
+      : kind === "recent"
+        ? "recently_created"
+        : kind;
+  const baseFilters = buildQuickViewPresetFilters(
+    {
+      q: "",
+      quickView: "all",
+      status: "all",
+      bucket: "all",
+      dateField: "delivery_date",
+      datePreset: "all",
+      city: "",
+      zip: "",
+      sort: "updated_desc",
+      pageSize,
+      customFrom: "",
+      customTo: "",
+    },
+    presetKey,
+  );
+  return getQuickViewHref({ ...baseFilters, pageSize }, presetKey, keepPanelOpen, 1);
 }
 
-function buildScopedHref(filters: Filters, overrides: Partial<Filters> = {}, page = 1, keepPanelOpen = false) {
+function buildScopedHref(
+  filters: Filters,
+  overrides: Partial<Filters> = {},
+  page = 1,
+  keepPanelOpen: boolean | "closed" = false,
+) {
   const nextFilters = { ...filters, ...overrides };
   const next = new URLSearchParams();
   if (nextFilters.q) next.set("q", nextFilters.q);
@@ -1062,59 +1166,31 @@ function buildScopedHref(filters: Filters, overrides: Partial<Filters> = {}, pag
   if (nextFilters.pageSize !== 50) next.set("pageSize", String(nextFilters.pageSize));
   if (nextFilters.datePreset === "custom" && nextFilters.customFrom) next.set("from", nextFilters.customFrom);
   if (nextFilters.datePreset === "custom" && nextFilters.customTo) next.set("to", nextFilters.customTo);
-  if (keepPanelOpen) next.set("filtersPanel", "open");
+  if (keepPanelOpen === "closed") next.set("filtersPanel", "closed");
+  else if (keepPanelOpen) next.set("filtersPanel", "open");
   if (page > 1) next.set("page", String(page));
   return `/admin/bookings${next.toString() ? `?${next.toString()}` : ""}`;
 }
 
-function buildPageHref(filters: Filters, page: number, keepPanelOpen = false) {
+function buildPageHref(filters: Filters, page: number, keepPanelOpen: boolean | "closed" = false) {
   return buildScopedHref(filters, {}, page, keepPanelOpen);
 }
 
 function EmptyState({
   title,
   copy,
-  resetHref,
-  tips,
+  secondaryCopy,
 }: {
   title: string;
   copy: string;
-  resetHref: string;
-  tips?: string[];
+  secondaryCopy?: string;
 }) {
   return (
     <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
       <div className="mx-auto max-w-xl">
         <div className="text-lg font-semibold text-slate-900">{title}</div>
         <p className="mt-2 text-sm leading-6 text-slate-600">{copy}</p>
-        {tips?.length ? (
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-              Try next
-            </div>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-              {tips.map((tip) => (
-                <li key={tip} className="rounded-xl bg-slate-50 px-3 py-2">
-                  {tip}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href={resetHref}
-            className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
-          >
-            Reset all
-          </Link>
-          <Link
-            href="/admin/bookings"
-            className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Search all bookings
-          </Link>
-        </div>
+        {secondaryCopy ? <p className="mt-3 text-sm leading-6 text-slate-500">{secondaryCopy}</p> : null}
       </div>
     </div>
   );
@@ -1144,7 +1220,7 @@ export default async function AdminBookingsPage({
     customTo: clean(sp(spObj, "to")),
   };
   const page = Math.max(1, Number.parseInt(clean(sp(spObj, "page")) || "1", 10) || 1);
-  const filtersPanelOpen = clean(sp(spObj, "filtersPanel")) === "open";
+  const filtersPanelState = clean(sp(spObj, "filtersPanel"));
 
   const [baseBookings, supplementalSearchBookings, activeHolds, futureDeliveries] = await Promise.all([
     getBookings(),
@@ -1305,24 +1381,12 @@ export default async function AdminBookingsPage({
   const pageStart = (currentPage - 1) * filters.pageSize;
   const results = filteredResults.slice(pageStart, pageStart + filters.pageSize);
   const pagedHolds = filteredHolds.slice(pageStart, pageStart + filters.pageSize);
-  const noResultsTips = showingHolds
-    ? [
-        "Clear one or more filters to widen the hold view.",
-        "Search all bookings if the customer may already have a confirmed rental instead of an active hold.",
-      ]
-    : [
-        "Try the booking ref first if you have it.",
-        "Search by the current email or an older booked-with email.",
-        "Try the phone number, contact name, or service address.",
-        "If the customer updated their account details, the booking may still be easier to find by older details or address.",
-      ];
-
+  const visibleResultsCount = showingHolds ? pagedHolds.length : results.length;
   const hasFiltersApplied = hasActiveFilters(filters);
-  const filtersExpanded = filtersPanelOpen || hasFiltersApplied;
-  const activeChips = buildFilterChips(filters, filtersExpanded);
-  const clearAllHref = "/admin/bookings";
+  const filtersExpanded =
+    filtersPanelState === "open" ? true : filtersPanelState === "closed" ? false : hasFiltersApplied;
   const resetFiltersHref = "/admin/bookings?filtersPanel=open";
-  const scopeLabel = buildScopeLabel(filters, allViewModels.length);
+  const scopeMeta = buildScopeMeta(filters, allViewModels.length);
   const next7Range = getExplicitDateRange("next_7_days", "", "");
   const visibleNeedsAttention = allViewModels.filter((vm) => vm.needsAttention).length;
   const activeOnSiteCount = allViewModels.filter((vm) => vm.activeBucket === "active").length;
@@ -1348,143 +1412,60 @@ export default async function AdminBookingsPage({
     {
       key: "all",
       label: "All bookings",
-      href: buildScopedHref(
-        {
-          ...filters,
-          q: "",
-          quickView: "all",
-          status: "all",
-          bucket: "all",
-          dateField: "delivery_date",
-          datePreset: "all",
-          city: "",
-          zip: "",
-          sort: "updated_desc",
-          customFrom: "",
-          customTo: "",
-        },
-        {},
-        1,
-        filtersExpanded,
-      ),
-      active:
-        filters.quickView === "all" &&
-        !filters.q &&
-        filters.status === "all" &&
-        filters.bucket === "all" &&
-        filters.dateField === "delivery_date" &&
-        filters.datePreset === "all" &&
-        !filters.city &&
-        !filters.zip &&
-        filters.sort === "updated_desc",
+      href: getQuickViewHref(filters, "all", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "all"),
     },
     {
       key: "needs_attention",
       label: "Needs attention",
-      href: buildScopedHref(
-        { ...filters, q: "", quickView: "needs_attention", status: "all", bucket: "all", dateField: "delivery_date", datePreset: "all", city: "", zip: "", sort: "updated_desc", customFrom: "", customTo: "" },
-        {},
-        1,
-        filtersExpanded,
-      ),
-      active:
-        filters.quickView === "needs_attention" &&
-        !filters.q &&
-        filters.status === "all" &&
-        filters.bucket === "all" &&
-        filters.datePreset === "all" &&
-        !filters.city &&
-        !filters.zip,
+      href: getQuickViewHref(filters, "needs_attention", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "needs_attention"),
     },
     {
       key: "overdue_confirmed",
-      label: "Overdue confirmed",
-      href: buildScopedHref(
-        { ...filters, q: "", quickView: "overdue_confirmed", status: "all", bucket: "all", dateField: "delivery_date", datePreset: "all", city: "", zip: "", sort: "updated_desc", customFrom: "", customTo: "" },
-        {},
-        1,
-        filtersExpanded,
-      ),
-      active:
-        filters.quickView === "overdue_confirmed" &&
-        !filters.q &&
-        filters.status === "all" &&
-        filters.bucket === "all" &&
-        filters.datePreset === "all" &&
-        !filters.city &&
-        !filters.zip,
+      label: "Deliveries overdue",
+      href: getQuickViewHref(filters, "overdue_confirmed", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "overdue_confirmed"),
     },
     {
       key: "overdue_pickups",
       label: "Overdue pickups",
-      href: buildScopedHref(
-        { ...filters, q: "", quickView: "overdue_pickups", status: "all", bucket: "all", dateField: "delivery_date", datePreset: "all", city: "", zip: "", sort: "updated_desc", customFrom: "", customTo: "" },
-        {},
-        1,
-        filtersExpanded,
-      ),
-      active:
-        filters.quickView === "overdue_pickups" &&
-        !filters.q &&
-        filters.status === "all" &&
-        filters.bucket === "all" &&
-        filters.datePreset === "all" &&
-        !filters.city &&
-        !filters.zip,
+      href: getQuickViewHref(filters, "overdue_pickups", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "overdue_pickups"),
     },
     {
       key: "active",
       label: "Active / on-site",
-      href: buildScopedHref(
-        { ...filters, q: "", quickView: "active", status: "all", bucket: "active", dateField: "delivery_date", datePreset: "all", city: "", zip: "", sort: "updated_desc", customFrom: "", customTo: "" },
-        {},
-        1,
-        filtersExpanded,
-      ),
-      active:
-        filters.quickView === "active" &&
-        !filters.q &&
-        filters.status === "all" &&
-        filters.bucket === "active" &&
-        filters.datePreset === "all" &&
-        !filters.city &&
-        !filters.zip,
+      href: getQuickViewHref(filters, "active", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "active"),
     },
     {
       key: "holds",
       label: "Holds",
-      href: buildScopedHref(
-        { ...filters, q: "", quickView: "holds", status: "all", bucket: "holds", dateField: "delivery_date", datePreset: "all", city: "", zip: "", sort: "updated_desc", customFrom: "", customTo: "" },
-        {},
-        1,
-        filtersExpanded,
-      ),
-      active:
-        filters.quickView === "holds" &&
-        !filters.q &&
-        filters.status === "all" &&
-        filters.bucket === "holds" &&
-        filters.datePreset === "all" &&
-        !filters.city &&
-        !filters.zip,
+      href: getQuickViewHref(filters, "holds", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "holds"),
+    },
+    {
+      key: "upcoming_deliveries",
+      label: "Upcoming deliveries",
+      href: getQuickViewHref(filters, "upcoming_deliveries", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "upcoming_deliveries"),
+    },
+    {
+      key: "upcoming_pickups",
+      label: "Upcoming pickups",
+      href: getQuickViewHref(filters, "upcoming_pickups", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "upcoming_pickups"),
+    },
+    {
+      key: "recently_created",
+      label: "Recently created",
+      href: getQuickViewHref(filters, "recently_created", filtersExpanded, 1),
+      active: isQuickViewPresetActive(filters, "recently_created"),
     },
   ];
   const filtersFormContent = (
     <>
-      {activeChips.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {activeChips.map((chip) => (
-            <Link
-              key={chip.key}
-              href={chip.href}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white"
-            >
-              {chip.label}
-              <XMarkIcon className="h-3.5 w-3.5 text-slate-400" />
-            </Link>
-          ))}
-        </div>
-      ) : null}
       <div className="grid gap-x-4 gap-y-5 xl:grid-cols-[minmax(0,2.2fr)_220px_220px] xl:items-start">
         <div className="min-w-0">
           <label className="mb-2 block text-sm font-semibold text-slate-700">Search</label>
@@ -1640,7 +1621,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("needs_attention", filters.pageSize, filtersExpanded),
               icon: ClockIcon,
               shellTone: "rose",
-              chipTone: "bg-rose-100/90 text-rose-700 ring-1 ring-inset ring-rose-200/80",
               detail: "High-risk or stale follow-up needed",
             },
             {
@@ -1649,7 +1629,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("active", filters.pageSize, filtersExpanded),
               icon: TruckIcon,
               shellTone: "teal",
-              chipTone: "bg-teal-100/90 text-teal-700 ring-1 ring-inset ring-teal-200/80",
               detail: "Currently delivered and not yet picked up",
             },
             {
@@ -1658,7 +1637,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("upcoming", filters.pageSize, filtersExpanded),
               icon: CalendarDaysIcon,
               shellTone: "blue",
-              chipTone: "bg-sky-100/90 text-sky-700 ring-1 ring-inset ring-sky-200/80",
               detail: "Scheduled to go out in the next 7 days",
             },
             {
@@ -1667,7 +1645,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("upcoming_pickups", filters.pageSize, filtersExpanded),
               icon: ArrowDownTrayIcon,
               shellTone: "amber",
-              chipTone: "bg-amber-100/90 text-amber-700 ring-1 ring-inset ring-amber-200/80",
               detail: "Scheduled returns in the next 7 days",
             },
             {
@@ -1675,8 +1652,7 @@ export default async function AdminBookingsPage({
               value: recentlyCreatedCount,
               href: getSummaryHref("recent", filters.pageSize, filtersExpanded),
               icon: Squares2X2Icon,
-              shellTone: "green",
-              chipTone: "bg-emerald-100/90 text-emerald-700 ring-1 ring-inset ring-emerald-200/80",
+              shellTone: "violet",
               detail: "Created within the last 7 days",
             },
             ...(activeHoldCount > 0
@@ -1687,32 +1663,24 @@ export default async function AdminBookingsPage({
                     href: getSummaryHref("holds", filters.pageSize, filtersExpanded),
                     icon: ClockIcon,
                     shellTone: "violet",
-                    chipTone: "bg-violet-100/90 text-violet-700 ring-1 ring-inset ring-violet-200/80",
                     detail: "Temporary inventory reservations in progress",
                   },
                 ]
               : []),
           ].map((card) => {
-            const Icon = card.icon;
             return (
-              <Link
+              <AdminSummaryCard
                 key={card.label}
-                href={card.href}
-                className={summaryCardShell(card.shellTone, "p-5 transition hover:-translate-y-0.5 hover:shadow-md")}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-medium text-slate-500">{card.label}</div>
-                    <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{card.value}</div>
-                    <div className="mt-2 text-xs text-slate-500">{card.detail}</div>
-                  </div>
-                  <span className={`inline-flex h-11 w-11 items-center justify-center rounded-2xl ${card.chipTone}`}>
-                    <Icon className="h-5 w-5" />
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
+                label={card.label}
+                value={card.value}
+                icon={card.icon}
+                tone={card.shellTone}
+              href={card.href}
+              detail={card.detail}
+              stretch
+            />
+          );
+        })}
         </section>
 
         {filtersExpanded ? (
@@ -1743,7 +1711,7 @@ export default async function AdminBookingsPage({
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-3">
                   <Link
-                    href={buildPageHref(filters, currentPage, false)}
+                    href={buildPageHref(filters, currentPage, "closed")}
                     className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
                   >
                     <span>Less</span>
@@ -1809,15 +1777,22 @@ export default async function AdminBookingsPage({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold text-slate-900">Dumpster Bookings</div>
-                {scopeLabel !== "Showing all bookings" ? (
-                  <div className="mt-1 text-sm text-slate-500">{scopeLabel}</div>
+                {scopeMeta.label !== "Showing all bookings" ? (
+                  <div className="mt-1 text-sm text-slate-500">{scopeMeta.label}</div>
                 ) : null}
               </div>
-              {filters.q ? (
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                  Search ranked by strongest identity match first
-                </div>
-              ) : null}
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                {visibleResultsCount > 0 ? (
+                  <div className="text-sm font-medium text-slate-500">
+                    {visibleResultsCount} {visibleResultsCount === 1 ? "booking" : "bookings"}
+                  </div>
+                ) : null}
+                {filters.q ? (
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                    Search ranked by strongest identity match first
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -1825,13 +1800,12 @@ export default async function AdminBookingsPage({
             {!showingHolds && totalFilteredResults > 0 ? (
               <div
                 role="row"
-                className="hidden rounded-[22px] border border-slate-200/80 bg-slate-50/90 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_minmax(140px,0.65fr)] lg:items-center lg:gap-4"
+                className="hidden rounded-[22px] border border-slate-200/90 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px] lg:items-center lg:gap-4"
               >
                 <div>ID / Status</div>
                 <div>Customer</div>
                 <div>Service Location</div>
                 <div>Dates</div>
-                <div>Actions</div>
               </div>
             ) : null}
             {showingHolds
@@ -1890,11 +1864,16 @@ export default async function AdminBookingsPage({
               const pickupDateCell = getPickupDateCell(vm);
 
               return (
-                <div key={booking.id} className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                  <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_minmax(140px,0.65fr)]">
+                <Link
+                  key={booking.id}
+                  href={`/admin/bookings/${encodeURIComponent(booking.id)}`}
+                  aria-label={`Open booking ${getCustomerFacingBookingLabel(booking.booking_ref)}`}
+                  className="group block rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+                >
+                  <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px]">
                     <div className="space-y-3">
                       <div>
-                        <div className="text-base font-semibold tracking-tight text-slate-900">
+                        <div className="text-base font-semibold tracking-tight text-slate-900 transition group-hover:text-slate-950 group-focus-visible:text-slate-950">
                           {getCustomerFacingBookingLabel(booking.booking_ref)}
                         </div>
                       </div>
@@ -1915,7 +1894,7 @@ export default async function AdminBookingsPage({
                     <div className="space-y-1.5">
                       <div className="text-sm font-semibold text-slate-900">{vm.bookedWithName || "No customer name"}</div>
                       <div className="text-sm text-slate-600">{vm.bookedWithEmail || "No email on file"}</div>
-                      <div className="text-sm text-slate-600">{vm.bookedWithPhone || "No phone on file"}</div>
+                      <div className="text-sm text-slate-600">{formatBookingTablePhone(vm.bookedWithPhone) || "No phone on file"}</div>
                     </div>
 
                     <div>
@@ -1923,15 +1902,11 @@ export default async function AdminBookingsPage({
                         <div className="flex items-center gap-1.5">
                           <div className="min-w-0 text-sm font-semibold leading-6 text-slate-900">{booking.customer_street || "No street on file"}</div>
                           {vm.placementInstructions.length > 0 ? (
-                            <button
-                              type="button"
-                              aria-label="View placement and dispatch notes"
-                              className="group relative mt-0.5 shrink-0 rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
-                            >
+                            <span className="group/tooltip relative mt-0.5 shrink-0 rounded-full p-0.5 text-slate-400 transition group-hover:text-slate-500 group-focus-visible:text-slate-500">
                               <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
                               <span
                                 role="tooltip"
-                                className="pointer-events-none absolute left-1/2 top-7 z-50 w-72 -translate-x-1/2 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-3 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                                className="pointer-events-none absolute left-1/2 top-7 z-50 w-72 -translate-x-1/2 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-3 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover/tooltip:pointer-events-auto group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100"
                               >
                                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                                   Placement notes
@@ -1942,7 +1917,7 @@ export default async function AdminBookingsPage({
                                   ))}
                                 </div>
                               </span>
-                            </button>
+                            </span>
                           ) : null}
                         </div>
                         <div className="mt-1 text-sm text-slate-600">
@@ -1974,44 +1949,29 @@ export default async function AdminBookingsPage({
                       </dl>
                     </div>
 
-                    <div className="flex flex-col gap-2 xl:pl-2 2xl:pl-0">
-                      <Link
-                        href={`/admin/bookings/${encodeURIComponent(booking.id)}`}
-                        className="inline-flex h-11 w-full items-center justify-center rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 xl:min-w-[150px]"
+                    <div className="flex h-full items-center justify-end">
+                      <span
+                        aria-hidden="true"
+                        className="inline-flex items-center justify-center rounded-full p-2 text-slate-400 transition group-hover:translate-x-0.5 group-hover:scale-110 group-hover:text-slate-700 group-focus-visible:translate-x-0.5 group-focus-visible:scale-110 group-focus-visible:text-slate-700"
                       >
-                        View booking
-                      </Link>
-                      {booking.customer_id ? (
-                        <Link
-                          href={`/admin/customers/${encodeURIComponent(booking.customer_id)}`}
-                          className="inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-700 xl:min-w-[150px]"
-                        >
-                          Open customer
-                        </Link>
-                      ) : null}
+                        <ChevronRightIcon className="h-6 w-6" />
+                      </span>
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
 
             {totalFilteredResults === 0 ? (
               hasFiltersApplied ? (
                 <EmptyState
-                  title={showingHolds ? "No holds matched your current search and filters" : "No bookings matched your current search and filters"}
-                  copy={
-                    showingHolds
-                      ? `Nothing matched this scope. ${scopeLabel}. Remove one or more filters or search all holds to widen the result set.`
-                      : "No results found for this search. The booking may still be available under a different identifier, especially if customer details changed after the booking was created."
-                  }
-                  resetHref={filtersExpanded ? resetFiltersHref : clearAllHref}
-                  tips={noResultsTips}
+                  title={showingHolds ? "No holds match your current filters" : "No bookings match your current filters"}
+                  copy="Try adjusting your filters or search terms to find the booking you’re looking for."
                 />
               ) : (
                 <EmptyState
                   title={showingHolds ? "No active holds right now" : "No bookings yet"}
                   copy={showingHolds ? "Active booking holds will appear here when inventory is being temporarily reserved." : "Bookings will appear here once customers start placing orders."}
-                  resetHref={filtersExpanded ? resetFiltersHref : clearAllHref}
                 />
               )
             ) : null}

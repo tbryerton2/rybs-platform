@@ -2,9 +2,16 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
+import {
+  ArrowPathIcon,
+  ChevronRightIcon,
+  UserPlusIcon,
+  UsersIcon,
+} from "@heroicons/react/24/outline";
+import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
+import { ClickableTableRow } from "@/app/admin/analytics/zip-heatmap/clickable-table-row";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
-import { ContextHelpCard } from "@/app/admin/_components/admin/context-help-card";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -74,6 +81,18 @@ function includesTerm(value: string | null | undefined, search: string) {
   return (value ?? "").toLowerCase().includes(search);
 }
 
+function getYearMonthInEastern(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(value);
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "00";
+  return `${year}-${month}`;
+}
+
 export default async function AdminCustomersPage({
   searchParams,
 }: {
@@ -106,7 +125,7 @@ export default async function AdminCustomersPage({
     bookingsByCustomer.set(booking.customer_id, existing);
   }
 
-  const customers = ((customersData ?? []) as CustomerRow[])
+  const allCustomers = ((customersData ?? []) as CustomerRow[])
     .map((customer) => {
       const linkedBookings = (bookingsByCustomer.get(customer.id) ?? []).sort((left, right) =>
         new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime(),
@@ -125,40 +144,45 @@ export default async function AdminCustomersPage({
         latestBooking,
         lifetimeValue,
       };
-    })
-    .filter((customer) => {
-      if (!query) return true;
-
-      return (
-        includesTerm(customer.id, query) ||
-        includesTerm(customer.name, query) ||
-        includesTerm(customer.email, query) ||
-        includesTerm(customer.phone, query) ||
-        includesTerm(customer.primary_city, query) ||
-        includesTerm(customer.primary_zip, query) ||
-        customer.linkedBookings.some((booking) =>
-          [
-            booking.id,
-            booking.booking_ref,
-            booking.booking_contact_name,
-            booking.booking_contact_email,
-            booking.booking_contact_phone,
-            booking.customer_street,
-            booking.customer_city,
-            booking.customer_zip,
-          ].some((value) => includesTerm(value, query)),
-        )
-      );
     });
 
-  const repeatCustomers = customers.filter((customer) => customer.bookingCount > 1).length;
-  const totalBookings = customers.reduce((sum, customer) => sum + customer.bookingCount, 0);
+  const customers = allCustomers.filter((customer) => {
+    if (!query) return true;
+
+    return (
+      includesTerm(customer.id, query) ||
+      includesTerm(customer.name, query) ||
+      includesTerm(customer.email, query) ||
+      includesTerm(customer.phone, query) ||
+      includesTerm(customer.primary_city, query) ||
+      includesTerm(customer.primary_zip, query) ||
+      customer.linkedBookings.some((booking) =>
+        [
+          booking.id,
+          booking.booking_ref,
+          booking.booking_contact_name,
+          booking.booking_contact_email,
+          booking.booking_contact_phone,
+          booking.customer_street,
+          booking.customer_city,
+          booking.customer_zip,
+        ].some((value) => includesTerm(value, query)),
+      )
+    );
+  });
+
+  const currentMonthKey = getYearMonthInEastern(new Date());
+  const repeatCustomers = allCustomers.filter((customer) => customer.bookingCount > 1).length;
+  const newCustomersThisMonth = allCustomers.filter((customer) => {
+    if (!customer.created_at) return false;
+    return getYearMonthInEastern(new Date(customer.created_at)) === currentMonthKey;
+  }).length;
 
   return (
     <AdminPage>
       <AdminPageHeader
         title="Customers"
-        description="Search customers by current account details and quickly review linked booking history."
+        className="mb-6 gap-3 xl:items-center"
         actions={
           <AdminPageHelpLink
             href="/admin/docs/customer-booking-identity"
@@ -168,24 +192,31 @@ export default async function AdminCustomersPage({
       />
 
       <section className="mb-8 grid gap-4 md:grid-cols-3">
-        {[
-          { label: "Customers", value: customers.length, hint: "Customer/account records" },
-          { label: "Linked bookings", value: totalBookings, hint: "Bookings attached to customer UUIDs" },
-          { label: "Repeat customers", value: repeatCustomers, hint: "Customers with more than one booking" },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm ring-1 ring-slate-200/60">
-            <div className="text-sm font-medium text-slate-500">{stat.label}</div>
-            <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{stat.value}</div>
-            <div className="mt-2 text-xs text-slate-500">{stat.hint}</div>
-          </div>
-        ))}
+        <AdminSummaryCard
+          label="Total customers"
+          value={allCustomers.length}
+          icon={UsersIcon}
+          tone="rose"
+          compact
+        />
+        <AdminSummaryCard
+          label="New customers this month"
+          value={newCustomersThisMonth}
+          icon={UserPlusIcon}
+          tone="green"
+          compact
+        />
+        <AdminSummaryCard
+          label="Repeat customers"
+          value={repeatCustomers}
+          icon={ArrowPathIcon}
+          tone="blue"
+          compact
+        />
       </section>
 
       <section className="mb-8 rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search customers</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Find a customer by current email, name, or phone.
-        </p>
 
         <form className="mt-5 flex flex-col gap-3 sm:flex-row">
           <input
@@ -210,22 +241,16 @@ export default async function AdminCustomersPage({
             </Link>
           ) : null}
         </form>
-
-        <div className="mt-4">
-          <ContextHelpCard
-            title="Search by current email, name, or phone."
-            body="Linked bookings may still show older booking contact details."
-            emphasis="subtle"
-          />
-        </div>
       </section>
 
       <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
-          <div className="text-lg font-semibold tracking-tight text-slate-900">Customer list</div>
-          <div className="mt-1 text-sm text-slate-500">
-            {customers.length} {customers.length === 1 ? "customer" : "customers"}
-            {query ? <> matching “{query}”</> : null}
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="text-lg font-semibold tracking-tight text-slate-900">Customer list</div>
+            <div className="text-sm font-medium text-slate-500">
+              {customers.length} {customers.length === 1 ? "customer" : "customers"}
+              {query ? <> matching “{query}”</> : null}
+            </div>
           </div>
         </div>
 
@@ -253,53 +278,85 @@ export default async function AdminCustomersPage({
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-fixed">
-              <thead className="bg-slate-50/80">
-                <tr className="text-left">
-                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 sm:px-8">Customer</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Portal</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Latest booking</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Lifetime value</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Action</th>
+          <div className="px-6 py-5 sm:px-8">
+            <table className="w-full table-fixed border-separate border-spacing-y-3">
+              <colgroup>
+                <col style={{ width: "230px" }} />
+                <col style={{ width: "200px" }} />
+                <col style={{ width: "200px" }} />
+                <col style={{ width: "270px" }} />
+                <col style={{ width: "220px" }} />
+                <col style={{ width: "50px" }} />
+              </colgroup>
+
+              <thead>
+                <tr>
+                  <th className="rounded-l-[22px] border-y border-l border-slate-200/90 bg-slate-100 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                    Customer
+                  </th>
+                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                    Portal Status
+                  </th>
+                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                    Total Bookings
+                  </th>
+                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 pl-[60px] py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                    Latest booking
+                  </th>
+                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 pr-[120px] py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                    Lifetime value
+                  </th>
+                  <th className="rounded-r-[22px] border-y border-r border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                    <span className="sr-only">Open</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+
+              <tbody>
                 {customers.map((customer) => (
-                  <tr key={customer.id} className="transition hover:bg-slate-50/70">
-                    <td className="px-6 py-4 align-top sm:px-8">
-                      <div className="font-semibold text-slate-900">{customer.name || "Unnamed customer"}</div>
-                      <div className="mt-1 text-sm text-slate-600">{customer.email || "No email"}</div>
-                      <div className="mt-1 text-sm text-slate-600">{formatPhone(customer.phone)}</div>
-                      <div className="mt-2 text-xs text-slate-500">UUID: <span className="font-mono">{customer.id}</span></div>
-                    </td>
-                    <td className="px-6 py-4 align-top">
-                      <div className="space-y-2">
-                        <span
-                          className={[
-                            "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
-                            customer.portal_status === "deactivated"
-                              ? "bg-rose-50 text-rose-700 ring-rose-200"
-                              : customer.portal_status === "active"
-                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                              : "bg-slate-100 text-slate-700 ring-slate-200",
-                          ].join(" ")}
-                        >
-                          {customer.portal_status ?? "invited"}
-                        </span>
-                        <div className="text-sm text-slate-600">
-                          {customer.bookingCount} booking{customer.bookingCount === 1 ? "" : "s"} • {customer.activeBookingCount} active
+                  <ClickableTableRow
+                    key={customer.id}
+                    href={`/admin/customers/${customer.id}`}
+                    ariaLabel={`Open customer ${customer.name || customer.email || customer.id}`}
+                    className="group cursor-pointer outline-none transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-300"
+                  >
+                    <td className="rounded-l-[24px] border-y border-l border-slate-200 bg-white px-5 py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-900 transition group-hover:text-slate-950 group-focus-visible:text-slate-950">
+                          {customer.name || "Unnamed customer"}
                         </div>
+                        <div className="mt-1 text-sm text-slate-600">{customer.email || "No email"}</div>
+                        <div className="mt-1 text-sm text-slate-600">{formatPhone(customer.phone)}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 align-top">
+
+                    <td className="border-y border-slate-200 bg-white px-4 py-[18px] text-center align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <span
+                        className={[
+                          "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
+                          customer.portal_status === "deactivated"
+                            ? "bg-rose-50 text-rose-700 ring-rose-200"
+                            : customer.portal_status === "active"
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                              : "bg-slate-100 text-slate-700 ring-slate-200",
+                        ].join(" ")}
+                      >
+                        {customer.portal_status ?? "invited"}
+                      </span>
+                    </td>
+
+                    <td className="border-y border-slate-200 bg-white px-4 py-[18px] text-center align-top text-sm font-medium text-slate-900 transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      {customer.bookingCount}
+                    </td>
+
+                    <td className="border-y border-slate-200 bg-white px-4 pl-[60px] py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
                       {customer.latestBooking ? (
-                        <div className="text-sm text-slate-700">
+                        <div className="min-w-0 text-sm text-slate-700">
                           <div className="font-semibold text-slate-900">
                             {getCustomerFacingBookingLabel(customer.latestBooking.booking_ref)}
                           </div>
                           <div className="mt-1">{formatDate(customer.latestBooking.delivery_date)}</div>
-                          <div className="mt-1 text-slate-500">
+                          <div className="mt-1 truncate text-slate-500">
                             {customer.latestBooking.customer_street || "Address pending"}
                           </div>
                         </div>
@@ -307,18 +364,22 @@ export default async function AdminCustomersPage({
                         <span className="text-sm text-slate-500">No linked bookings</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 align-top text-sm font-semibold text-slate-900">
+
+                    <td className="border-y border-slate-200 bg-white px-4 pr-[120px] py-[18px] text-right align-top text-sm font-semibold text-slate-900 transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
                       {formatUsd(customer.lifetimeValue)}
                     </td>
-                    <td className="px-6 py-4 align-top">
-                      <Link
-                        href={`/admin/customers/${customer.id}`}
-                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                      >
-                        View customer
-                      </Link>
+
+                    <td className="rounded-r-[24px] border-y border-r border-slate-200 bg-white px-3 py-[18px] align-middle transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <div className="flex items-center justify-center">
+                        <span
+                          aria-hidden="true"
+                          className="inline-flex items-center justify-center rounded-full p-2 text-slate-400 transition group-hover:translate-x-0.5 group-hover:scale-110 group-hover:text-slate-700 group-focus-visible:translate-x-0.5 group-focus-visible:scale-110 group-focus-visible:text-slate-700"
+                        >
+                          <ChevronRightIcon className="h-6 w-6" />
+                        </span>
+                      </div>
                     </td>
-                  </tr>
+                  </ClickableTableRow>
                 ))}
               </tbody>
             </table>

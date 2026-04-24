@@ -44,8 +44,8 @@ export function AdminSidebar({
   return (
     <aside
       className={[
-        "fixed left-6 top-24 hidden h-[calc(100vh-8rem)] rounded-[30px] border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/70 shadow-[0_16px_34px_rgba(15,23,42,0.065)] transition-[width] duration-300 lg:flex lg:flex-col",
-        collapsed ? "w-20" : "w-72",
+        "fixed left-5 top-24 hidden h-[calc(100vh-8rem)] rounded-[30px] border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/70 shadow-[0_16px_34px_rgba(15,23,42,0.065)] transition-[width,left] duration-300 lg:flex lg:flex-col xl:left-6 2xl:left-8",
+        collapsed ? "lg:w-[84px] xl:w-[88px]" : "lg:w-[232px] xl:w-[256px] 2xl:w-[272px]",
       ].join(" ")}
     >
       <div className={["border-b border-slate-200/80", collapsed ? "px-3 pb-3 pt-4" : "px-5 pb-[14px] pt-[18px]"].join(" ")}>

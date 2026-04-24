@@ -1,93 +1,42 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useDeferredValue, useMemo, useState, useTransition } from "react";
 import {
   CheckCircleIcon,
+  ExclamationTriangleIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   UserMinusIcon,
   UserPlusIcon,
 } from "@heroicons/react/24/outline";
+import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 import {
   createEmptyEmployee,
-  createMockEmployees,
-  employeeStatusTagOptions,
+  employeeRoleOptions,
+  formatDate,
+  formatPhone,
+  formatTimestamp,
+  getEmployeeRoleLabel,
+  normalizeEmailInput,
+  normalizeEmployeeCodeInput,
+  normalizeEmployeeMutationInput,
+  normalizePhoneInput,
+  normalizeStateInput,
+  normalizeZipInput,
   preferredContactMethodOptions,
+  toEmployeeMutationInput,
+  validateEmployee,
+  type EmployeeFormErrors,
   type EmployeeRecord,
 } from "@/lib/admin/employees";
-
-type EmployeeFormErrors = Partial<Record<keyof EmployeeRecord, string>>;
-
-function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return value || "—";
-}
-
-function formatDate(value: string) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/New_York",
-  }).format(new Date(`${value}T12:00:00`));
-}
-
-function formatTimestamp(value: string) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  }).format(new Date(value));
-}
-
-function normalizePhoneInput(value: string) {
-  return value.replace(/[^\d()+\-\s]/g, "");
-}
-
-function normalizeZipInput(value: string) {
-  return value.replace(/\D/g, "").slice(0, 5);
-}
-
-function validateEmployee(employee: EmployeeRecord) {
-  const errors: EmployeeFormErrors = {};
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const phoneDigits = employee.phone.replace(/\D/g, "");
-  const secondPhoneDigits = employee.secondPhone.replace(/\D/g, "");
-  const emergencyPhoneDigits = employee.emergencyContactPhone.replace(/\D/g, "");
-
-  if (!employee.firstName.trim()) errors.firstName = "First name is required.";
-  if (!employee.lastName.trim()) errors.lastName = "Last name is required.";
-  if (!employee.employeeId.trim()) errors.employeeId = "Employee ID is required.";
-  if (!employee.streetAddress.trim()) errors.streetAddress = "Street address is required.";
-  if (!employee.city.trim()) errors.city = "City is required.";
-  if (!employee.state.trim()) errors.state = "State is required.";
-  if (employee.state.trim().length !== 2) errors.state = "Use a 2-letter state code.";
-  if (employee.zip.trim().length !== 5) errors.zip = "ZIP must be 5 digits.";
-  if (!employee.jobTitle.trim()) errors.jobTitle = "Job title is required.";
-  if (phoneDigits.length !== 10) errors.phone = "Phone must be 10 digits.";
-  if (employee.secondPhone && secondPhoneDigits.length !== 10) errors.secondPhone = "Second phone must be 10 digits.";
-  if (!emailPattern.test(employee.email.trim())) errors.email = "Enter a valid email address.";
-  if (!employee.dateOfBirth) errors.dateOfBirth = "Date of birth is required.";
-  if (!employee.hireDate) errors.hireDate = "Hire date is required.";
-  if (!employee.licenseNumber.trim()) errors.licenseNumber = "License number is required.";
-  if (!employee.licenseState.trim()) errors.licenseState = "License state is required.";
-  if (employee.licenseState.trim().length !== 2) errors.licenseState = "Use a 2-letter state code.";
-  if (!employee.licenseClass.trim()) errors.licenseClass = "License class is required.";
-  if (!employee.licenseExpiration) errors.licenseExpiration = "License expiration is required.";
-  if (!employee.emergencyContactName.trim()) errors.emergencyContactName = "Emergency contact name is required.";
-  if (emergencyPhoneDigits.length !== 10) errors.emergencyContactPhone = "Emergency contact phone must be 10 digits.";
-
-  return errors;
-}
+import {
+  createEmployeeAction,
+  deactivateEmployeeAction,
+  reactivateEmployeeAction,
+  updateEmployeeAction,
+} from "./actions";
 
 function SectionTitle({
   title,
@@ -113,7 +62,7 @@ function Field({
   label: string;
   error?: string;
   required?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <label className="block">
@@ -134,6 +83,7 @@ function Input({
   placeholder,
   maxLength,
   error,
+  disabled,
 }: {
   value: string;
   onChange: (nextValue: string) => void;
@@ -141,6 +91,7 @@ function Input({
   placeholder?: string;
   maxLength?: number;
   error?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -149,8 +100,9 @@ function Input({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       maxLength={maxLength}
+      disabled={disabled}
       className={[
-        "h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition",
+        "h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50",
         error
           ? "border-rose-300 focus:border-rose-400"
           : "border-slate-300 focus:border-[#F97316]",
@@ -164,18 +116,21 @@ function Select({
   onChange,
   children,
   error,
+  disabled,
 }: {
   value: string;
   onChange: (nextValue: string) => void;
-  children: React.ReactNode;
+  children: ReactNode;
   error?: string;
+  disabled?: boolean;
 }) {
   return (
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
       className={[
-        "h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition",
+        "h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50",
         error
           ? "border-rose-300 focus:border-rose-400"
           : "border-slate-300 focus:border-[#F97316]",
@@ -189,31 +144,45 @@ function Select({
 function Textarea({
   value,
   onChange,
+  disabled,
 }: {
   value: string;
   onChange: (nextValue: string) => void;
+  disabled?: boolean;
 }) {
   return (
     <textarea
       value={value}
       onChange={(event) => onChange(event.target.value)}
       rows={4}
-      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316]"
+      disabled={disabled}
+      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
     />
   );
 }
 
-export function EmployeesClient() {
-  const [employees, setEmployees] = useState<EmployeeRecord[]>(() => createMockEmployees());
+type EmployeesClientProps = {
+  initialEmployees: EmployeeRecord[];
+  loadError: string | null;
+};
+
+export function EmployeesClient({
+  initialEmployees,
+  loadError,
+}: EmployeesClientProps) {
+  const [employees, setEmployees] = useState<EmployeeRecord[]>(initialEmployees);
   const [search, setSearch] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [draft, setDraft] = useState<EmployeeRecord | null>(null);
   const [draftMode, setDraftMode] = useState<"create" | "edit">("create");
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(initialEmployees[0]?.id ?? null);
   const [errors, setErrors] = useState<EmployeeFormErrors>({});
+  const [panelError, setPanelError] = useState<string | null>(loadError);
+  const [isPending, startTransition] = useTransition();
+  const deferredSearch = useDeferredValue(search);
 
   const filteredEmployees = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const normalizedSearch = deferredSearch.trim().toLowerCase();
 
     return employees
       .filter((employee) => includeInactive || employee.active)
@@ -229,6 +198,7 @@ export function EmployeesClient() {
           employee.city,
           employee.state,
           employee.employeeId,
+          employee.roleKey,
         ]
           .join(" ")
           .toLowerCase()
@@ -238,7 +208,7 @@ export function EmployeesClient() {
         if (left.active !== right.active) return left.active ? -1 : 1;
         return `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`);
       });
-  }, [employees, includeInactive, search]);
+  }, [deferredSearch, employees, includeInactive]);
 
   const selectedEmployee =
     filteredEmployees.find((employee) => employee.id === selectedEmployeeId) ??
@@ -254,11 +224,15 @@ export function EmployeesClient() {
     const diffDays = (expiration.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
     return diffDays >= 0 && diffDays <= 90;
   }).length;
+  const hasSearch = search.trim().length > 0;
+  const hasNoEmployees = employees.length === 0;
+  const hasNoResults = !hasNoEmployees && filteredEmployees.length === 0;
 
   function openCreateForm() {
     setDraft(createEmptyEmployee());
     setDraftMode("create");
     setErrors({});
+    setPanelError(null);
     setSelectedEmployeeId(null);
   }
 
@@ -266,6 +240,7 @@ export function EmployeesClient() {
     setDraft({ ...employee });
     setDraftMode("edit");
     setErrors({});
+    setPanelError(null);
     setSelectedEmployeeId(employee.id);
   }
 
@@ -273,61 +248,108 @@ export function EmployeesClient() {
     setSelectedEmployeeId(employeeId);
     setDraft(null);
     setErrors({});
+    setPanelError(null);
   }
 
   function closeForm() {
     setDraft(null);
     setErrors({});
+    setPanelError(null);
   }
 
   function updateDraft<K extends keyof EmployeeRecord>(key: K, value: EmployeeRecord[K]) {
     if (!draft) return;
     setDraft({ ...draft, [key]: value });
-    setErrors((current) => ({ ...current, [key]: undefined }));
+    setErrors((current) => ({
+      ...current,
+      [key as keyof EmployeeFormErrors]: undefined,
+    }));
+    setPanelError(null);
+  }
+
+  function clearRosterFilters() {
+    setSearch("");
+    setIncludeInactive(false);
   }
 
   function saveDraft() {
     if (!draft) return;
-    const nextErrors = validateEmployee(draft);
+
+    const payload = normalizeEmployeeMutationInput(toEmployeeMutationInput(draft));
+    const nextErrors = validateEmployee(payload);
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      setPanelError("Please review the highlighted fields before saving.");
+      adminToast.error("Please review the employee form.");
       return;
     }
 
-    const now = new Date().toISOString();
-    if (draftMode === "create") {
-      const created: EmployeeRecord = {
-        ...draft,
-        id: `emp_${crypto.randomUUID()}`,
-        updatedAt: now,
-      };
-      setEmployees((current) => [created, ...current]);
-      setSelectedEmployeeId(created.id);
-      setDraft({ ...created });
+    startTransition(async () => {
+      const result =
+        draftMode === "create"
+          ? await createEmployeeAction(payload)
+          : await updateEmployeeAction(draft.id, payload);
+
+      if (!result.ok) {
+        setErrors(result.fieldErrors ?? {});
+        setPanelError(result.error);
+        adminToast.error(result.error);
+        return;
+      }
+
+      setEmployees((current) => {
+        if (draftMode === "create") {
+          return [result.employee, ...current];
+        }
+
+        return current.map((employee) =>
+          employee.id === result.employee.id ? result.employee : employee,
+        );
+      });
+      setSelectedEmployeeId(result.employee.id);
+      setDraft(result.employee);
       setDraftMode("edit");
-      return;
-    }
-
-    const saved = { ...draft, updatedAt: now };
-    setEmployees((current) => current.map((employee) => (employee.id === saved.id ? saved : employee)));
-    setSelectedEmployeeId(saved.id);
-    setDraft(saved);
+      setErrors({});
+      setPanelError(null);
+      adminToast.success(result.message);
+    });
   }
 
   function toggleEmployeeStatus(employeeId: string) {
-    setEmployees((current) =>
-      current.map((employee) =>
-        employee.id === employeeId
-          ? { ...employee, active: !employee.active, updatedAt: new Date().toISOString() }
-          : employee,
-      ),
-    );
+    const employee = employees.find((entry) => entry.id === employeeId);
+    if (!employee) return;
 
-    setDraft((current) =>
-      current && current.id === employeeId
-        ? { ...current, active: !current.active, updatedAt: new Date().toISOString() }
-        : current,
-    );
+    const confirmed = employee.active
+      ? window.confirm(
+          `Move ${employee.firstName} ${employee.lastName} to inactive? This keeps the record and history but removes the employee from the default active roster.`,
+        )
+      : window.confirm(
+          `Reactivate ${employee.firstName} ${employee.lastName}? This will return the employee to the active roster.`,
+        );
+
+    if (!confirmed) return;
+
+    startTransition(async () => {
+      const result = employee.active
+        ? await deactivateEmployeeAction(employeeId)
+        : await reactivateEmployeeAction(employeeId);
+
+      if (!result.ok) {
+        setPanelError(result.error);
+        adminToast.error(result.error);
+        return;
+      }
+
+      setEmployees((current) =>
+        current.map((entry) => (entry.id === result.employee.id ? result.employee : entry)),
+      );
+      setDraft((current) =>
+        current && current.id === result.employee.id ? result.employee : current,
+      );
+      setSelectedEmployeeId(result.employee.id);
+      setPanelError(null);
+      adminToast.success(result.message);
+    });
   }
 
   return (
@@ -358,7 +380,8 @@ export function EmployeesClient() {
           <button
             type="button"
             onClick={openCreateForm}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            disabled={isPending}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-orange-300"
           >
             <PlusIcon className="h-4 w-4" />
             Add employee
@@ -386,7 +409,30 @@ export function EmployeesClient() {
             />
             Include inactive
           </label>
+
+          {(hasSearch || includeInactive) ? (
+            <button
+              type="button"
+              onClick={clearRosterFilters}
+              className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Clear view
+            </button>
+          ) : null}
         </div>
+
+        {loadError ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <div>Employee records could not be loaded from Supabase: {loadError}</div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-800 transition hover:bg-rose-100"
+            >
+              Refresh page
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-8 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
@@ -402,17 +448,35 @@ export function EmployeesClient() {
           {filteredEmployees.length === 0 ? (
             <div className="px-6 py-16">
               <div className="mx-auto max-w-xl rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-                <div className="text-lg font-semibold text-slate-900">No employees match the current view</div>
+                <div className="text-lg font-semibold text-slate-900">
+                  {hasNoEmployees ? "No employees yet" : "No employees match this view"}
+                </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Adjust the search or include inactive employees to expand the roster. You can also start a new record from here.
+                  {hasNoEmployees
+                    ? "Create the first employee record for this business. Inactive records remain available for history and reactivation later."
+                    : hasNoResults
+                      ? "Try a different search, clear the current view, or include inactive employees to widen the roster."
+                      : "Adjust the current view to continue."}
                 </p>
-                <button
-                  type="button"
-                  onClick={openCreateForm}
-                  className="mt-6 inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
-                  Add employee
-                </button>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  {!hasNoEmployees ? (
+                    <button
+                      type="button"
+                      onClick={clearRosterFilters}
+                      className="inline-flex h-11 items-center rounded-2xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Clear view
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={openCreateForm}
+                    disabled={isPending}
+                    className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  >
+                    Add employee
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -434,7 +498,13 @@ export function EmployeesClient() {
                   {filteredEmployees.map((employee) => {
                     const isSelected = selectedEmployeeId === employee.id;
                     return (
-                      <tr key={employee.id} className={isSelected ? "bg-orange-50/40" : "bg-white"}>
+                      <tr
+                        key={employee.id}
+                        className={[
+                          isSelected ? "bg-orange-50/40" : "bg-white",
+                          !employee.active ? "opacity-80" : "",
+                        ].join(" ")}
+                      >
                         <td className="px-6 py-4 sm:px-8">
                           <button
                             type="button"
@@ -444,8 +514,8 @@ export function EmployeesClient() {
                             {employee.firstName} {employee.lastName}
                           </button>
                           <div className="mt-1 text-xs text-slate-500">
-                            {employee.employeeId}
-                            {employee.statusTag ? <> • {employee.statusTag}</> : null}
+                            {employee.employeeId || "No employee ID"}
+                            {employee.roleKey ? <> • {getEmployeeRoleLabel(employee.roleKey)}</> : null}
                           </div>
                         </td>
                         <td className="px-4 py-4 text-slate-600">{employee.jobTitle}</td>
@@ -459,11 +529,16 @@ export function EmployeesClient() {
                               "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
                               employee.active
                                 ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                                : "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
+                                : "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
                             ].join(" ")}
                           >
                             {employee.active ? "Active" : "Inactive"}
                           </span>
+                          {!employee.active && employee.deactivatedAt ? (
+                            <div className="mt-1 text-xs text-slate-500">
+                              Inactive since {formatTimestamp(employee.deactivatedAt)}
+                            </div>
+                          ) : null}
                         </td>
                         <td className="px-6 py-4 sm:px-8">
                           <div className="flex gap-2">
@@ -513,7 +588,8 @@ export function EmployeesClient() {
                     <button
                       type="button"
                       onClick={() => toggleEmployeeStatus(draft.id)}
-                      className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                      disabled={isPending}
+                      className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50"
                     >
                       {draft.active ? <UserMinusIcon className="h-4 w-4" /> : <UserPlusIcon className="h-4 w-4" />}
                       {draft.active ? "Deactivate" : "Reactivate"}
@@ -530,6 +606,12 @@ export function EmployeesClient() {
               ) : null}
             </div>
 
+            {panelError ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                {panelError}
+              </div>
+            ) : null}
+
             {draft ? (
               <div className="mt-6 space-y-8">
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
@@ -537,35 +619,52 @@ export function EmployeesClient() {
                     <div className="font-medium text-slate-700">
                       Status: <span className={draft.active ? "text-emerald-700" : "text-slate-600"}>{draft.active ? "Active" : "Inactive"}</span>
                     </div>
-                    <div className="text-slate-500">Last updated {draft.updatedAt ? formatTimestamp(draft.updatedAt) : "not yet saved"}</div>
+                    <div className="text-slate-500">
+                      {isPending ? "Saving..." : `Last updated ${draft.updatedAt ? formatTimestamp(draft.updatedAt) : "not yet saved"}`}
+                    </div>
                   </div>
+                  {!draft.active ? (
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      This employee is inactive. The record stays available for history, compliance review, and future reactivation.
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
                   <SectionTitle title="Core details" description="Capture the identity and day-to-day operational role for this employee." />
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field label="First name" required error={errors.firstName}>
-                      <Input value={draft.firstName} onChange={(value) => updateDraft("firstName", value)} error={errors.firstName} />
+                      <Input disabled={isPending} value={draft.firstName} onChange={(value) => updateDraft("firstName", value)} error={errors.firstName} />
                     </Field>
                     <Field label="Last name" required error={errors.lastName}>
-                      <Input value={draft.lastName} onChange={(value) => updateDraft("lastName", value)} error={errors.lastName} />
+                      <Input disabled={isPending} value={draft.lastName} onChange={(value) => updateDraft("lastName", value)} error={errors.lastName} />
                     </Field>
                     <Field label="Employee ID" required error={errors.employeeId}>
-                      <Input value={draft.employeeId} onChange={(value) => updateDraft("employeeId", value.toUpperCase())} error={errors.employeeId} />
+                      <Input
+                        disabled={isPending}
+                        value={draft.employeeId}
+                        onChange={(value) => updateDraft("employeeId", normalizeEmployeeCodeInput(value))}
+                        error={errors.employeeId}
+                      />
                     </Field>
                     <Field label="Job title / role" required error={errors.jobTitle}>
-                      <Input value={draft.jobTitle} onChange={(value) => updateDraft("jobTitle", value)} error={errors.jobTitle} />
+                      <Input disabled={isPending} value={draft.jobTitle} onChange={(value) => updateDraft("jobTitle", value)} error={errors.jobTitle} />
                     </Field>
-                    <Field label="Status tag">
-                      <Select value={draft.statusTag} onChange={(value) => updateDraft("statusTag", value as EmployeeRecord["statusTag"])}>
+                    <Field label="Role key">
+                      <Select
+                        disabled={isPending}
+                        value={draft.roleKey}
+                        onChange={(value) => updateDraft("roleKey", value as EmployeeRecord["roleKey"])}
+                      >
                         <option value="">None</option>
-                        {employeeStatusTagOptions.map((option) => (
-                          <option key={option} value={option}>{option}</option>
+                        {employeeRoleOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </Select>
                     </Field>
                     <Field label="Preferred contact method">
                       <Select
+                        disabled={isPending}
                         value={draft.preferredContactMethod}
                         onChange={(value) => updateDraft("preferredContactMethod", value as EmployeeRecord["preferredContactMethod"])}
                       >
@@ -575,10 +674,10 @@ export function EmployeesClient() {
                       </Select>
                     </Field>
                     <Field label="Date of birth" required error={errors.dateOfBirth}>
-                      <Input type="date" value={draft.dateOfBirth} onChange={(value) => updateDraft("dateOfBirth", value)} error={errors.dateOfBirth} />
+                      <Input disabled={isPending} type="date" value={draft.dateOfBirth} onChange={(value) => updateDraft("dateOfBirth", value)} error={errors.dateOfBirth} />
                     </Field>
                     <Field label="Hire date" required error={errors.hireDate}>
-                      <Input type="date" value={draft.hireDate} onChange={(value) => updateDraft("hireDate", value)} error={errors.hireDate} />
+                      <Input disabled={isPending} type="date" value={draft.hireDate} onChange={(value) => updateDraft("hireDate", value)} error={errors.hireDate} />
                     </Field>
                   </div>
                 </div>
@@ -587,31 +686,55 @@ export function EmployeesClient() {
                   <SectionTitle title="Contact and address" description="Keep the primary routing and emergency contact details easy to review from one place." />
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field label="Street address" required error={errors.streetAddress}>
-                      <Input value={draft.streetAddress} onChange={(value) => updateDraft("streetAddress", value)} error={errors.streetAddress} />
+                      <Input disabled={isPending} value={draft.streetAddress} onChange={(value) => updateDraft("streetAddress", value)} error={errors.streetAddress} />
                     </Field>
                     <Field label="City" required error={errors.city}>
-                      <Input value={draft.city} onChange={(value) => updateDraft("city", value)} error={errors.city} />
+                      <Input disabled={isPending} value={draft.city} onChange={(value) => updateDraft("city", value)} error={errors.city} />
                     </Field>
                     <Field label="State" required error={errors.state}>
-                      <Input value={draft.state} onChange={(value) => updateDraft("state", value.toUpperCase().slice(0, 2))} maxLength={2} error={errors.state} />
+                      <Input
+                        disabled={isPending}
+                        value={draft.state}
+                        onChange={(value) => updateDraft("state", normalizeStateInput(value))}
+                        maxLength={2}
+                        error={errors.state}
+                      />
                     </Field>
                     <Field label="ZIP" required error={errors.zip}>
-                      <Input value={draft.zip} onChange={(value) => updateDraft("zip", normalizeZipInput(value))} maxLength={5} error={errors.zip} />
+                      <Input
+                        disabled={isPending}
+                        value={draft.zip}
+                        onChange={(value) => updateDraft("zip", normalizeZipInput(value))}
+                        maxLength={5}
+                        error={errors.zip}
+                      />
                     </Field>
                     <Field label="Phone number" required error={errors.phone}>
-                      <Input value={draft.phone} onChange={(value) => updateDraft("phone", normalizePhoneInput(value))} error={errors.phone} />
+                      <Input disabled={isPending} value={draft.phone} onChange={(value) => updateDraft("phone", normalizePhoneInput(value))} error={errors.phone} />
                     </Field>
                     <Field label="Optional second phone" error={errors.secondPhone}>
-                      <Input value={draft.secondPhone} onChange={(value) => updateDraft("secondPhone", normalizePhoneInput(value))} error={errors.secondPhone} />
+                      <Input disabled={isPending} value={draft.secondPhone} onChange={(value) => updateDraft("secondPhone", normalizePhoneInput(value))} error={errors.secondPhone} />
                     </Field>
                     <Field label="Email" required error={errors.email}>
-                      <Input type="email" value={draft.email} onChange={(value) => updateDraft("email", value)} error={errors.email} />
+                      <Input
+                        disabled={isPending}
+                        type="email"
+                        value={draft.email}
+                        onChange={(value) => updateDraft("email", normalizeEmailInput(value))}
+                        error={errors.email}
+                      />
                     </Field>
                     <Field label="Emergency contact name" required error={errors.emergencyContactName}>
-                      <Input value={draft.emergencyContactName} onChange={(value) => updateDraft("emergencyContactName", value)} error={errors.emergencyContactName} />
+                      <Input
+                        disabled={isPending}
+                        value={draft.emergencyContactName}
+                        onChange={(value) => updateDraft("emergencyContactName", value)}
+                        error={errors.emergencyContactName}
+                      />
                     </Field>
                     <Field label="Emergency contact phone" required error={errors.emergencyContactPhone}>
                       <Input
+                        disabled={isPending}
                         value={draft.emergencyContactPhone}
                         onChange={(value) => updateDraft("emergencyContactPhone", normalizePhoneInput(value))}
                         error={errors.emergencyContactPhone}
@@ -624,21 +747,23 @@ export function EmployeesClient() {
                   <SectionTitle title="Driver's license and notes" description="Surface license coverage and operational notes without turning this into HR software." />
                   <div className="grid gap-4 md:grid-cols-2">
                     <Field label="License number" required error={errors.licenseNumber}>
-                      <Input value={draft.licenseNumber} onChange={(value) => updateDraft("licenseNumber", value.toUpperCase())} error={errors.licenseNumber} />
+                      <Input disabled={isPending} value={draft.licenseNumber} onChange={(value) => updateDraft("licenseNumber", value.toUpperCase())} error={errors.licenseNumber} />
                     </Field>
                     <Field label="License state" required error={errors.licenseState}>
                       <Input
+                        disabled={isPending}
                         value={draft.licenseState}
-                        onChange={(value) => updateDraft("licenseState", value.toUpperCase().slice(0, 2))}
+                        onChange={(value) => updateDraft("licenseState", normalizeStateInput(value))}
                         maxLength={2}
                         error={errors.licenseState}
                       />
                     </Field>
                     <Field label="License class / type" required error={errors.licenseClass}>
-                      <Input value={draft.licenseClass} onChange={(value) => updateDraft("licenseClass", value)} error={errors.licenseClass} />
+                      <Input disabled={isPending} value={draft.licenseClass} onChange={(value) => updateDraft("licenseClass", value)} error={errors.licenseClass} />
                     </Field>
                     <Field label="Expiration date" required error={errors.licenseExpiration}>
                       <Input
+                        disabled={isPending}
                         type="date"
                         value={draft.licenseExpiration}
                         onChange={(value) => updateDraft("licenseExpiration", value)}
@@ -647,7 +772,7 @@ export function EmployeesClient() {
                     </Field>
                     <div className="md:col-span-2">
                       <Field label="Notes">
-                        <Textarea value={draft.notes} onChange={(value) => updateDraft("notes", value)} />
+                        <Textarea disabled={isPending} value={draft.notes} onChange={(value) => updateDraft("notes", value)} />
                       </Field>
                     </div>
                   </div>
@@ -670,9 +795,10 @@ export function EmployeesClient() {
                     <button
                       type="button"
                       onClick={saveDraft}
-                      className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      disabled={isPending}
+                      className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
                     >
-                      {draftMode === "create" ? "Create employee" : "Save changes"}
+                      {isPending ? "Saving..." : draftMode === "create" ? "Create employee" : "Save changes"}
                     </button>
                   </div>
                 </div>
@@ -684,7 +810,7 @@ export function EmployeesClient() {
                     <div>
                       <div className="text-xl font-semibold text-slate-900">{selectedEmployee.firstName} {selectedEmployee.lastName}</div>
                       <div className="mt-1 text-sm text-slate-500">
-                        {selectedEmployee.jobTitle} • {selectedEmployee.employeeId}
+                        {selectedEmployee.jobTitle} • {selectedEmployee.employeeId || "No employee ID"}
                       </div>
                     </div>
                     <button
@@ -696,6 +822,19 @@ export function EmployeesClient() {
                       Edit record
                     </button>
                   </div>
+                  {!selectedEmployee.active ? (
+                    <div className="mt-4 flex items-start gap-3 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                      <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 shrink-0" />
+                      <div>
+                        <div className="font-semibold">Inactive employee record</div>
+                        <div className="mt-1">
+                          {selectedEmployee.deactivationReason
+                            ? `${selectedEmployee.deactivationReason}${selectedEmployee.deactivatedAt ? ` • ${formatTimestamp(selectedEmployee.deactivatedAt)}` : ""}`
+                            : "This record has been soft-deactivated and remains available for review and reactivation."}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
 
                 <dl className="grid gap-4 sm:grid-cols-2">
@@ -706,6 +845,7 @@ export function EmployeesClient() {
                     ["License", `${selectedEmployee.licenseState} ${selectedEmployee.licenseClass}`],
                     ["License expiration", formatDate(selectedEmployee.licenseExpiration)],
                     ["Preferred contact", selectedEmployee.preferredContactMethod],
+                    ["Role key", selectedEmployee.roleKey ? getEmployeeRoleLabel(selectedEmployee.roleKey) : "—"],
                     ["Emergency contact", `${selectedEmployee.emergencyContactName} • ${formatPhone(selectedEmployee.emergencyContactPhone)}`],
                     ["Last updated", formatTimestamp(selectedEmployee.updatedAt)],
                   ].map(([label, value]) => (
@@ -725,7 +865,7 @@ export function EmployeesClient() {
               </div>
             ) : (
               <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
-                Select an employee to review details, or create a new record to get started.
+                Select an employee to review details, or start a new employee record for this business.
               </div>
             )}
           </div>
@@ -733,7 +873,7 @@ export function EmployeesClient() {
           <div className="rounded-[32px] border border-slate-200 bg-slate-50/80 p-6 shadow-sm">
             <div className="text-sm font-semibold text-slate-900">Data status</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              This first version uses typed local mock state so the page can be reviewed without introducing a one-off backend pattern. The entity shape is structured for a future business-managed employees table with soft deactivation rather than deletion.
+              Employees now load from the tenant-scoped Supabase `business_employees` table. Records are business-owned, soft-deactivated instead of deleted, and ready for future auth-user linking without requiring login access today.
             </p>
           </div>
         </div>

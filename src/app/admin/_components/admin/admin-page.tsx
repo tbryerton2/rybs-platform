@@ -17,7 +17,7 @@ export function AdminPage({
     <div
       className={joinClasses(
         "mx-auto w-full pb-16 pt-6",
-        width === "wide" ? "max-w-[1680px]" : "max-w-[1400px]",
+        width === "wide" ? "max-w-[1920px]" : "max-w-[1680px]",
         className,
       )}
     >
@@ -42,7 +42,7 @@ export function AdminPageHeader({
   return (
     <div
       className={joinClasses(
-        "mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between",
+        "mb-8 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between",
         className,
       )}
     >
@@ -61,7 +61,7 @@ export function AdminPageHeader({
       </div>
 
       {actions ? (
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           {actions}
         </div>
       ) : null}

@@ -61,7 +61,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const showShellHeader =
     pathname !== "/admin" &&
     !pathname.startsWith("/admin/bookings") &&
-    pathname !== "/admin/customers" &&
+    !pathname.startsWith("/admin/customers") &&
     !pathname.startsWith("/admin/docs") &&
     pathname !== "/admin/portal-requests" &&
     pathname !== "/admin/system" &&
@@ -90,7 +90,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-slate-100">
       <MobileNav pathname={pathname} />
 
-      <div className="mx-auto max-w-[1720px] lg:px-6 lg:pb-6 lg:pt-6">
+      <div className="w-full lg:px-5 lg:pb-6 lg:pt-6 xl:px-6 2xl:px-8">
         <AdminSidebar
           pathname={pathname}
           collapsed={sidebarCollapsed}
@@ -100,10 +100,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div
           className={[
             "min-w-0 transition-[padding-left] duration-300",
-            sidebarCollapsed ? "lg:pl-[112px]" : "lg:pl-[320px]",
+            sidebarCollapsed ? "lg:pl-[108px] xl:pl-[116px]" : "lg:pl-[272px] xl:pl-[296px] 2xl:pl-[312px]",
           ].join(" ")}
         >
-          <div className="min-w-0 px-4 sm:px-6 lg:px-8">
+          <div className="min-w-0 px-4 sm:px-6 lg:px-7 xl:px-8 2xl:px-10">
             {showShellHeader ? (
               <div className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 lg:rounded-[28px] lg:border lg:px-8 lg:py-5">
                 <div className="flex items-center justify-between gap-4">

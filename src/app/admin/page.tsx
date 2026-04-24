@@ -6,8 +6,8 @@ import {
   ChevronRightIcon,
   ClockIcon,
   ExclamationTriangleIcon,
-  LifebuoyIcon,
   InformationCircleIcon,
+  LifebuoyIcon,
   MapPinIcon,
   ShieldCheckIcon,
   QueueListIcon,
@@ -17,6 +17,7 @@ import {
   WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "./_components/admin/admin-page";
+import { SnapshotCard } from "./_components/SnapshotCard";
 import { supabaseServer } from "@/lib/supabase/server";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
 import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
@@ -281,124 +282,6 @@ function SectionCard({
       <div className="flex-1 p-6">{children}</div>
     </section>
   );
-}
-
-function SnapshotCard({
-  label,
-  value,
-  insight,
-  tooltip,
-  icon: Icon,
-  toneKey = "slate",
-  href,
-  tone = "default",
-}: {
-  label: string;
-  value: string | number;
-  insight: string;
-  tooltip: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  toneKey?: "blue" | "amber" | "slate" | "green";
-  href?: string;
-  tone?: "default" | "alert";
-}) {
-  const colorClasses =
-    tone === "alert"
-      ? {
-          card: "border-rose-200/80 bg-rose-50/85 shadow-[0_10px_24px_rgba(244,63,94,0.08)]",
-          iconChip: "border-rose-200/80 bg-white/80 text-rose-700",
-          label: "text-rose-700",
-          value: "text-rose-900",
-          insight: "text-rose-700",
-          info: "text-rose-500 hover:text-rose-700 focus-visible:text-rose-700",
-        }
-      : toneKey === "blue"
-        ? {
-            card: "border-sky-200/70 bg-sky-50/55 hover:border-sky-300/80 hover:shadow-[0_12px_28px_rgba(14,165,233,0.08)]",
-            iconChip: "border-sky-200/70 bg-white/80 text-sky-700",
-            label: "text-slate-700",
-            value: "text-slate-900",
-            insight: "text-slate-700",
-            info: "text-sky-500 hover:text-sky-700 focus-visible:text-sky-700",
-          }
-        : toneKey === "amber"
-          ? {
-              card: "border-amber-200/70 bg-amber-50/50 hover:border-amber-300/80 hover:shadow-[0_12px_28px_rgba(245,158,11,0.08)]",
-              iconChip: "border-amber-200/70 bg-white/80 text-amber-700",
-              label: "text-slate-700",
-              value: "text-slate-900",
-              insight: "text-slate-700",
-              info: "text-amber-500 hover:text-amber-700 focus-visible:text-amber-700",
-            }
-          : toneKey === "green"
-            ? {
-                card: "border-emerald-200/70 bg-emerald-50/50 hover:border-emerald-300/80 hover:shadow-[0_12px_28px_rgba(16,185,129,0.08)]",
-                iconChip: "border-emerald-200/70 bg-white/80 text-emerald-700",
-                label: "text-slate-700",
-                value: "text-slate-900",
-                insight: "text-slate-700",
-                info: "text-emerald-500 hover:text-emerald-700 focus-visible:text-emerald-700",
-              }
-            : {
-                card: "border-indigo-200/60 bg-indigo-50/40 hover:border-indigo-300/70 hover:shadow-[0_12px_28px_rgba(99,102,241,0.08)]",
-                iconChip: "border-indigo-200/70 bg-white/80 text-indigo-700",
-                label: "text-slate-700",
-                value: "text-slate-900",
-                insight: "text-slate-700",
-                info: "text-indigo-500 hover:text-indigo-700 focus-visible:text-indigo-700",
-              };
-
-  const content = (
-    <div
-      className={joinClasses(
-        "relative flex h-full min-h-[164px] flex-col overflow-visible rounded-[28px] border px-5 py-5 shadow-sm transition",
-        colorClasses.card,
-      )}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className={joinClasses("flex items-center gap-2 text-sm font-semibold", colorClasses.label)}>
-            <span
-              className={joinClasses(
-                "flex h-9 w-9 items-center justify-center rounded-2xl border",
-                colorClasses.iconChip,
-              )}
-            >
-              <Icon className="h-[18px] w-[18px]" />
-            </span>
-            {label}
-          </div>
-          <div className={joinClasses("mt-3 text-4xl font-semibold tracking-tight", colorClasses.value)}>
-            {value}
-          </div>
-          <div className={joinClasses("mt-auto pt-5 text-sm font-medium", colorClasses.insight)}>
-            {insight}
-          </div>
-        </div>
-
-        <div className="relative z-20 shrink-0 overflow-visible">
-          <button
-            type="button"
-            aria-label={`${label} definition`}
-            className={joinClasses(
-              "group relative rounded-full p-0.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
-              colorClasses.info,
-            )}
-          >
-            <InformationCircleIcon className="h-5 w-5" aria-hidden="true" />
-            <span
-              role="tooltip"
-              className="pointer-events-none absolute right-0 top-8 z-50 w-64 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-            >
-              {tooltip}
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
-  return href ? <Link href={href}>{content}</Link> : content;
 }
 
 function QueueItem({
@@ -879,21 +762,21 @@ export default async function AdminDashboardPage() {
   ];
 
   return (
-    <AdminPage className="space-y-8">
+    <AdminPage width="wide" className="space-y-8">
       <AdminPageHeader
         title="Dashboard"
         description={`${formatDateHeadline(todayStr)} · Here’s your current operations overview`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <Link
               href="/admin/schedule"
-              className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 sm:min-w-[9.75rem]"
             >
               Open Schedule
             </Link>
             <Link
               href="/admin/bookings"
-              className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:min-w-[9.75rem]"
             >
               View Bookings
             </Link>
@@ -908,14 +791,14 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="grid auto-rows-fr gap-4 overflow-visible md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid auto-rows-fr gap-4 overflow-visible sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           {snapshotCards.map((card) => (
             <SnapshotCard key={card.label} {...card} />
           ))}
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
           title="Needs Attention"
           tooltip="This list highlights the active issues the office or dispatcher can act on right now."
@@ -958,7 +841,7 @@ export default async function AdminDashboardPage() {
           actionLabel="Open Schedule"
         >
           <div className="overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1.2fr)_88px_88px_72px] gap-3 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            <div className="grid grid-cols-[minmax(0,1fr)_72px_72px_64px] gap-2 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:grid-cols-[minmax(0,1.1fr)_80px_80px_68px] sm:gap-3 xl:grid-cols-[minmax(0,1.2fr)_88px_88px_72px]">
               <div>Day</div>
               <div className="text-right">Deliveries</div>
               <div className="text-right">Pickups</div>
@@ -971,11 +854,16 @@ export default async function AdminDashboardPage() {
                   key={row.dayIso}
                   href={row.href}
                   className={joinClasses(
-                    "grid grid-cols-[minmax(0,1.2fr)_88px_88px_72px] items-center gap-3 px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2",
+                    "grid grid-cols-[minmax(0,1fr)_72px_72px_64px] items-center gap-2 px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1.1fr)_80px_80px_68px] sm:gap-3 xl:grid-cols-[minmax(0,1.2fr)_88px_88px_72px]",
                     row.dayIso === todayStr && "bg-orange-50/35",
                   )}
                 >
-                  <div className={joinClasses("text-sm font-semibold", row.dayIso === todayStr ? "text-slate-950" : "text-slate-900")}>
+                  <div
+                    className={joinClasses(
+                      "truncate text-sm font-semibold",
+                      row.dayIso === todayStr ? "text-slate-950" : "text-slate-900",
+                    )}
+                  >
                     {row.label}
                   </div>
                   <div className="text-right text-sm font-semibold text-sky-700">{number(row.deliveries)}</div>
@@ -988,7 +876,7 @@ export default async function AdminDashboardPage() {
         </SectionCard>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
           title="Recent Bookings"
           tooltip="Recent Bookings shows the latest booking activity so the office can quickly scan new work without opening the full bookings page."
@@ -1093,7 +981,7 @@ export default async function AdminDashboardPage() {
         </SectionCard>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
           title="Booking Funnel"
           tooltip="Booking Funnel shows the top-line path from booking started, to review reached, to completed, plus the overall conversion rate from started to completed."
@@ -1223,7 +1111,7 @@ export default async function AdminDashboardPage() {
         </SectionCard>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-3">
+      <section className="grid gap-6 md:grid-cols-2 2xl:grid-cols-3">
         <SectionCard
           title="Customer Activity"
           tooltip="Customer Activity shows the mix of new and returning customers in the last 30 days. New Customers are newly created customer records, Returning are recent customers with more than one booking, and Repeat Rate is the returning share of recent booking customers."

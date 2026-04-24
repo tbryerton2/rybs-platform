@@ -82,8 +82,9 @@ export function evaluateBookingAttention(input: {
       : null;
   const unresolvedPickupRequest = input.pickupPlanning.pickupStatus === "requested" && status === "delivered";
   const needsAttention =
-    rowAlertTone === "high_risk" ||
-    rowAlertLabel === "Needs review" ||
+    rowAlertTone !== "none" ||
+    isOverdueConfirmed ||
+    isOverduePickup ||
     (unresolvedPickupRequest && daysOnSite !== null && daysOnSite >= 3);
 
   return {
