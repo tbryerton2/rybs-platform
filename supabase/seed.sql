@@ -226,11 +226,17 @@ with resolved_business as (
   select id
   from public.tenants
   where slug = 'tan-can-man'
-  union all
+  limit 1
+), fallback_business as (
   select id
   from public.tenants
   order by created_at asc
   limit 1
+), selected_business as (
+  select id from resolved_business
+  union all
+  select id from fallback_business
+  where not exists (select 1 from resolved_business)
 )
 insert into public.business_employees (
   id,
@@ -263,7 +269,7 @@ insert into public.business_employees (
 )
 select
   seeded.id,
-  resolved_business.id,
+  selected_business.id,
   seeded.employee_code,
   seeded.first_name,
   seeded.last_name,
@@ -289,7 +295,7 @@ select
   seeded.license_state,
   seeded.license_class,
   seeded.license_expiration
-from resolved_business
+from selected_business
 cross join (
   values
     (
