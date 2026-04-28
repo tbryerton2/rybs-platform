@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type EntityHistoryEntry = {
-  entityType: "customer" | "booking" | "employee";
+  entityType: "customer" | "booking" | "employee" | "expense";
   entityId: string;
   fieldName: string;
   oldValue?: unknown;
@@ -46,7 +46,7 @@ export function diffEntityFields<
   TBefore extends Record<string, unknown>,
   TAfter extends Record<string, unknown>,
 >(
-  entityType: "customer" | "booking" | "employee",
+  entityType: "customer" | "booking" | "employee" | "expense",
   entityId: string,
   before: TBefore,
   after: TAfter,

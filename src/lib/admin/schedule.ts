@@ -1,8 +1,5 @@
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
-import { getManagedDumpsterFleetSize } from "@/lib/admin/equipment";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-export const FLEET_SIZE = getManagedDumpsterFleetSize();
 
 const SCHEDULE_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
@@ -17,6 +14,9 @@ const SCHEDULE_JOB_SELECT = `
         delivery_date,
         pickup_date,
         pickup_mode,
+        dumpster_id,
+        dumpster_size,
+        assigned_dumpster:dumpster_id(display_name, equipment_id),
         status,
         notes,
         created_at,
@@ -33,6 +33,9 @@ const BASE_SCHEDULE_JOB_SELECT = `
         delivery_date,
         pickup_date,
         pickup_mode,
+        dumpster_id,
+        dumpster_size,
+        assigned_dumpster:dumpster_id(display_name, equipment_id),
         status,
         notes,
         created_at
@@ -59,6 +62,9 @@ export async function getScheduleJobs(weekStartISO: string, weekEndISO: string) 
 
     return (fallback.data ?? []).map((row) => ({
       ...((row as unknown as Record<string, unknown>) ?? {}),
+      dumpster_id: null,
+      dumpster_size: null,
+      assigned_dumpster: null,
       ...EMPTY_BOOKING_PLACEMENT_FIELDS,
     }));
   }

@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { MagnifyingGlassIcon, PencilSquareIcon, PlusIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
+import { adminToast } from "@/app/admin/_components/admin/admin-toast";
+import { validateDumpsterRecord } from "@/lib/admin/dumpster-inventory";
 import {
   createEmptyDumpster,
-  createMockDumpsters,
   dumpsterMaintenanceStatusOptions,
   dumpsterOperationalStatusOptions,
   serviceStatusOptions,
@@ -36,17 +37,6 @@ function formatTimestamp(value: string) {
   }).format(new Date(value));
 }
 
-function validateDumpster(dumpster: DumpsterRecord) {
-  const errors: DumpsterErrors = {};
-  if (!dumpster.equipmentId.trim()) errors.equipmentId = "Equipment ID is required.";
-  if (!dumpster.displayName.trim()) errors.displayName = "Display name is required.";
-  if (!dumpster.size.trim()) errors.size = "Size is required.";
-  if (dumpster.tracker.enabled && !dumpster.tracker.trackerId.trim()) {
-    errors.tracker = "Tracker ID is required when tracker support is enabled.";
-  }
-  return errors;
-}
-
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -57,14 +47,16 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-export function DumpstersClient() {
-  const [dumpsters, setDumpsters] = useState<DumpsterRecord[]>(() => createMockDumpsters());
+export function DumpstersClient({ initialDumpsters }: { initialDumpsters: DumpsterRecord[] }) {
+  const [dumpsters, setDumpsters] = useState<DumpsterRecord[]>(initialDumpsters);
   const [search, setSearch] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [draft, setDraft] = useState<DumpsterRecord | null>(null);
   const [draftMode, setDraftMode] = useState<"create" | "edit">("create");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errors, setErrors] = useState<DumpsterErrors>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -127,34 +119,78 @@ export function DumpstersClient() {
     setErrors((current) => ({ ...current, tracker: undefined }));
   }
 
-  function saveDraft() {
+  async function saveDraft() {
     if (!draft) return;
-    const nextErrors = validateDumpster(draft);
+    const nextErrors = validateDumpsterRecord(draft);
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      adminToast.error("Please review the dumpster form.");
       return;
     }
-    const now = new Date().toISOString();
-    if (draftMode === "create") {
-      const created = { ...draft, id: `dumpster_${crypto.randomUUID()}`, updatedAt: now };
-      setDumpsters((current) => [created, ...current]);
-      setDraft({ ...created, tracker: { ...created.tracker } });
+
+    setIsSaving(true);
+
+    try {
+      const response = await fetch(
+        draftMode === "create" ? "/api/admin/dumpsters" : `/api/admin/dumpsters/${encodeURIComponent(draft.id)}`,
+        {
+          method: draftMode === "create" ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dumpster: draft }),
+        },
+      );
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || !json?.ok || !json?.dumpster) {
+        setErrors((json?.fieldErrors as DumpsterErrors | undefined) ?? {});
+        adminToast.error(json?.error || "Could not save dumpster.");
+        return;
+      }
+
+      const saved = json.dumpster as DumpsterRecord;
+      setDumpsters((current) => {
+        if (draftMode === "create") return [saved, ...current];
+        return current.map((item) => (item.id === saved.id ? saved : item));
+      });
+      setDraft({ ...saved, tracker: { ...saved.tracker } });
       setDraftMode("edit");
-      setSelectedId(created.id);
-      return;
+      setSelectedId(saved.id);
+      adminToast.success(draftMode === "create" ? "Dumpster created." : "Dumpster updated.");
+    } catch (error) {
+      adminToast.error(error instanceof Error ? error.message : "Could not save dumpster.");
+    } finally {
+      setIsSaving(false);
     }
-    const saved = { ...draft, updatedAt: now };
-    setDumpsters((current) => current.map((item) => (item.id === saved.id ? saved : item)));
-    setDraft({ ...saved, tracker: { ...saved.tracker } });
   }
 
-  function toggleActive(id: string) {
-    setDumpsters((current) =>
-      current.map((item) => (item.id === id ? { ...item, active: !item.active, updatedAt: new Date().toISOString() } : item)),
-    );
-    setDraft((current) =>
-      current && current.id === id ? { ...current, active: !current.active, updatedAt: new Date().toISOString() } : current,
-    );
+  async function toggleActive(id: string) {
+    const target = dumpsters.find((item) => item.id === id);
+    if (!target) return;
+
+    setTogglingId(id);
+
+    try {
+      const response = await fetch(`/api/admin/dumpsters/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !target.active }),
+      });
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || !json?.ok || !json?.dumpster) {
+        adminToast.error(json?.error || "Could not update dumpster status.");
+        return;
+      }
+
+      const saved = json.dumpster as DumpsterRecord;
+      setDumpsters((current) => current.map((item) => (item.id === saved.id ? saved : item)));
+      setDraft((current) => (current && current.id === saved.id ? { ...saved, tracker: { ...saved.tracker } } : current));
+      adminToast.success(saved.active ? "Dumpster reactivated." : "Dumpster deactivated.");
+    } catch (error) {
+      adminToast.error(error instanceof Error ? error.message : "Could not update dumpster status.");
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   return (
@@ -272,8 +308,13 @@ export function DumpstersClient() {
                 <p className="mt-1 text-sm text-slate-500">{draft ? "Capture operational status, inspection timing, and tracker configuration." : "Select a dumpster to review details, or add a new managed unit."}</p>
               </div>
               {draft && draftMode === "edit" && draft.id ? (
-                <button type="button" onClick={() => toggleActive(draft.id)} className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                  {draft.active ? "Deactivate" : "Reactivate"}
+                <button
+                  type="button"
+                  onClick={() => toggleActive(draft.id)}
+                  disabled={togglingId === draft.id}
+                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {togglingId === draft.id ? "Saving..." : draft.active ? "Deactivate" : "Reactivate"}
                 </button>
               ) : null}
             </div>
@@ -374,8 +415,13 @@ export function DumpstersClient() {
                   <div className="text-xs text-slate-500">Last updated {draft.updatedAt ? formatTimestamp(draft.updatedAt) : "not yet saved"}</div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setDraft(null)} className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Cancel</button>
-                    <button type="button" onClick={saveDraft} className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800">
-                      {draftMode === "create" ? "Create dumpster" : "Save changes"}
+                    <button
+                      type="button"
+                      onClick={saveDraft}
+                      disabled={isSaving}
+                      className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isSaving ? "Saving..." : draftMode === "create" ? "Create dumpster" : "Save changes"}
                     </button>
                   </div>
                 </div>
@@ -415,7 +461,7 @@ export function DumpstersClient() {
 
           <div className="rounded-[32px] border border-slate-200 bg-slate-50/80 p-6 shadow-sm">
             <div className="text-sm font-semibold text-slate-900">Inventory direction</div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">This page treats managed dumpster records as the intended inventory source of truth. App-level fallback fleet counts now read from this managed roster, while database availability still needs to be wired to persistent equipment records.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">This page uses persistent dumpster records as the managed inventory source of truth. Customer availability, holds, and pickup caps now read from this inventory, with legacy database fallbacks still available for resilience.</p>
           </div>
         </div>
       </section>

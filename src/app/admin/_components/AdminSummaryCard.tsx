@@ -47,6 +47,8 @@ export function AdminSummaryCard({
   detail,
   compact = false,
   stretch = false,
+  active = false,
+  layout = "default",
 }: {
   label: string;
   value: string | number;
@@ -56,47 +58,73 @@ export function AdminSummaryCard({
   detail?: string;
   compact?: boolean;
   stretch?: boolean;
+  active?: boolean;
+  layout?: "default" | "pricing";
 }) {
-  const content = (
-    <div
-      className={joinClasses(
-        adminSummaryCardShell(
-          tone,
-          compact
-            ? "p-4 transition hover:-translate-y-0.5 hover:shadow-md"
-            : "p-5 transition hover:-translate-y-0.5 hover:shadow-md",
-        ),
-        stretch && "flex h-full flex-col",
-      )}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-slate-500">{label}</div>
-          <div
-            className={joinClasses(
-              "mt-2 font-semibold tracking-tight text-slate-900",
-              compact ? "text-[1.75rem]" : "text-3xl",
-            )}
-          >
-            {value}
-          </div>
-          {detail ? <div className="mt-2 text-xs text-slate-500">{detail}</div> : null}
-        </div>
-        <span
-          className={joinClasses(
-            "inline-flex items-center justify-center rounded-2xl",
-            compact ? "h-10 w-10" : "h-11 w-11",
-            chipToneClasses(tone),
-          )}
-        >
-          <Icon className={compact ? "h-[18px] w-[18px]" : "h-5 w-5"} />
-        </span>
-      </div>
-    </div>
+  const shellClasses = joinClasses(
+    adminSummaryCardShell(
+      tone,
+      compact
+        ? "p-4 transition hover:-translate-y-0.5 hover:shadow-md"
+        : "p-5 transition hover:-translate-y-0.5 hover:shadow-md",
+    ),
+    stretch && "flex h-full flex-col",
+    active && "ring-2 ring-slate-900/12 shadow-md shadow-slate-900/8",
+    active && compact && "-translate-y-0.5",
   );
 
+  const content =
+    layout === "pricing" ? (
+      <div className={shellClasses}>
+        <div className="flex gap-4">
+          <span
+            className={joinClasses(
+              "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset",
+              chipToneClasses(tone),
+            )}
+          >
+            <Icon className="h-6 w-6" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex h-12 items-center text-sm font-medium leading-5 text-slate-600">{label}</div>
+            <div className="mt-2 text-lg font-semibold tracking-tight text-slate-950">{value}</div>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className={shellClasses}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-slate-500">{label}</div>
+            <div
+              className={joinClasses(
+                "mt-2 font-semibold tracking-tight text-slate-900",
+                compact ? "text-[1.75rem]" : "text-3xl",
+              )}
+            >
+              {value}
+            </div>
+            {detail ? <div className="mt-2 text-xs text-slate-500">{detail}</div> : null}
+          </div>
+          <span
+            className={joinClasses(
+              "inline-flex items-center justify-center rounded-2xl",
+              compact ? "h-10 w-10" : "h-11 w-11",
+              chipToneClasses(tone),
+            )}
+          >
+            <Icon className={compact ? "h-[18px] w-[18px]" : "h-5 w-5"} />
+          </span>
+        </div>
+      </div>
+    );
+
   return href ? (
-    <Link href={href} className={stretch ? "block h-full" : undefined}>
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={joinClasses(stretch && "block h-full", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2 rounded-[28px]")}
+    >
       {content}
     </Link>
   ) : content;

@@ -181,13 +181,13 @@ export async function updatePricingSettingsAction(
   const dailyOveragePrice = parseCurrency(
     values.dailyOveragePrice,
     "dailyOveragePrice",
-    "Daily overage rate",
+    "Extra day rate",
     fieldErrors,
   );
   const maxRentalDays = parseOptionalInteger(
     values.maxRentalDays,
     "maxRentalDays",
-    "Maximum rental length",
+    "Max rental length",
     fieldErrors,
   );
   const includedTons = parseDecimal(values.includedTons, "includedTons", "Included tons", fieldErrors);
@@ -204,7 +204,7 @@ export async function updatePricingSettingsAction(
     maxRentalDays < standardRentalDays
   ) {
     fieldErrors.maxRentalDays =
-      "Maximum rental length must be at least as long as the standard rental period.";
+      "Max rental length must be at least as long as the standard rental period.";
   }
 
   if (Object.keys(fieldErrors).length > 0) {

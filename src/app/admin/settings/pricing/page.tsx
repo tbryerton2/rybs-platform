@@ -1,9 +1,18 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import type { ComponentType, SVGProps } from "react";
+import {
+  CalendarDaysIcon,
+  CalendarIcon,
+  ClockIcon,
+  CurrencyDollarIcon,
+  InformationCircleIcon,
+  PlusCircleIcon,
+} from "@heroicons/react/24/outline";
+import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { isMissingPricingSettingsRentalPeriodColumnsError } from "@/lib/pricing-settings";
-import { formatDateTimeET } from "@/lib/time";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { PricingSettingsForm } from "./pricing-settings-form";
 
@@ -25,6 +34,57 @@ function formatMoney(value: number) {
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+type SummaryCardTone = "blue" | "green" | "amber" | "violet" | "teal";
+
+function joinClasses(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
+function statTileClasses(tone: SummaryCardTone) {
+  return tone === "blue"
+    ? "bg-sky-100/95 text-sky-700 ring-sky-200/90"
+    : tone === "green"
+      ? "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90"
+      : tone === "amber"
+        ? "bg-amber-100/95 text-amber-700 ring-amber-200/90"
+        : tone === "violet"
+          ? "bg-violet-100/95 text-violet-700 ring-violet-200/90"
+          : "bg-teal-100/95 text-teal-700 ring-teal-200/90";
+}
+
+function SummaryMetricCard({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  tone: SummaryCardTone;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+}) {
+  return (
+    <div className={adminSummaryCardShell(tone, "h-full p-5")}>
+      <div className="flex gap-4">
+        <span
+          className={joinClasses(
+            "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset",
+            statTileClasses(tone),
+          )}
+        >
+          <Icon className="h-6 w-6" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex h-12 items-center text-sm font-medium leading-5 text-slate-600">
+            {label}
+          </div>
+          <div className="mt-2 text-lg font-semibold tracking-tight text-slate-950">{value}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 async function getPricingSettings(): Promise<PricingSettingsRow> {
@@ -143,6 +203,10 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
     };
   }
 
+  if (!inserted) {
+    throw new Error("Unable to create pricing settings.");
+  }
+
   return inserted;
 }
 
@@ -154,75 +218,59 @@ export default async function AdminPricingSettingsPage() {
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Pricing"
-        description="Control the default rental period and overage pricing customers see during booking."
+        title={
+          <span className="flex items-center gap-2">
+            <span>Pricing</span>
+            <button
+              type="button"
+              aria-label="Pricing page details"
+              className="group relative rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+            >
+              <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+              >
+                Control the default rental period and overage pricing customers see during
+                booking.
+              </span>
+            </button>
+          </span>
+        }
       />
 
-      <section className="mb-8 rounded-[32px] border border-slate-200 bg-slate-50/80 p-6 shadow-[0_2px_6px_rgba(15,23,42,0.06)] sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Current default setup
-            </div>
-            <h2 className="mt-2 text-lg font-semibold text-slate-950">
-              Rental pricing customers are booking against
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-600">
-              ZIP-specific overrides can still change the base price, but these rental-period rules
-              are the default source of truth across the booking flow.
-            </p>
-            {pricing.updated_at ? (
-              <div className="mt-2 text-xs text-slate-500">
-                Last updated {formatDateTimeET(pricing.updated_at)}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="inline-flex items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Active defaults
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Standard rental period
-            </div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">
-              {pricing.included_rental_days} days
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Base price
-            </div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">
-              {formatMoney(pricing.standard_rental_price)}
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Daily overage rate
-            </div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">
-              {formatMoney(pricing.daily_overage_price)}
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Maximum rental length
-            </div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">{maxRentalSummary}</div>
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Booking-time extra days
-            </div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">
-              {pricing.allow_extended_rental_at_booking ? "Allowed" : "Off"}
-            </div>
-          </div>
+      <section className="mb-8">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryMetricCard
+            label="Standard Rental Period"
+            value={`${pricing.included_rental_days} days`}
+            tone="blue"
+            icon={CalendarDaysIcon}
+          />
+          <SummaryMetricCard
+            label="Base Price"
+            value={formatMoney(pricing.standard_rental_price)}
+            tone="green"
+            icon={CurrencyDollarIcon}
+          />
+          <SummaryMetricCard
+            label="Extra Day Rate"
+            value={formatMoney(pricing.daily_overage_price)}
+            tone="amber"
+            icon={ClockIcon}
+          />
+          <SummaryMetricCard
+            label="Max Rental Length"
+            value={maxRentalSummary}
+            tone="violet"
+            icon={CalendarIcon}
+          />
+          <SummaryMetricCard
+            label="Booking-Time Extra Days"
+            value={pricing.allow_extended_rental_at_booking ? "Allowed" : "Off"}
+            tone="teal"
+            icon={PlusCircleIcon}
+          />
         </div>
       </section>
 

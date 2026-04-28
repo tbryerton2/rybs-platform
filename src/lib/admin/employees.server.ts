@@ -151,6 +151,14 @@ function normalizePreferredContactMethod(
   return value === "text" || value === "email" ? value : "phone";
 }
 
+function parseGeneratedEmployeeCodeNumber(value: string | null | undefined) {
+  const match = value?.match(/^EMP-(\d+)$/);
+  if (!match) return null;
+
+  const parsed = Number.parseInt(match[1] ?? "", 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function mapRowToEmployeeRecord(row: BusinessEmployeeRow): EmployeeRecord {
   const empty = createEmptyEmployee();
 
@@ -303,6 +311,25 @@ async function findDuplicateEmployeeField(
   return data?.id ?? null;
 }
 
+async function getNextEmployeeCodeForBusiness(businessId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("business_employees")
+    .select("employee_code")
+    .eq("business_id", businessId)
+    .ilike("employee_code", "EMP-%");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const maxExisting = (data ?? []).reduce((currentMax, row) => {
+    const nextValue = parseGeneratedEmployeeCodeNumber((row as { employee_code: string | null }).employee_code);
+    return nextValue && nextValue > currentMax ? nextValue : currentMax;
+  }, 1000);
+
+  return `EMP-${maxExisting + 1}`;
+}
+
 export async function listEmployeesForCurrentBusiness(filter?: EmployeeListFilter) {
   const tenant = await getCurrentTenant();
   let query = supabaseAdmin
@@ -326,12 +353,42 @@ export async function listEmployeesForCurrentBusiness(filter?: EmployeeListFilte
   return ((data ?? []) as BusinessEmployeeRow[]).map(mapRowToEmployeeRecord);
 }
 
+export async function getEmployeeForCurrentBusiness(id: string) {
+  const tenant = await getCurrentTenant();
+  const { data, error } = await supabaseAdmin
+    .from("business_employees")
+    .select(BUSINESS_EMPLOYEE_SELECT)
+    .eq("id", id)
+    .eq("business_id", tenant.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return mapRowToEmployeeRecord(data as BusinessEmployeeRow);
+}
+
+export async function getNextEmployeeCodeForCurrentBusiness() {
+  const tenant = await getCurrentTenant();
+  return getNextEmployeeCodeForBusiness(tenant.id);
+}
+
 export async function createEmployeeForCurrentBusiness(
   input: EmployeeMutationInput,
   actorUserId?: string | null,
 ): Promise<EmployeeMutationResult> {
-  const normalizedInput = normalizeEmployeeMutationInput(input);
-  const fieldErrors = validateEmployee(normalizedInput);
+  const tenant = await getCurrentTenant();
+  const generatedEmployeeId = await getNextEmployeeCodeForBusiness(tenant.id);
+  const normalizedInput = normalizeEmployeeMutationInput({
+    ...input,
+    employeeId: generatedEmployeeId,
+  });
+  const fieldErrors = validateEmployee(normalizedInput, { requireEmployeeId: false });
   if (Object.keys(fieldErrors).length > 0) {
     return {
       ok: false,
@@ -340,7 +397,6 @@ export async function createEmployeeForCurrentBusiness(
     };
   }
 
-  const tenant = await getCurrentTenant();
   const duplicateEmailId = await findDuplicateEmployeeField(
     tenant.id,
     "normalized_email",
@@ -360,10 +416,20 @@ export async function createEmployeeForCurrentBusiness(
     cleanText(normalizedInput.employeeId)?.toUpperCase() ?? null,
   );
   if (duplicateCodeId) {
+    const regeneratedEmployeeId = await getNextEmployeeCodeForBusiness(tenant.id);
+    normalizedInput.employeeId = regeneratedEmployeeId;
+  }
+
+  const duplicateRegeneratedCodeId = await findDuplicateEmployeeField(
+    tenant.id,
+    "employee_code",
+    cleanText(normalizedInput.employeeId)?.toUpperCase() ?? null,
+  );
+  if (duplicateRegeneratedCodeId) {
     return {
       ok: false,
-      error: "That employee ID is already used by another employee record for this business.",
-      fieldErrors: { employeeId: "Employee ID must be unique within the business." },
+      error: "Unable to generate a new employee ID right now. Please try again.",
+      fieldErrors: { employeeId: "Unable to generate a unique employee ID right now." },
     };
   }
 

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { createBookingRecord } from "@/lib/booking-records";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabase } from "@/lib/supabase";
 import { normalizePhone } from "@/lib/customers";
@@ -39,6 +40,8 @@ type ConfirmBody = {
     placementPhotoUrl?: string | null;
     specialDeliveryInstructions?: string | null;
     reorderSourceBookingId?: string | null;
+    dumpsterSize?: string | null;
+    dumpsterProductId?: string | null;
   };
 
   // keep backward-compatible flat fields too
@@ -62,6 +65,8 @@ type ConfirmBody = {
   placementPhotoUrl?: string | null;
   specialDeliveryInstructions?: string | null;
   reorderSourceBookingId?: string | null;
+  dumpsterSize?: string | null;
+  dumpsterProductId?: string | null;
 };
 
 function isYMD(s: string) {
@@ -108,6 +113,10 @@ export async function POST(req: Request) {
     const customerState = ((draft.customerState ?? body.customerState) || "").trim().toUpperCase();
     const customerZip = ((draft.customerZip ?? body.customerZip) || "").trim();
     const reorderSourceBookingId = ((draft.reorderSourceBookingId ?? body.reorderSourceBookingId) || "").trim();
+    const selectedDumpster = resolveSelectedDumpster({
+      dumpsterSize: draft.dumpsterSize ?? body.dumpsterSize,
+      dumpsterProductId: draft.dumpsterProductId ?? body.dumpsterProductId,
+    });
     const placement = sanitizePlacementDetails({
       placementPreference: draft.placementPreference ?? body.placementPreference ?? null,
       placementDetails: draft.placementDetails ?? body.placementDetails ?? null,
@@ -271,6 +280,8 @@ export async function POST(req: Request) {
           pickup_mode: "schedule",
           status: "confirmed",
           total_price_cents: pricing.priceQuote.totalCents,
+          dumpster_size: selectedDumpster.dumpsterSize,
+          dumpster_product_id: selectedDumpster.dumpsterProductId,
         },
         identity: {
           customerName,

@@ -2,10 +2,15 @@
 
 import { useState } from "react";
 
+type HoldTestResult = {
+  status: number;
+  json: unknown;
+};
+
 export default function TestHoldPage() {
   const [date, setDate] = useState("2026-02-21");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<HoldTestResult | null>(null);
   const [error, setError] = useState<string>("");
 
   async function run() {
@@ -17,13 +22,17 @@ export default function TestHoldPage() {
       const res = await fetch("/api/hold", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliveryDate: date }),
+        body: JSON.stringify({
+          deliveryDate: date,
+          dumpsterSize: "14 yard",
+          dumpsterProductId: "default",
+        }),
       });
 
       const json = await res.json().catch(() => ({}));
       setResult({ status: res.status, json });
-    } catch (e: any) {
-      setError(e?.message || "Request failed");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Request failed");
     } finally {
       setLoading(false);
     }

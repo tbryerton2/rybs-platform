@@ -16,6 +16,7 @@ import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type CustomerListView = "all" | "new" | "repeat";
 
 type CustomerRow = {
   id: string;
@@ -48,6 +49,10 @@ type BookingSummaryRow = {
 function readParam(params: SearchParams, key: string) {
   const value = params[key];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function getCustomerListView(value: string | undefined): CustomerListView {
+  return value === "new" || value === "repeat" ? value : "all";
 }
 
 function formatDate(value: string | null) {
@@ -99,6 +104,7 @@ export default async function AdminCustomersPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const resolved = (await searchParams) ?? {};
+  const selectedView = getCustomerListView(readParam(resolved, "view"));
   const query = (readParam(resolved, "q") ?? "").trim().toLowerCase();
 
   const [{ data: customersData, error: customersError }, { data: bookingsData, error: bookingsError }] =
@@ -146,7 +152,25 @@ export default async function AdminCustomersPage({
       };
     });
 
-  const customers = allCustomers.filter((customer) => {
+  const currentMonthKey = getYearMonthInEastern(new Date());
+  const repeatCustomers = allCustomers.filter((customer) => customer.bookingCount > 1).length;
+  const newCustomersThisMonth = allCustomers.filter((customer) => {
+    if (!customer.created_at) return false;
+    return getYearMonthInEastern(new Date(customer.created_at)) === currentMonthKey;
+  }).length;
+  const filteredByCard = allCustomers.filter((customer) => {
+    if (selectedView === "new") {
+      if (!customer.created_at) return false;
+      return getYearMonthInEastern(new Date(customer.created_at)) === currentMonthKey;
+    }
+
+    if (selectedView === "repeat") {
+      return customer.bookingCount > 1;
+    }
+
+    return true;
+  });
+  const customers = filteredByCard.filter((customer) => {
     if (!query) return true;
 
     return (
@@ -171,12 +195,13 @@ export default async function AdminCustomersPage({
     );
   });
 
-  const currentMonthKey = getYearMonthInEastern(new Date());
-  const repeatCustomers = allCustomers.filter((customer) => customer.bookingCount > 1).length;
-  const newCustomersThisMonth = allCustomers.filter((customer) => {
-    if (!customer.created_at) return false;
-    return getYearMonthInEastern(new Date(customer.created_at)) === currentMonthKey;
-  }).length;
+  function buildCustomersHref(view: CustomerListView) {
+    const params = new URLSearchParams();
+    if (view !== "all") params.set("view", view);
+    if (query) params.set("q", query);
+    const next = params.toString();
+    return next ? `/admin/customers?${next}` : "/admin/customers";
+  }
 
   return (
     <AdminPage>
@@ -197,21 +222,30 @@ export default async function AdminCustomersPage({
           value={allCustomers.length}
           icon={UsersIcon}
           tone="rose"
-          compact
+          layout="pricing"
+          stretch
+          href={buildCustomersHref("all")}
+          active={selectedView === "all"}
         />
         <AdminSummaryCard
           label="New customers this month"
           value={newCustomersThisMonth}
           icon={UserPlusIcon}
           tone="green"
-          compact
+          layout="pricing"
+          stretch
+          href={buildCustomersHref("new")}
+          active={selectedView === "new"}
         />
         <AdminSummaryCard
           label="Repeat customers"
           value={repeatCustomers}
           icon={ArrowPathIcon}
           tone="blue"
-          compact
+          layout="pricing"
+          stretch
+          href={buildCustomersHref("repeat")}
+          active={selectedView === "repeat"}
         />
       </section>
 
@@ -219,6 +253,7 @@ export default async function AdminCustomersPage({
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search customers</h2>
 
         <form className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <input type="hidden" name="view" value={selectedView} />
           <input
             id="q"
             name="q"
@@ -234,7 +269,7 @@ export default async function AdminCustomersPage({
           </button>
           {query ? (
             <Link
-              href="/admin/customers"
+              href={buildCustomersHref(selectedView)}
               className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Clear
@@ -250,6 +285,8 @@ export default async function AdminCustomersPage({
             <div className="text-sm font-medium text-slate-500">
               {customers.length} {customers.length === 1 ? "customer" : "customers"}
               {query ? <> matching “{query}”</> : null}
+              {!query && selectedView === "new" ? <> this month</> : null}
+              {!query && selectedView === "repeat" ? <> with repeat bookings</> : null}
             </div>
           </div>
         </div>
@@ -263,7 +300,7 @@ export default async function AdminCustomersPage({
               </p>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <Link
-                  href="/admin/customers"
+                  href={buildCustomersHref(selectedView)}
                   className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
                   Clear search

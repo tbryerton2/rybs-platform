@@ -2,6 +2,7 @@
 
 import type { InputHTMLAttributes, ReactNode } from "react";
 import { useActionState, useEffect, useMemo, useState } from "react";
+import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 import { FadingFormMessage } from "@/app/admin/_components/admin/fading-form-message";
 import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
@@ -114,6 +115,7 @@ function formatMoney(value: number) {
 function Field({
   label,
   helper,
+  labelTone = "slate",
   name,
   value,
   onChange,
@@ -127,7 +129,8 @@ function Field({
   placeholder,
 }: {
   label: string;
-  helper: string;
+  helper?: string;
+  labelTone?: "blue" | "green" | "amber" | "violet" | "slate";
   name: Exclude<keyof PricingSettingsFormValues, "allowExtendedRentalAtBooking">;
   value: string;
   onChange: (
@@ -143,12 +146,32 @@ function Field({
   step?: string;
   placeholder?: string;
 }) {
+  const bulletClasses =
+    labelTone === "blue"
+      ? "bg-sky-100"
+      : labelTone === "green"
+        ? "bg-emerald-100"
+        : labelTone === "amber"
+          ? "bg-amber-100"
+          : labelTone === "violet"
+            ? "bg-violet-100"
+            : "bg-slate-200";
+
   return (
     <label className="block">
-      <div className="text-sm font-medium text-slate-900">{label}</div>
-      <p className="mt-1 text-sm text-slate-600">{helper}</p>
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+        <span className={`h-3 w-3 shrink-0 rounded-full ${bulletClasses}`} />
+        <span>{label}</span>
+      </div>
+      {helper ? <p className="mt-1 text-sm text-slate-600">{helper}</p> : null}
 
-      <div className="relative mt-3">
+      <div
+        className={
+          helper
+            ? "relative mt-3 w-full max-w-full sm:max-w-[16rem]"
+            : "relative mt-2 w-full max-w-full sm:max-w-[16rem]"
+        }
+      >
         {prefix ? (
           <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-sm text-slate-500">
             {prefix}
@@ -191,41 +214,52 @@ function Field({
   );
 }
 
+function FormSectionHeading({
+  title,
+  tooltip,
+}: {
+  title: string;
+  tooltip?: string;
+}) {
+  return (
+    <div className="flex min-h-7 items-center gap-2">
+      <h3 className="text-base font-semibold text-slate-950">{title}</h3>
+      {tooltip ? (
+        <button
+          type="button"
+          aria-label={`${title} details`}
+          className="group relative rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+        >
+          <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+          >
+            {tooltip}
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function Section({
   title,
   description,
   children,
 }: {
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Subsection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-5">
-      <div>
-        <h3 className="text-base font-semibold text-slate-950">{title}</h3>
-        <p className="mt-1 text-sm text-slate-600">{description}</p>
-      </div>
+      {title || description ? (
+        <div className="mb-6">
+          {title ? <h2 className="text-lg font-semibold text-slate-950">{title}</h2> : null}
+          {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
+        </div>
+      ) : null}
       {children}
     </section>
   );
@@ -352,8 +386,8 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
       <input type="hidden" name="id" value={pricing.id} />
 
       <Section
-        title="Pricing settings"
-        description="Set the default rental period, overage pricing, and weight policy customers will see during booking."
+        title={undefined}
+        description={undefined}
       >
         <div className="space-y-8">
           <FadingFormMessage
@@ -362,123 +396,123 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
             message={state.success ? state.message : ""}
           />
 
-          <Subsection
-            title="Rental pricing"
-            description="Set the included rental period, base price, and what happens if a customer needs more time."
-          >
-            <div className="grid gap-5 lg:grid-cols-2">
-              <Field
-                label="Standard rental period"
-                helper="How many days are included in the base rental price."
-                name="standardRentalDays"
-                value={values.standardRentalDays}
-                onChange={updateTextValue}
-                error={mergedErrors.standardRentalDays}
-                type="number"
-                inputMode="numeric"
-                min="1"
-                step="1"
-                suffix="days"
-              />
-              <Field
-                label="Base price"
-                helper="Flat price for the standard rental period."
-                name="basePrice"
-                value={values.basePrice}
-                onChange={updateTextValue}
-                error={mergedErrors.basePrice}
-                prefix="$"
-                inputMode="decimal"
-              />
-              <Field
-                label="Daily overage rate"
-                helper="Extra charge per day after the included rental period."
-                name="dailyOveragePrice"
-                value={values.dailyOveragePrice}
-                onChange={updateTextValue}
-                error={mergedErrors.dailyOveragePrice}
-                prefix="$"
-                inputMode="decimal"
-                suffix="per day"
-              />
-              <Field
-                label="Maximum rental length"
-                helper="Optional limit on how long a customer can keep the dumpster. Leave blank for no hard cap."
-                name="maxRentalDays"
-                value={values.maxRentalDays}
-                onChange={updateTextValue}
-                error={mergedErrors.maxRentalDays}
-                type="number"
-                inputMode="numeric"
-                min={values.standardRentalDays || "1"}
-                step="1"
-                suffix="days"
-                placeholder="No hard cap"
-              />
+          <div className="space-y-5">
+            <div className="grid gap-y-5 xl:grid-cols-[16rem_16rem_1px_16rem] xl:items-start xl:justify-start xl:gap-x-40">
+              <div className="space-y-5">
+                <FormSectionHeading
+                  title="Rental pricing"
+                  tooltip="Set the included rental period, base price, and what happens if a customer needs more time."
+                />
+                <Field
+                  label="Standard rental period"
+                  labelTone="blue"
+                  name="standardRentalDays"
+                  value={values.standardRentalDays}
+                  onChange={updateTextValue}
+                  error={mergedErrors.standardRentalDays}
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  step="1"
+                  suffix="days"
+                />
+                <Field
+                  label="Extra day rate"
+                  labelTone="amber"
+                  name="dailyOveragePrice"
+                  value={values.dailyOveragePrice}
+                  onChange={updateTextValue}
+                  error={mergedErrors.dailyOveragePrice}
+                  prefix="$"
+                  inputMode="decimal"
+                  suffix="per day"
+                />
+              </div>
+
+              <div className="space-y-5">
+                <div className="hidden min-h-7 xl:block" aria-hidden="true" />
+                <Field
+                  label="Base price"
+                  labelTone="green"
+                  name="basePrice"
+                  value={values.basePrice}
+                  onChange={updateTextValue}
+                  error={mergedErrors.basePrice}
+                  prefix="$"
+                  inputMode="decimal"
+                />
+                <Field
+                  label="Max rental length"
+                  labelTone="violet"
+                  name="maxRentalDays"
+                  value={values.maxRentalDays}
+                  onChange={updateTextValue}
+                  error={mergedErrors.maxRentalDays}
+                  type="number"
+                  inputMode="numeric"
+                  min={values.standardRentalDays || "1"}
+                  step="1"
+                  suffix="days"
+                  placeholder="No hard cap"
+                />
+              </div>
+
+              <div className="hidden w-px self-stretch bg-slate-300 xl:block" />
+
+              <div className="space-y-5 xl:pl-3">
+                <FormSectionHeading title="Weight overages" />
+                <Field
+                  label="Included tons"
+                  labelTone="slate"
+                  name="includedTons"
+                  value={values.includedTons}
+                  onChange={updateTextValue}
+                  error={mergedErrors.includedTons}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  suffix="tons"
+                />
+                <Field
+                  label="Price per ton over"
+                  labelTone="slate"
+                  name="tonOveragePrice"
+                  value={values.tonOveragePrice}
+                  onChange={updateTextValue}
+                  error={mergedErrors.tonOveragePrice}
+                  prefix="$"
+                  inputMode="decimal"
+                  suffix="per ton"
+                />
+              </div>
             </div>
 
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <input
-                type="checkbox"
-                name="allowExtendedRentalAtBooking"
-                checked={values.allowExtendedRentalAtBooking}
-                onChange={(event) =>
-                  updateBooleanValue("allowExtendedRentalAtBooking", event.target.checked)
-                }
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-orange-200"
-              />
-              <span>
-                <span className="block text-sm font-medium text-slate-900">
-                  Allow customers to request extra days during booking
+            <div className="w-full mt-10">
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <input
+                  type="checkbox"
+                  name="allowExtendedRentalAtBooking"
+                  checked={values.allowExtendedRentalAtBooking}
+                  onChange={(event) =>
+                    updateBooleanValue("allowExtendedRentalAtBooking", event.target.checked)
+                  }
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-orange-200"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-900">
+                    Allow customers to request extra days during booking
+                  </span>
                 </span>
-                <span className="mt-1 block text-sm text-slate-600">
-                  Let customers choose a longer rental during online booking.
-                </span>
-              </span>
-            </label>
-          </Subsection>
-
-          <div className="h-px bg-slate-200" />
-
-          <Subsection
-            title="Weight overages"
-            description="These settings stay separate from the rental-period pricing and continue to apply to overweight loads."
-          >
-            <div className="grid gap-5 lg:grid-cols-2">
-              <Field
-                label="Included tons"
-                helper="How much weight is included before overage charges apply."
-                name="includedTons"
-                value={values.includedTons}
-                onChange={updateTextValue}
-                error={mergedErrors.includedTons}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                suffix="tons"
-              />
-              <Field
-                label="Price per ton over"
-                helper="Extra charge for each additional ton above the included weight."
-                name="tonOveragePrice"
-                value={values.tonOveragePrice}
-                onChange={updateTextValue}
-                error={mergedErrors.tonOveragePrice}
-                prefix="$"
-                inputMode="decimal"
-                suffix="per ton"
-              />
+              </label>
             </div>
-          </Subsection>
+          </div>
 
-          <div className="h-px bg-slate-200" />
+          
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-3">
-              <div className="text-sm text-slate-600">
-                Save these settings to update the default rental pricing used across booking.
-              </div>
+             
               <InlineActionMessage
                 success={false}
                 message={!state.success && !isSubmitting ? state.error ?? "" : ""}
@@ -491,7 +525,6 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
 
       <Section
         title="Live pricing preview"
-        description="This preview updates as you edit the settings so you can see what customers will be quoted."
       >
         <div className="rounded-3xl border border-orange-200 bg-orange-50/60 p-5">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700">
@@ -506,7 +539,7 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
               return (
                 <div
                   key={days}
-                  className="flex items-center justify-between gap-4 rounded-2xl bg-white px-4 py-3 text-sm text-slate-700"
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-700"
                 >
                   <span>
                     {days}-day rental
@@ -520,19 +553,24 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
             })}
           </div>
 
-          <div className="mt-4 space-y-2 text-sm text-slate-700">
-            {parsedMaxRentalDays !== null && parsedMaxRentalDays >= parsedStandardRentalDays ? (
-              <p>Customers can keep the dumpster for up to {parsedMaxRentalDays} days.</p>
-            ) : (
-              <p>No maximum rental length is set.</p>
-            )}
-
-            {values.allowExtendedRentalAtBooking ? (
-              <p>Customers can request extra days during online booking.</p>
-            ) : (
-              <p>Customers can only book the standard rental period online.</p>
-            )}
-          </div>
+          <ul className="mt-4 space-y-2 text-sm text-slate-700">
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
+              <span>
+                {parsedMaxRentalDays !== null && parsedMaxRentalDays >= parsedStandardRentalDays
+                  ? `Customers can keep the dumpster for up to ${parsedMaxRentalDays} days.`
+                  : "No maximum rental length is set."}
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
+              <span>
+                {values.allowExtendedRentalAtBooking
+                  ? "Customers can request extra days during online booking."
+                  : "Customers can only book the standard rental period online."}
+              </span>
+            </li>
+          </ul>
         </div>
       </Section>
     </form>

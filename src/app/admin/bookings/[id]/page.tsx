@@ -4,6 +4,10 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  getAssignableDumpstersForBooking,
+  type AssignableDumpsterOption,
+} from "@/lib/admin/dumpster-assignment";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { evaluateBookingAttention } from "@/lib/admin/booking-attention";
@@ -27,6 +31,7 @@ import {
   quickCancelBookingAction,
   quickMarkDeliveredAction,
   quickMarkPickedUpAction,
+  updateAssignedDumpsterAction,
   updateNotesAction,
   updateOperationalControlsAction,
 } from "./actions";
@@ -77,6 +82,9 @@ type Booking = {
   pickup_date: string | null;
   status: BookingStatus;
   total_price_cents: number | null;
+  dumpster_id: string | null;
+  dumpster_size: string | null;
+  dumpster_product_id: string | null;
   base_rental_price_cents: number | null;
   included_rental_days: number | null;
   rental_duration_days: number | null;
@@ -364,6 +372,16 @@ function Field({
   );
 }
 
+function formatAssignedDumpsterLabel(option: AssignableDumpsterOption) {
+  const details = [
+    option.equipmentId,
+    option.yardLocation,
+    option.isCurrentlyAssigned && !option.isCompatible ? "currently planned" : null,
+  ].filter(Boolean);
+
+  return `${option.displayName}${details.length ? ` • ${details.join(" • ")}` : ""}`;
+}
+
 function AuditHistoryCard({
   title,
   beforeValue,
@@ -416,6 +434,8 @@ function getSavedMessage(saved: string | undefined) {
       return "Placement details saved.";
     case "operational-controls":
       return "Operational controls saved.";
+    case "assigned-dumpster":
+      return "Planned dumpster saved.";
     default:
       return null;
   }
@@ -426,10 +446,10 @@ export default async function AdminBookingDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; placementError?: string }>;
+  searchParams: Promise<{ saved?: string; placementError?: string; assignmentError?: string }>;
 }) {
   const { id } = await params;
-  const { saved, placementError } = await searchParams;
+  const { saved, placementError, assignmentError } = await searchParams;
 
     const bookingSelect = `
       id,
@@ -448,6 +468,9 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      dumpster_id,
+      dumpster_size,
+      dumpster_product_id,
       base_rental_price_cents,
       included_rental_days,
       rental_duration_days,
@@ -488,6 +511,9 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      dumpster_id,
+      dumpster_size,
+      dumpster_product_id,
       base_rental_price_cents,
       included_rental_days,
       rental_duration_days,
@@ -556,11 +582,14 @@ export default async function AdminBookingDetailPage({
         .eq("id", id)
         .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS | "customer_id" | "reordered_from_booking_id" | "booking_ref">>();
 
-      booking = legacyFallback.data
+          booking = legacyFallback.data
         ? ({
             customer_id: null,
             reordered_from_booking_id: null,
             booking_ref: null,
+            dumpster_id: null,
+            dumpster_size: null,
+            dumpster_product_id: null,
             ...legacyFallback.data,
             ...EMPTY_BOOKING_PLACEMENT_FIELDS,
           } as Booking)
@@ -752,6 +781,23 @@ export default async function AdminBookingDetailPage({
     booking.pickup_mode === "schedule" && pickupPlanning.scheduledPickupDate
       ? pickupPlanning.scheduledPickupDate
       : "";
+  const assignmentOptions = await getAssignableDumpstersForBooking({
+    bookingId: booking.id,
+    dumpsterSize: booking.dumpster_size,
+    deliveryDate: booking.delivery_date,
+    pickupDate: booking.pickup_date,
+    includedRentalDays: booking.included_rental_days,
+    currentDumpsterId: booking.dumpster_id,
+  });
+  const compatibleDumpsters = assignmentOptions.compatibleDumpsters;
+  const currentAssignedDumpster = assignmentOptions.currentAssignedDumpster;
+  const assignmentChoices = [
+    ...(currentAssignedDumpster &&
+    !compatibleDumpsters.some((option) => option.id === currentAssignedDumpster.id)
+      ? [currentAssignedDumpster]
+      : []),
+    ...compatibleDumpsters,
+  ];
   const daysOnSite =
     booking.status === "delivered"
       ? getDaysOnSite(deliveredAt, booking.delivery_date)
@@ -1137,10 +1183,20 @@ export default async function AdminBookingDetailPage({
             </div>
 
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
-              <div className={`grid gap-4 sm:grid-cols-2 ${daysOnSite != null ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+              <div className={`grid gap-4 sm:grid-cols-2 ${daysOnSite != null ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
                 <div className="min-w-0 border-b border-slate-200/80 pb-3 sm:border-b-0 sm:pb-0 sm:pr-4 xl:border-r">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Delivery date</div>
                   <div className="mt-2 text-sm font-medium text-slate-900">{formatDate(booking.delivery_date)}</div>
+                </div>
+                <div className="min-w-0 border-b border-slate-200/80 pb-3 sm:border-b-0 sm:pb-0 sm:pr-4 xl:border-r">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Dumpster</div>
+                  <div className="mt-2 text-sm font-medium text-slate-900">
+                    {booking.dumpster_size || "—"}
+                    {booking.dumpster_product_id ? ` • ${booking.dumpster_product_id}` : ""}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Planned: {currentAssignedDumpster ? currentAssignedDumpster.displayName : "Unplanned"}
+                  </div>
                 </div>
                 <div className="min-w-0 border-b border-slate-200/80 pb-3 sm:border-b-0 sm:pb-0 sm:pr-4 xl:border-r">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Created</div>
@@ -1168,6 +1224,115 @@ export default async function AdminBookingDetailPage({
             </div>
           </div>
         </div>
+      </div>
+
+      <div id="assigned-dumpster">
+        <Section
+          title="Planned dumpster"
+          description="Optional dispatch assignment for a specific dumpster record. This does not change pooled customer availability."
+          icon={<TruckIcon className="h-4 w-4" />}
+        >
+          {assignmentError ? (
+            <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+              {assignmentError}
+            </div>
+          ) : null}
+
+          {!booking.dumpster_size || !booking.delivery_date ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
+              Save a dumpster size and delivery date on the booking before planning a specific unit.
+            </div>
+          ) : (
+            <form action={updateAssignedDumpsterAction} className="space-y-5">
+              <input type="hidden" name="id" value={booking.id} />
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field
+                      label="Booking size"
+                      value={
+                        <>
+                          {booking.dumpster_size}
+                          {booking.dumpster_product_id ? ` • ${booking.dumpster_product_id}` : ""}
+                        </>
+                      }
+                    />
+                    <Field
+                      label="Requested window"
+                      value={
+                        <>
+                          {formatDate(booking.delivery_date)} to{" "}
+                          {assignmentOptions.requestedPickupDate
+                            ? formatDate(assignmentOptions.requestedPickupDate)
+                            : "—"}
+                        </>
+                      }
+                    />
+                    <Field
+                      label="Current plan"
+                      value={
+                        currentAssignedDumpster ? (
+                          <span>
+                            {currentAssignedDumpster.displayName}
+                            <span className="text-slate-500">
+                              {` • ${currentAssignedDumpster.equipmentId}`}
+                            </span>
+                          </span>
+                        ) : (
+                          "Unplanned"
+                        )
+                      }
+                    />
+                    <Field
+                      label="Compatible dumpsters"
+                      value={`${compatibleDumpsters.length} available for planning`}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Planned dumpster
+                    </span>
+                    <select
+                      name="dumpster_id"
+                      defaultValue={booking.dumpster_id ?? ""}
+                      className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                    >
+                      <option value="">Unplanned</option>
+                      {assignmentChoices.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {formatAssignedDumpsterLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="mt-3 text-xs leading-5 text-slate-500">
+                    Compatible dumpsters match the booking size, are active and bookable, and are not already planned on another overlapping active booking.
+                  </div>
+
+                  {currentAssignedDumpster && !currentAssignedDumpster.isCompatible ? (
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs font-medium text-amber-900">
+                      The current planned dumpster is no longer in the compatible pool. You can keep it temporarily or clear it here.
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="submit"
+                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                    >
+                      Save plan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+          )}
+        </Section>
       </div>
 
       {linkedCustomer && (accountEmailDiffers || accountNameDiffers || accountPhoneDiffers) ? (

@@ -12,6 +12,8 @@ type BookingDraft = {
   zip?: string;
   county?: string;
   town?: string;
+  dumpsterSize?: string;
+  dumpsterProductId?: string | null;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -382,6 +384,8 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
       zip: z,
       county: json.county,
       town: json.town,
+      dumpsterSize: "14 yard",
+      dumpsterProductId: "default",
       priceQuote: json.priceQuote ?? null,
     });
 

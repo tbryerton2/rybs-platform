@@ -1,0 +1,41 @@
+import { NextResponse } from "next/server";
+import {
+  INTERNAL_DUMPSTER_AVAILABILITY_RULES,
+  getPooledDumpsterAvailabilityBySize,
+} from "@/lib/admin/dumpster-availability";
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const dumpsterSize = (searchParams.get("dumpsterSize") || searchParams.get("size") || "").trim();
+    const dumpsterProductId = (searchParams.get("dumpsterProductId") || searchParams.get("productId") || "").trim();
+    const deliveryDate = (searchParams.get("deliveryDate") || "").trim();
+    const pickupDate = (searchParams.get("pickupDate") || searchParams.get("endDate") || "").trim();
+
+    if (!dumpsterSize) {
+      return NextResponse.json({ ok: false, error: "dumpsterSize is required." }, { status: 400 });
+    }
+
+    if (!deliveryDate) {
+      return NextResponse.json({ ok: false, error: "deliveryDate is required." }, { status: 400 });
+    }
+
+    const result = await getPooledDumpsterAvailabilityBySize({
+      dumpsterSize,
+      dumpsterProductId: dumpsterProductId || null,
+      deliveryDate,
+      pickupDate: pickupDate || null,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      rules: INTERNAL_DUMPSTER_AVAILABILITY_RULES,
+      result,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Availability debug failed." },
+      { status: 500 },
+    );
+  }
+}

@@ -15,6 +15,8 @@ export async function createEmployeeAction(input: EmployeeMutationInput): Promis
 
   if (result.ok) {
     revalidatePath("/admin/employees");
+    revalidatePath("/admin/employees/new");
+    revalidatePath(`/admin/employees/${result.employee.id}`);
   }
 
   return result;
@@ -28,6 +30,7 @@ export async function updateEmployeeAction(
 
   if (result.ok) {
     revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${id}`);
   }
 
   return result;
@@ -38,6 +41,7 @@ export async function deactivateEmployeeAction(id: string): Promise<EmployeeMuta
 
   if (result.ok) {
     revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${id}`);
   }
 
   return result;
@@ -48,6 +52,7 @@ export async function reactivateEmployeeAction(id: string): Promise<EmployeeMuta
 
   if (result.ok) {
     revalidatePath("/admin/employees");
+    revalidatePath(`/admin/employees/${id}`);
   }
 
   return result;

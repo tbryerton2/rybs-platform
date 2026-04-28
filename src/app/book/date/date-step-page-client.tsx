@@ -15,6 +15,8 @@ type BookingDraft = {
   zip?: string;
   county?: string;
   town?: string;
+  dumpsterSize?: string;
+  dumpsterProductId?: string | null;
 
   customerName?: string;
   customerEmail?: string;
@@ -399,15 +401,21 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
     let zip = "";
     let bodyRentalDays = cap ? cap.maxDaysAllowed : 1;
+    let dumpsterSize = "14 yard";
+    let dumpsterProductId = "default";
     try {
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
       zip = (existing.zip || "").trim(); // assuming Step 1 saved it as `zip`
       const standardRentalDays = existing.priceQuote?.standardRentalDays ?? 1;
       bodyRentalDays = cap ? cap.maxDaysAllowed : standardRentalDays;
+      dumpsterSize = (existing.dumpsterSize || "").trim() || "14 yard";
+      dumpsterProductId = (existing.dumpsterProductId || "").trim() || "default";
     } catch {
       zip = "";
       bodyRentalDays = cap ? cap.maxDaysAllowed : 1;
+      dumpsterSize = "14 yard";
+      dumpsterProductId = "default";
     }
 
     try {
@@ -418,6 +426,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           deliveryDate: d,
           rentalDays: bodyRentalDays,
           zip,
+          dumpsterSize,
+          dumpsterProductId,
         }),
       });
 

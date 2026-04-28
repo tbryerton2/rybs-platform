@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createBookingRecord } from "@/lib/booking-records";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isValidEmail } from "@/lib/identity";
 import { normalizePhone } from "@/lib/customers";
@@ -69,7 +70,13 @@ export async function POST(req: Request) {
       total_price_cents,
       service_county,
       service_town,
+      dumpster_size,
+      dumpster_product_id,
     } = body;
+    const selectedDumpster = resolveSelectedDumpster({
+      dumpsterSize: dumpster_size,
+      dumpsterProductId: dumpster_product_id,
+    });
 
     // Minimal required fields for v1
     if (!customer_name || !customer_street || !customer_city || !customer_zip || !delivery_date) {
@@ -115,6 +122,8 @@ export async function POST(req: Request) {
           total_price_cents: total_price_cents ?? null,
           service_county: service_county ?? null,
           service_town: service_town ?? null,
+          dumpster_size: selectedDumpster.dumpsterSize,
+          dumpster_product_id: selectedDumpster.dumpsterProductId,
         },
         identity: {
           customerName: customer_name,

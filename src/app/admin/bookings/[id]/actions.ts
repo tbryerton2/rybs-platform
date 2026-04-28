@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getAssignableDumpstersForBooking } from "@/lib/admin/dumpster-assignment";
 import { bookingPlacementSchemaMessage, isBookingSchemaError } from "@/lib/booking-schema";
 import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
 import {
@@ -32,6 +33,10 @@ function redirectWithPlacementError(id: string, error: string) {
 
 function redirectWithOperationalControlsError(id: string, error: string) {
   redirect(`/admin/bookings/${id}?placementError=${encodeURIComponent(error)}#booking-operational-controls`);
+}
+
+function redirectWithAssignmentError(id: string, error: string) {
+  redirect(`/admin/bookings/${id}?assignmentError=${encodeURIComponent(error)}#assigned-dumpster`);
 }
 
 function normalizeOperationalFieldValue(fieldName: string, value: unknown) {
@@ -395,6 +400,80 @@ export async function updateOperationalControlsAction(formData: FormData) {
   revalidatePath("/admin");
 
   redirect(`/admin/bookings/${id}?saved=operational-controls#booking-operational-controls`);
+}
+
+export async function updateAssignedDumpsterAction(formData: FormData) {
+  const id = asString(formData.get("id"));
+  const dumpsterId = emptyToNull(asString(formData.get("dumpster_id")));
+
+  if (!id) throw new Error("Missing booking id");
+
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("dumpster_id, dumpster_size, delivery_date, pickup_date, included_rental_days")
+    .eq("id", id)
+    .single();
+
+  if (current.error) {
+    redirectWithAssignmentError(id, current.error.message);
+  }
+
+  const currentAssignment = current.data.dumpster_id ?? null;
+
+  if (currentAssignment === dumpsterId) {
+    revalidatePath(`/admin/bookings/${id}`);
+    redirect(`/admin/bookings/${id}#assigned-dumpster`);
+  }
+
+  if (dumpsterId) {
+    const assignmentOptions = await getAssignableDumpstersForBooking({
+      bookingId: id,
+      dumpsterSize: current.data.dumpster_size,
+      deliveryDate: current.data.delivery_date,
+      pickupDate: current.data.pickup_date,
+      includedRentalDays: current.data.included_rental_days,
+      currentDumpsterId: currentAssignment,
+    });
+
+    const canAssign = assignmentOptions.compatibleDumpsters.some((option) => option.id === dumpsterId);
+    if (!canAssign) {
+      redirectWithAssignmentError(
+        id,
+        "That dumpster is not compatible with this booking's size, status, or delivery window.",
+      );
+    }
+  }
+
+  const { error } = await supabaseAdmin
+    .from("bookings")
+    .update({ dumpster_id: dumpsterId })
+    .eq("id", id);
+
+  if (error) {
+    redirectWithAssignmentError(id, error.message);
+  }
+
+  await recordEntityHistory(
+    supabaseAdmin,
+    diffEntityFields(
+      "booking",
+      id,
+      current.data,
+      { dumpster_id: dumpsterId },
+      ["dumpster_id"],
+      {
+        changedByType: "admin",
+        changeReason: dumpsterId ? "Planned dumpster" : "Cleared planned dumpster",
+      },
+    ),
+  );
+
+  revalidatePath(`/admin/bookings/${id}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/schedule");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${id}?saved=assigned-dumpster#assigned-dumpster`);
 }
 
 

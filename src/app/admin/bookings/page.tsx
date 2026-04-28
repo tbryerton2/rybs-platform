@@ -30,6 +30,7 @@ import {
   sanitizePlacementDetails,
 } from "@/lib/placement";
 import { buildPickupPlanningModel } from "@/lib/pickup-planning";
+import { getActiveDumpsterFilterOptions } from "@/lib/admin/dumpster-inventory";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -54,6 +55,14 @@ type BookingRow = {
   delivery_date: string | null;
   pickup_mode: string | null;
   pickup_date: string | null;
+  dumpster_id?: string | null;
+  dumpster_size?: string | null;
+  assigned_dumpster?:
+    | {
+        display_name: string | null;
+        equipment_id: string | null;
+      }
+    | null;
   placement_preference: string | null;
   placement_details: string | null;
   access_issues: string[] | null;
@@ -135,6 +144,8 @@ type Filters = {
     | "recently_created";
   status: string;
   bucket: BookingBucket;
+  assignment: "all" | "assigned" | "unassigned";
+  dumpster: string;
   dateField: DateField;
   datePreset: DatePreset;
   city: string;
@@ -150,11 +161,11 @@ type QuickViewPresetKey = Filters["quickView"];
 const BOOKING_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
 
-const BOOKING_LIST_SELECT = `id, booking_ref, created_at, updated_at, status, customer_id, reordered_from_booking_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, ${BOOKING_PLACEMENT_SELECT}`;
+const BOOKING_LIST_SELECT = `id, booking_ref, created_at, updated_at, status, customer_id, reordered_from_booking_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id), ${BOOKING_PLACEMENT_SELECT}`;
 const BOOKING_LIST_SELECT_WITH_REORDER_ONLY =
-  "id, booking_ref, created_at, updated_at, status, customer_id, reordered_from_booking_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
+  "id, booking_ref, created_at, updated_at, status, customer_id, reordered_from_booking_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id)";
 const BASE_BOOKING_LIST_SELECT =
-  "id, booking_ref, created_at, updated_at, status, customer_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
+  "id, booking_ref, created_at, updated_at, status, customer_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id)";
 const LEGACY_BOOKING_LIST_SELECT =
   "id, booking_ref, created_at, status, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
 
@@ -257,6 +268,27 @@ function formatDateTimeLabel(value?: string | null) {
   }).format(date);
 }
 
+function formatAssignedDumpsterSummary(
+  booking: Pick<BookingRow, "assigned_dumpster">,
+  fallback: "unassigned" | "assign" = "unassigned",
+) {
+  const displayName = booking.assigned_dumpster?.display_name?.trim();
+  const equipmentId = booking.assigned_dumpster?.equipment_id?.trim();
+
+  if (!displayName && !equipmentId) {
+    return fallback === "assign" ? "Plan on booking detail" : "Unplanned";
+  }
+
+  return [displayName, equipmentId].filter(Boolean).join(" • ");
+}
+
+function hasAssignedDumpster(booking: Pick<BookingRow, "assigned_dumpster">) {
+  return Boolean(
+    booking.assigned_dumpster?.display_name?.trim() ||
+      booking.assigned_dumpster?.equipment_id?.trim(),
+  );
+}
+
 function normalizePhone(value: string | null | undefined) {
   return (value ?? "").replace(/\D/g, "");
 }
@@ -349,6 +381,9 @@ function withLegacyBookingFields(
     delivery_date: row.delivery_date ?? null,
     pickup_mode: row.pickup_mode ?? null,
     pickup_date: row.pickup_date ?? null,
+    dumpster_id: null,
+    dumpster_size: null,
+    assigned_dumpster: null,
     ...EMPTY_BOOKING_PLACEMENT_FIELDS,
   })) satisfies BookingRow[];
 }
@@ -915,6 +950,19 @@ function filterByBucket(vm: BookingViewModel, bucket: BookingBucket) {
   return vm.activeBucket === bucket;
 }
 
+function filterByAssignment(vm: BookingViewModel, assignment: Filters["assignment"]) {
+  if (assignment === "all") return true;
+  return assignment === "assigned"
+    ? hasAssignedDumpster(vm.booking)
+    : !hasAssignedDumpster(vm.booking);
+}
+
+function filterByDumpster(vm: BookingViewModel, dumpster: Filters["dumpster"]) {
+  if (dumpster === "all") return true;
+  if (dumpster === "unassigned") return !hasAssignedDumpster(vm.booking);
+  return vm.booking.dumpster_id === dumpster;
+}
+
 function filterByQuickView(vm: BookingViewModel, quickView: string) {
   switch (quickView) {
     case "needs_attention":
@@ -1026,6 +1074,18 @@ function buildScopeMeta(filters: Filters, totalCount: number) {
     };
   }
 
+  if (filters.assignment === "assigned") {
+    return { label: "Showing bookings with planned dumpsters" };
+  }
+
+  if (filters.assignment === "unassigned") {
+    return { label: "Showing bookings without planned dumpsters" };
+  }
+
+  if (filters.dumpster === "unassigned") {
+    return { label: "Showing bookings without a planned dumpster" };
+  }
+
   if (filters.bucket !== "all") {
     return { label: `Showing ${filters.bucket.replace(/_/g, " ")} bookings` };
   }
@@ -1043,6 +1103,8 @@ function hasActiveFilters(filters: Filters) {
       filters.quickView !== "all" ||
       filters.status !== "all" ||
       filters.bucket !== "all" ||
+      filters.assignment !== "all" ||
+      filters.dumpster !== "all" ||
       filters.dateField !== "delivery_date" ||
       filters.datePreset !== "all" ||
       filters.city ||
@@ -1060,6 +1122,8 @@ function buildQuickViewPresetFilters(baseFilters: Filters, quickView: QuickViewP
     quickView,
     status: "all",
     bucket: "all",
+    assignment: "all",
+    dumpster: "all",
     dateField: "delivery_date",
     datePreset: "all",
     city: "",
@@ -1096,6 +1160,8 @@ function isQuickViewPresetActive(filters: Filters, quickView: QuickViewPresetKey
     filters.quickView === preset.quickView &&
     filters.status === preset.status &&
     filters.bucket === preset.bucket &&
+    filters.assignment === preset.assignment &&
+    filters.dumpster === preset.dumpster &&
     filters.dateField === preset.dateField &&
     filters.datePreset === preset.datePreset &&
     filters.city === preset.city &&
@@ -1132,6 +1198,8 @@ function getSummaryHref(
       quickView: "all",
       status: "all",
       bucket: "all",
+      assignment: "all",
+      dumpster: "all",
       dateField: "delivery_date",
       datePreset: "all",
       city: "",
@@ -1158,6 +1226,8 @@ function buildScopedHref(
   if (nextFilters.quickView !== "all") next.set("view", nextFilters.quickView);
   if (nextFilters.status !== "all") next.set("status", nextFilters.status);
   if (nextFilters.bucket !== "all") next.set("bucket", nextFilters.bucket);
+  if (nextFilters.assignment !== "all") next.set("assignment", nextFilters.assignment);
+  if (nextFilters.dumpster !== "all") next.set("dumpster", nextFilters.dumpster);
   if (nextFilters.dateField !== "delivery_date") next.set("dateField", nextFilters.dateField);
   if (nextFilters.datePreset !== "all") next.set("datePreset", nextFilters.datePreset);
   if (nextFilters.city) next.set("city", nextFilters.city);
@@ -1208,6 +1278,8 @@ export default async function AdminBookingsPage({
     quickView: (clean(sp(spObj, "view")) || "all") as Filters["quickView"],
     status: clean(sp(spObj, "status")) || "all",
     bucket: (clean(sp(spObj, "bucket")) || "all") as BookingBucket,
+    assignment: (clean(sp(spObj, "assignment")) || "all") as Filters["assignment"],
+    dumpster: clean(sp(spObj, "dumpster")) || "all",
     dateField: (clean(sp(spObj, "dateField")) || "delivery_date") as DateField,
     datePreset: (clean(sp(spObj, "datePreset")) || "all") as DatePreset,
     city: clean(sp(spObj, "city")),
@@ -1222,7 +1294,7 @@ export default async function AdminBookingsPage({
   const page = Math.max(1, Number.parseInt(clean(sp(spObj, "page")) || "1", 10) || 1);
   const filtersPanelState = clean(sp(spObj, "filtersPanel"));
 
-  const [baseBookings, supplementalSearchBookings, activeHolds, futureDeliveries] = await Promise.all([
+  const [baseBookings, supplementalSearchBookings, activeHolds, futureDeliveries, dumpsterOptions] = await Promise.all([
     getBookings(),
     filters.q ? getSearchSupplementalBookings(filters.q) : Promise.resolve([] as BookingRow[]),
     getActiveHolds(),
@@ -1233,6 +1305,7 @@ export default async function AdminBookingsPage({
       .gte("delivery_date", todayISOET())
       .order("delivery_date", { ascending: true })
       .limit(500),
+    getActiveDumpsterFilterOptions(),
   ]);
   const bookings = mergeBookingRows(baseBookings, supplementalSearchBookings);
 
@@ -1276,6 +1349,8 @@ export default async function AdminBookingsPage({
 
   let filteredResults = allViewModels.filter((vm) => {
     if (!filterByQuickView(vm, filters.quickView)) return false;
+    if (!filterByAssignment(vm, filters.assignment)) return false;
+    if (!filterByDumpster(vm, filters.dumpster)) return false;
     if (filters.status !== "all" && (vm.booking.status ?? "") !== filters.status) return false;
     if (!filterByBucket(vm, filters.bucket)) return false;
     if (filters.city && !(vm.booking.customer_city ?? "").toLowerCase().includes(filters.city.toLowerCase())) return false;
@@ -1514,7 +1589,7 @@ export default async function AdminBookingsPage({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-9">
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Status</label>
           <select name="status" defaultValue={filters.status} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
@@ -1536,6 +1611,26 @@ export default async function AdminBookingsPage({
             <option value="holds">Holds</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-slate-700">Planning</label>
+          <select name="assignment" defaultValue={filters.assignment} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
+            <option value="all">All</option>
+            <option value="assigned">Planned</option>
+            <option value="unassigned">Unplanned</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-slate-700">Dumpster</label>
+          <select name="dumpster" defaultValue={filters.dumpster} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
+            <option value="all">All dumpsters</option>
+            <option value="unassigned">Unplanned</option>
+            {dumpsterOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -1621,7 +1716,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("needs_attention", filters.pageSize, filtersExpanded),
               icon: ClockIcon,
               shellTone: "rose",
-              detail: "High-risk or stale follow-up needed",
             },
             {
               label: "Active / on-site",
@@ -1629,7 +1723,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("active", filters.pageSize, filtersExpanded),
               icon: TruckIcon,
               shellTone: "teal",
-              detail: "Currently delivered and not yet picked up",
             },
             {
               label: "Upcoming deliveries",
@@ -1637,7 +1730,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("upcoming", filters.pageSize, filtersExpanded),
               icon: CalendarDaysIcon,
               shellTone: "blue",
-              detail: "Scheduled to go out in the next 7 days",
             },
             {
               label: "Upcoming pickups",
@@ -1645,7 +1737,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("upcoming_pickups", filters.pageSize, filtersExpanded),
               icon: ArrowDownTrayIcon,
               shellTone: "amber",
-              detail: "Scheduled returns in the next 7 days",
             },
             {
               label: "Recently created",
@@ -1653,7 +1744,6 @@ export default async function AdminBookingsPage({
               href: getSummaryHref("recent", filters.pageSize, filtersExpanded),
               icon: Squares2X2Icon,
               shellTone: "violet",
-              detail: "Created within the last 7 days",
             },
             ...(activeHoldCount > 0
               ? [
@@ -1676,7 +1766,7 @@ export default async function AdminBookingsPage({
                 icon={card.icon}
                 tone={card.shellTone}
               href={card.href}
-              detail={card.detail}
+              layout="pricing"
               stretch
             />
           );
@@ -1922,6 +2012,9 @@ export default async function AdminBookingsPage({
                         </div>
                         <div className="mt-1 text-sm text-slate-600">
                           {[booking.customer_city, booking.customer_zip].filter(Boolean).join(", ") || "No city or ZIP on file"}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          Planned dumpster: {formatAssignedDumpsterSummary(booking, "assign")}
                         </div>
                       </div>
                     </div>

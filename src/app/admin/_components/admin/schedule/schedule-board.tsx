@@ -26,6 +26,14 @@ type BookingRow = {
   delivery_date: string | null;
   pickup_date: string | null;
   pickup_mode: "request" | "schedule" | null;
+  dumpster_id: string | null;
+  dumpster_size: string | null;
+  assigned_dumpster:
+    | {
+        display_name: string | null;
+        equipment_id: string | null;
+      }
+    | null;
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
   created_at: string | null;
   notes?: string | null;
@@ -136,6 +144,12 @@ function getDayHeaderPills(day: DayData) {
 
 function stopDescriptor(job: BookingRow) {
   return bookingReference(job);
+}
+
+function assignedDumpsterLabel(job: BookingRow) {
+  const displayName = job.assigned_dumpster?.display_name?.trim();
+  const equipmentId = job.assigned_dumpster?.equipment_id?.trim();
+  return [displayName, equipmentId].filter(Boolean).join(" • ") || "Unplanned";
 }
 
 function operationalNotes(job: BookingRow, variant: StopVariant) {
@@ -254,6 +268,13 @@ function QuickViewDialog({
               Service date
             </div>
             <div className="mt-1 text-sm font-semibold text-slate-900">{formatShortDate(serviceDate)}</div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Planned dumpster
+            </div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">{assignedDumpsterLabel(job)}</div>
           </div>
         </div>
 
@@ -410,6 +431,7 @@ function StopCard({
       </div>
 
       <div className="mt-2 text-sm text-slate-600">{formatAddress(job)}</div>
+      <div className="mt-1 text-xs text-slate-500">Planned dumpster: {assignedDumpsterLabel(job)}</div>
 
       <div className="mt-3 flex items-center justify-end gap-3 text-xs text-slate-500">
         <span className="font-semibold text-slate-400 transition group-hover:text-slate-600">Quick view</span>

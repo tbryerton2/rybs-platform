@@ -210,14 +210,25 @@ export function formatDate(value: string) {
 
 export function formatTimestamp(value: string) {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    hour12: true,
     timeZone: "America/New_York",
-  }).format(new Date(value));
+  }).formatToParts(new Date(value));
+
+  const lookup = new Map(parts.map((part) => [part.type, part.value]));
+  const month = lookup.get("month") ?? "";
+  const day = lookup.get("day") ?? "";
+  const year = lookup.get("year") ?? "";
+  const hour = lookup.get("hour") ?? "";
+  const minute = lookup.get("minute") ?? "";
+  const dayPeriod = lookup.get("dayPeriod") ?? "";
+
+  return `${month} ${day}, ${year}, ${hour}:${minute} ${dayPeriod}`.trim();
 }
 
 export function getEmployeeRoleLabel(roleKey: EmployeeRoleKey | "") {
@@ -256,9 +267,15 @@ export function toEmployeeMutationInput(employee: EmployeeRecord): EmployeeMutat
   };
 }
 
-export function validateEmployee(employee: EmployeeMutationInput) {
+export function validateEmployee(
+  employee: EmployeeMutationInput,
+  options?: {
+    requireEmployeeId?: boolean;
+  },
+) {
   const normalized = normalizeEmployeeMutationInput(employee);
   const errors: EmployeeFormErrors = {};
+  const requireEmployeeId = options?.requireEmployeeId ?? true;
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneDigits = normalized.phone.replace(/\D/g, "");
   const secondPhoneDigits = normalized.secondPhone.replace(/\D/g, "");
@@ -270,24 +287,28 @@ export function validateEmployee(employee: EmployeeMutationInput) {
 
   if (!normalized.firstName) errors.firstName = "First name is required.";
   if (!normalized.lastName) errors.lastName = "Last name is required.";
-  if (!normalized.employeeId) {
+  if (requireEmployeeId && !normalized.employeeId) {
     errors.employeeId = "Employee ID is required.";
-  } else if (!/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(normalized.employeeId)) {
+  } else if (normalized.employeeId && !/^[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(normalized.employeeId)) {
     errors.employeeId = "Use letters, numbers, and hyphens only.";
   }
   if (!normalized.streetAddress) errors.streetAddress = "Street address is required.";
   if (!normalized.city) errors.city = "City is required.";
-  if (!normalized.state) errors.state = "State is required.";
-  if (normalized.state.length !== 2) errors.state = "Use a 2-letter state code.";
-  if (normalized.zip.length !== 5) errors.zip = "ZIP must be 5 digits.";
-  if (!normalized.jobTitle) errors.jobTitle = "Job title is required.";
+  if (!normalized.state) {
+    errors.state = "State is required.";
+  } else if (normalized.state.length !== 2) {
+    errors.state = "Use a 2-letter state code.";
+  }
+  if (!normalized.zip) {
+    errors.zip = "ZIP is required.";
+  } else if (normalized.zip.length !== 5) {
+    errors.zip = "ZIP must be 5 digits.";
+  }
   if (phoneDigits.length !== 10) errors.phone = "Phone must be 10 digits.";
   if (normalized.secondPhone && secondPhoneDigits.length !== 10) {
     errors.secondPhone = "Second phone must be 10 digits.";
   }
-  if (!normalized.email) {
-    errors.email = "Email is required.";
-  } else if (!emailPattern.test(normalized.email)) {
+  if (normalized.email && !emailPattern.test(normalized.email)) {
     errors.email = "Enter a valid email address.";
   }
   if (!normalized.dateOfBirth) {
@@ -297,27 +318,19 @@ export function validateEmployee(employee: EmployeeMutationInput) {
   } else if (birthDate > today) {
     errors.dateOfBirth = "Date of birth cannot be in the future.";
   }
-  if (!normalized.hireDate) {
-    errors.hireDate = "Hire date is required.";
-  } else if (!hireDate) {
+  if (normalized.hireDate && !hireDate) {
     errors.hireDate = "Enter a valid hire date.";
   }
   if (birthDate && hireDate && hireDate < birthDate) {
     errors.hireDate = "Hire date cannot be earlier than date of birth.";
   }
-  if (!normalized.licenseNumber) errors.licenseNumber = "License number is required.";
-  if (!normalized.licenseState) errors.licenseState = "License state is required.";
-  if (normalized.licenseState.length !== 2) errors.licenseState = "Use a 2-letter state code.";
-  if (!normalized.licenseClass) errors.licenseClass = "License class is required.";
-  if (!normalized.licenseExpiration) {
-    errors.licenseExpiration = "License expiration is required.";
-  } else if (!licenseExpiration) {
+  if (normalized.licenseState && normalized.licenseState.length !== 2) {
+    errors.licenseState = "Use a 2-letter state code.";
+  }
+  if (normalized.licenseExpiration && !licenseExpiration) {
     errors.licenseExpiration = "Enter a valid expiration date.";
   }
-  if (!normalized.emergencyContactName) {
-    errors.emergencyContactName = "Emergency contact name is required.";
-  }
-  if (emergencyPhoneDigits.length !== 10) {
+  if (normalized.emergencyContactPhone && emergencyPhoneDigits.length !== 10) {
     errors.emergencyContactPhone = "Emergency contact phone must be 10 digits.";
   }
 

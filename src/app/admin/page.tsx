@@ -710,10 +710,6 @@ export default async function AdminDashboardPage() {
     {
       label: "Deliveries Today",
       value: deliveriesToday.length,
-      insight:
-        deliveriesToday.length === deliveriesYesterday.length
-          ? "Same as yesterday"
-          : `${deliveriesToday.length > deliveriesYesterday.length ? "Up" : "Down"} ${Math.abs(deliveriesToday.length - deliveriesYesterday.length)} from yesterday`,
       tooltip: "Deliveries Today counts confirmed or scheduled drop-offs with a delivery date of today.",
       icon: TruckIcon,
       toneKey: "blue" as const,
@@ -722,7 +718,6 @@ export default async function AdminDashboardPage() {
     {
       label: "Pickups Today",
       value: pickupsToday.length,
-      insight: `${activeBookings.filter((booking) => booking.status === "delivered").length} still awaiting pickup`,
       tooltip:
         "Pickups Today counts delivered rentals with a pickup date of today. Awaiting pickup means the dumpster is still on site and not yet marked picked up.",
       icon: CalendarDaysIcon,
@@ -732,7 +727,6 @@ export default async function AdminDashboardPage() {
     {
       label: "Open Jobs",
       value: openJobs,
-      insight: `${activeBookings.filter((booking) => booking.status === "delivered").length} currently on site`,
       tooltip: "Open Jobs includes confirmed deliveries, scheduled jobs, and delivered rentals that are still active.",
       icon: ClockIcon,
       toneKey: "slate" as const,
@@ -741,7 +735,6 @@ export default async function AdminDashboardPage() {
     {
       label: "Overdue Pickups",
       value: overduePickups.length,
-      insight: overduePickups.length > 0 ? "Action needed" : "No overdue pickups",
       tooltip: "A pickup becomes overdue when a delivered rental has a scheduled pickup date that has already passed.",
       icon: ExclamationTriangleIcon,
       href: "/admin/bookings?quickView=overdue_pickups",
@@ -750,10 +743,6 @@ export default async function AdminDashboardPage() {
     {
       label: "Stops Scheduled",
       value: stopsScheduled,
-      insight:
-        stopsScheduled === stopsYesterday
-          ? "Same as yesterday"
-          : `${stopsScheduled > stopsYesterday ? "Up" : "Down"} ${Math.abs(stopsScheduled - stopsYesterday)} from yesterday`,
       tooltip: "Stops Scheduled is the combined total of today’s delivery stops and pickup stops.",
       icon: MapPinIcon,
       toneKey: "green" as const,

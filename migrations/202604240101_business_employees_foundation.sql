@@ -16,6 +16,17 @@ as $$
   )::uuid
 $$;
 
+create or replace function public.sync_business_employee_derived_fields()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.full_name := nullif(btrim(concat_ws(' ', new.first_name, new.last_name)), '');
+  new.normalized_email := public.normalize_email(new.email);
+  return new;
+end;
+$$;
+
 create table if not exists public.business_employees (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.tenants (id) on delete cascade,
@@ -24,9 +35,9 @@ create table if not exists public.business_employees (
     check (length(btrim(first_name)) > 0),
   last_name text not null
     check (length(btrim(last_name)) > 0),
-  full_name text generated always as (btrim(concat_ws(' ', first_name, last_name))) stored,
+  full_name text,
   email text,
-  normalized_email text generated always as (public.normalize_email(email)) stored,
+  normalized_email text,
   phone text,
   second_phone text,
   preferred_contact_method text not null default 'phone'
@@ -92,6 +103,11 @@ drop trigger if exists business_employees_set_updated_at on public.business_empl
 create trigger business_employees_set_updated_at
 before update on public.business_employees
 for each row execute function public.set_updated_at();
+
+drop trigger if exists business_employees_sync_derived_fields on public.business_employees;
+create trigger business_employees_sync_derived_fields
+before insert or update of first_name, last_name, email on public.business_employees
+for each row execute function public.sync_business_employee_derived_fields();
 
 comment on table public.business_employees is
   'Business-scoped employee records for operations/admin use. Records are soft-deactivated rather than deleted and can link to auth users later.';

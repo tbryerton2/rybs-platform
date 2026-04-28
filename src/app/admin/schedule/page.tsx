@@ -12,8 +12,13 @@ import {
   MapPinIcon,
   TruckIcon,
 } from "@heroicons/react/24/outline";
+import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
-import { getScheduleJobs, FLEET_SIZE } from "@/lib/admin/schedule";
+import {
+  getActiveDumpsterFilterOptions,
+  getDumpsterInventorySummary,
+} from "@/lib/admin/dumpster-inventory";
+import { getScheduleJobs } from "@/lib/admin/schedule";
 import {
   getPlacementCompactSignals,
   getPlacementDispatchSummary,
@@ -26,6 +31,8 @@ import {
 import ScheduleBoard from "../_components/admin/schedule/schedule-board";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type AssignmentFilter = "all" | "assigned" | "unassigned";
+type DumpsterFilter = "all" | "unassigned" | string;
 
 type BookingRow = {
   id: string;
@@ -37,6 +44,14 @@ type BookingRow = {
   delivery_date: string | null;
   pickup_date: string | null;
   pickup_mode: "request" | "schedule" | null;
+  dumpster_id: string | null;
+  dumpster_size: string | null;
+  assigned_dumpster:
+    | {
+        display_name: string | null;
+        equipment_id: string | null;
+      }
+    | null;
   status: "confirmed" | "scheduled" | "delivered" | "picked_up" | "cancelled";
   notes: string | null;
   created_at: string | null;
@@ -54,6 +69,11 @@ type BookingRow = {
 function sp(obj: SearchParams, key: string) {
   const value = obj[key];
   return Array.isArray(value) ? value[0] : value;
+}
+
+function clean(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "";
 }
 
 function todayETDate(): Date {
@@ -229,6 +249,43 @@ function bookingReference(job: BookingRow) {
   return job.booking_ref ?? `Job ${job.id.slice(0, 8).toUpperCase()}`;
 }
 
+function assignedDumpsterLabel(job: BookingRow, fallback: "unassigned" | "assign" = "unassigned") {
+  const displayName = job.assigned_dumpster?.display_name?.trim();
+  const equipmentId = job.assigned_dumpster?.equipment_id?.trim();
+
+  if (!displayName && !equipmentId) {
+    return fallback === "assign" ? "Plan on booking detail" : "Unplanned";
+  }
+
+  return [displayName, equipmentId].filter(Boolean).join(" • ");
+}
+
+function hasAssignedDumpster(job: BookingRow) {
+  return Boolean(
+    job.assigned_dumpster?.display_name?.trim() ||
+      job.assigned_dumpster?.equipment_id?.trim(),
+  );
+}
+
+function matchesAssignmentFilter(job: BookingRow, assignment: AssignmentFilter) {
+  if (assignment === "all") return true;
+  return assignment === "assigned" ? hasAssignedDumpster(job) : !hasAssignedDumpster(job);
+}
+
+function matchesDumpsterFilter(job: BookingRow, dumpster: DumpsterFilter) {
+  if (dumpster === "all") return true;
+  if (dumpster === "unassigned") return !hasAssignedDumpster(job);
+  return job.dumpster_id === dumpster;
+}
+
+function buildScheduleHref(weekIso: string, assignment: AssignmentFilter, dumpster: DumpsterFilter) {
+  const params = new URLSearchParams();
+  params.set("week", weekIso);
+  if (assignment !== "all") params.set("assignment", assignment);
+  if (dumpster !== "all") params.set("dumpster", dumpster);
+  return `/admin/schedule?${params.toString()}`;
+}
+
 function getAttentionLabel(job: BookingRow) {
   const todayISO = toISODate(todayETDate());
 
@@ -270,36 +327,49 @@ function SummaryCard({
   icon: Icon,
   label,
   value,
-  detail,
   tone,
 }: {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   label: string;
   value: number;
-  detail: string;
   tone: StatTone;
 }) {
-  const toneClasses: Record<StatTone, string> = {
-    orange: "bg-[#F97316]/10 text-[#C2410C] ring-[#F97316]/15",
-    blue: "bg-blue-50 text-blue-700 ring-blue-200",
-    emerald: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    slate: "bg-slate-100 text-slate-700 ring-slate-200",
-    rose: "bg-rose-50 text-rose-700 ring-rose-200",
+  const toneClasses: Record<StatTone, { card: string; icon: string }> = {
+    orange: {
+      card: adminSummaryCardShell("amber", "h-full p-5"),
+      icon: "bg-amber-100/95 text-amber-700 ring-amber-200/90",
+    },
+    blue: {
+      card: adminSummaryCardShell("blue", "h-full p-5"),
+      icon: "bg-sky-100/95 text-sky-700 ring-sky-200/90",
+    },
+    emerald: {
+      card: adminSummaryCardShell("green", "h-full p-5"),
+      icon: "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90",
+    },
+    slate: {
+      card: adminSummaryCardShell("violet", "h-full p-5"),
+      icon: "bg-violet-100/95 text-violet-700 ring-violet-200/90",
+    },
+    rose: {
+      card: adminSummaryCardShell("rose", "h-full p-5"),
+      icon: "bg-rose-100/95 text-rose-700 ring-rose-200/90",
+    },
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm shadow-slate-950/5">
-      <div className="flex items-start justify-between gap-4">
-        <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${toneClasses[tone]}`}>
-          <Icon className="h-5 w-5" />
+    <div className={toneClasses[tone].card}>
+      <div className="flex gap-4">
+        <div
+          className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${toneClasses[tone].icon}`}
+        >
+          <Icon className="h-6 w-6" />
         </div>
-        <div className="min-w-0 flex-1 text-right">
-          <div className="text-2xl font-semibold tracking-tight text-slate-900">{value}</div>
-          <div className="mt-1 text-xs font-medium text-slate-500">{label}</div>
+        <div className="min-w-0">
+          <div className="flex h-12 items-center text-sm font-medium leading-5 text-slate-600">{label}</div>
+          <div className="mt-2 text-lg font-semibold tracking-tight text-slate-950">{value}</div>
         </div>
       </div>
-
-      <div className="mt-3 text-sm leading-5 text-slate-600">{detail}</div>
     </div>
   );
 }
@@ -427,6 +497,15 @@ function PickupRequestPanel({
                       Expected available again {formatShortDate(pickupView.expectedAvailableDate)}.
                     </div>
                   ) : null}
+                </div>
+
+                <div className="rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200 sm:col-span-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Planned dumpster
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {assignedDumpsterLabel(job, "assign")}
+                  </div>
                 </div>
               </div>
 
@@ -570,6 +649,15 @@ function AttentionDumpstersPanel({
                     {pickupView.pickupStatusLabel}
                   </div>
                 </div>
+
+                <div className="rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200 sm:col-span-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Planned dumpster
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-900">
+                    {assignedDumpsterLabel(job, "assign")}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200">
@@ -631,6 +719,15 @@ function OverduePickupsPanel({
                 {daysOnSite(job.delivery_date)}
               </div>
             </div>
+
+            <div className="mt-3 rounded-xl bg-white px-3 py-2.5 ring-1 ring-rose-200">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">
+                Planned dumpster
+              </div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {assignedDumpsterLabel(job, "assign")}
+              </div>
+            </div>
           </div>
         ))
       ) : (
@@ -650,6 +747,8 @@ export default async function AdminSchedulePage({
 }) {
   const params = await searchParams;
   const requestedWeek = sp(params, "week");
+  const assignmentFilter = (clean(sp(params, "assignment")) || "all") as AssignmentFilter;
+  const dumpsterFilter = clean(sp(params, "dumpster")) || "all";
 
   const weekStart = getWeekStartMonday(requestedWeek);
   const weekEnd = addDays(weekStart, 6);
@@ -660,7 +759,16 @@ export default async function AdminSchedulePage({
   const weekEndISO = toISODate(weekEnd);
   const todayISO = toISODate(todayETDate());
 
-  const jobs = (await getScheduleJobs(weekStartISO, weekEndISO)) as BookingRow[];
+  const [allJobs, inventorySummary, dumpsterOptions] = await Promise.all([
+    getScheduleJobs(weekStartISO, weekEndISO),
+    getDumpsterInventorySummary(),
+    getActiveDumpsterFilterOptions(),
+  ]);
+  const jobs = (allJobs as BookingRow[]).filter((job) =>
+    matchesAssignmentFilter(job, assignmentFilter) &&
+    matchesDumpsterFilter(job, dumpsterFilter),
+  );
+  const bookableFleetSize = inventorySummary.bookableCount;
 
   const baseDays = Array.from({ length: 7 }, (_, index) => {
     const date = addDays(weekStart, index);
@@ -669,7 +777,7 @@ export default async function AdminSchedulePage({
     const pickups = jobs.filter((job) => isPickupForDay(job, iso));
     const startOnSite = jobs.filter((job) => isOnSiteStartOfDay(job, iso)).length;
     const endOnSite = jobs.filter((job) => isOnSiteEndOfDay(job, iso)).length;
-    const remaining = Math.max(0, FLEET_SIZE - endOnSite);
+    const remaining = Math.max(0, bookableFleetSize - endOnSite);
     const totalStops = deliveries.length + pickups.length;
 
     return {
@@ -680,7 +788,7 @@ export default async function AdminSchedulePage({
       startOnSite,
       endOnSite,
       remaining,
-      hasCapacityIssue: endOnSite > FLEET_SIZE,
+      hasCapacityIssue: endOnSite > bookableFleetSize,
       totalStops,
     };
   });
@@ -746,13 +854,13 @@ export default async function AdminSchedulePage({
     <AdminPage width="wide" className="max-w-[1500px]">
       <AdminPageHeader
         title="Schedule"
-        description={`Fleet planning is projected against ${FLEET_SIZE} dumpster${FLEET_SIZE === 1 ? "" : "s"}.`}
+        description={`Fleet planning is projected against ${bookableFleetSize} bookable dumpster${bookableFleetSize === 1 ? "" : "s"}.`}
         className="mb-6"
         actions={
           <div className="flex flex-col items-start gap-4 sm:items-end">
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               <Link
-                href={`/admin/schedule?week=${toISODate(prevWeek)}`}
+                href={buildScheduleHref(toISODate(prevWeek), assignmentFilter, dumpsterFilter)}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 <ArrowLeftIcon className="h-4 w-4" />
@@ -760,14 +868,14 @@ export default async function AdminSchedulePage({
               </Link>
 
               <Link
-                href={`/admin/schedule?week=${toISODate(getWeekStartMonday())}`}
+                href={buildScheduleHref(toISODate(getWeekStartMonday()), assignmentFilter, dumpsterFilter)}
                 className="inline-flex h-10 items-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:opacity-90"
               >
                 This week
               </Link>
 
               <Link
-                href={`/admin/schedule?week=${toISODate(nextWeek)}`}
+                href={buildScheduleHref(toISODate(nextWeek), assignmentFilter, dumpsterFilter)}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 Next week
@@ -775,8 +883,52 @@ export default async function AdminSchedulePage({
               </Link>
             </div>
 
-            <div className="pt-1 text-sm font-semibold text-slate-700 sm:text-right">
-              {formatWeekRange(weekStart, weekEnd)}
+            <div className="flex flex-col gap-2 pt-1 sm:items-end">
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                {([
+                  { key: "all", label: "All" },
+                  { key: "assigned", label: "Planned" },
+                  { key: "unassigned", label: "Unplanned" },
+                ] as Array<{ key: AssignmentFilter; label: string }>).map((option) => (
+                  <Link
+                    key={option.key}
+                    href={buildScheduleHref(weekStartISO, option.key, dumpsterFilter)}
+                    className={`inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium transition ${
+                      assignmentFilter === option.key
+                        ? "bg-[#F97316] text-white shadow-sm shadow-orange-100/80"
+                        : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                    }`}
+                  >
+                    {option.label}
+                  </Link>
+                ))}
+              </div>
+              <form action="/admin/schedule" method="GET" className="flex items-center gap-2 sm:justify-end">
+                <input type="hidden" name="week" value={weekStartISO} />
+                <input type="hidden" name="assignment" value={assignmentFilter} />
+                <select
+                  name="dumpster"
+                  defaultValue={dumpsterFilter}
+                  className="h-10 min-w-[240px] rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
+                >
+                  <option value="all">All dumpsters</option>
+                  <option value="unassigned">Unplanned</option>
+                  {dumpsterOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Apply
+                </button>
+              </form>
+              <div className="text-sm font-semibold text-slate-700 sm:text-right">
+                {formatWeekRange(weekStart, weekEnd)}
+              </div>
             </div>
           </div>
         }
@@ -787,35 +939,30 @@ export default async function AdminSchedulePage({
           icon={TruckIcon}
           label="Week deliveries"
           value={totalDeliveries}
-          detail="Outbound drops already placed on the weekly board."
           tone="orange"
         />
         <SummaryCard
           icon={CalendarDaysIcon}
           label="Week pickups"
           value={totalPickups}
-          detail="Return trips that already have a confirmed day."
           tone="blue"
         />
         <SummaryCard
           icon={InboxStackIcon}
           label="Open pickup requests"
           value={pickupRequests.length}
-          detail="Still waiting for dispatch to assign a pickup date."
           tone="emerald"
         />
         <SummaryCard
           icon={MapPinIcon}
           label="Dumpsters on-site"
           value={dumpstersOnSiteToday}
-          detail="Units currently deployed in the field today."
           tone="slate"
         />
         <SummaryCard
           icon={ExclamationTriangleIcon}
           label="Overdue pickups"
           value={overduePickupJobs.length}
-          detail="Past-due returns that need immediate cleanup."
           tone="rose"
         />
       </div>

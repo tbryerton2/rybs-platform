@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createBookingRecord } from "@/lib/booking-records";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { isValidEmail } from "@/lib/identity";
 import { supabaseServer } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/customers";
@@ -33,11 +34,17 @@ type Payload = {
   placement_photo_url?: string | null;
   special_delivery_instructions?: string | null;
   reordered_from_booking_id?: string | null;
+  dumpster_size?: string | null;
+  dumpster_product_id?: string | null;
 };
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Payload;
+    const selectedDumpster = resolveSelectedDumpster({
+      dumpsterSize: body.dumpster_size,
+      dumpsterProductId: body.dumpster_product_id,
+    });
 
     // Minimal required fields for v1 draft
     if (!body.customer_name?.trim()) {
@@ -87,6 +94,8 @@ export async function POST(req: Request) {
           total_price_cents: typeof body.total_price_cents === "number" ? body.total_price_cents : null,
           service_county: body.service_county?.trim() ?? null,
           service_town: body.service_town?.trim() ?? null,
+          dumpster_size: selectedDumpster.dumpsterSize,
+          dumpster_product_id: selectedDumpster.dumpsterProductId,
         },
         identity: {
           customerName: body.customer_name.trim(),

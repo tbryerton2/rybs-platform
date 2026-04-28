@@ -20,6 +20,7 @@ export type ExpensePaymentMethod =
 
 export type ExpenseRecord = {
   id: string;
+  businessId: string;
   expenseDate: string;
   category: ExpenseCategory;
   vendor: string;
@@ -31,8 +32,28 @@ export type ExpenseRecord = {
   taxDeductible: boolean;
   receiptReference: string;
   notes: string;
+  createdAt: string;
   updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+  archivedAt: string | null;
 };
+
+export type ExpenseMutationInput = {
+  expenseDate: string;
+  category: ExpenseCategory;
+  vendor: string;
+  description: string;
+  amountCents: number;
+  paymentStatus: ExpensePaymentStatus;
+  paymentMethod: ExpensePaymentMethod;
+  relatedAsset: string;
+  taxDeductible: boolean;
+  receiptReference: string;
+  notes: string;
+};
+
+export type ExpenseFormErrors = Partial<Record<keyof ExpenseMutationInput, string>>;
 
 export const expenseCategories: ExpenseCategory[] = [
   "Fuel",
@@ -49,9 +70,14 @@ export const expenseCategories: ExpenseCategory[] = [
 export const paymentStatuses: ExpensePaymentStatus[] = ["Paid", "Scheduled", "Outstanding"];
 export const paymentMethods: ExpensePaymentMethod[] = ["Card", "ACH", "Check", "Cash", "Payroll run", "Other"];
 
+function cleanText(value: string | null | undefined) {
+  return value?.trim() ?? "";
+}
+
 export function createEmptyExpense(): ExpenseRecord {
   return {
     id: "",
+    businessId: "",
     expenseDate: "",
     category: "Fuel",
     vendor: "",
@@ -63,71 +89,54 @@ export function createEmptyExpense(): ExpenseRecord {
     taxDeductible: true,
     receiptReference: "",
     notes: "",
+    createdAt: "",
     updatedAt: "",
+    createdBy: null,
+    updatedBy: null,
+    archivedAt: null,
   };
 }
 
-export function createMockExpenses(): ExpenseRecord[] {
-  return [
-    {
-      id: "exp_1",
-      expenseDate: "2026-04-08",
-      category: "Fuel",
-      vendor: "Fleet Fuel Services",
-      description: "Weekly diesel top-up for route trucks",
-      amountCents: 48620,
-      paymentStatus: "Paid",
-      paymentMethod: "Card",
-      relatedAsset: "Truck 12",
-      taxDeductible: true,
-      receiptReference: "INV-24018",
-      notes: "Included two emergency after-hours fills.",
-      updatedAt: "2026-04-08T16:20:00.000Z",
-    },
-    {
-      id: "exp_2",
-      expenseDate: "2026-04-05",
-      category: "Vehicle maintenance",
-      vendor: "North Yard Truck Repair",
-      description: "Brake service and inspection",
-      amountCents: 129500,
-      paymentStatus: "Outstanding",
-      paymentMethod: "ACH",
-      relatedAsset: "Truck 08",
-      taxDeductible: true,
-      receiptReference: "WO-8821",
-      notes: "Payment due net 15.",
-      updatedAt: "2026-04-06T10:05:00.000Z",
-    },
-    {
-      id: "exp_3",
-      expenseDate: "2026-04-03",
-      category: "Dump fees / disposal",
-      vendor: "County Transfer Station",
-      description: "Disposal charges for mixed debris loads",
-      amountCents: 73200,
-      paymentStatus: "Paid",
-      paymentMethod: "ACH",
-      relatedAsset: "",
-      taxDeductible: true,
-      receiptReference: "CTS-19037",
-      notes: "",
-      updatedAt: "2026-04-03T19:10:00.000Z",
-    },
-    {
-      id: "exp_4",
-      expenseDate: "2026-04-01",
-      category: "Payroll",
-      vendor: "Weekly payroll",
-      description: "Driver and yard payroll batch",
-      amountCents: 428000,
-      paymentStatus: "Paid",
-      paymentMethod: "Payroll run",
-      relatedAsset: "",
-      taxDeductible: true,
-      receiptReference: "PAY-2026-14",
-      notes: "Includes overtime for Saturday route support.",
-      updatedAt: "2026-04-01T13:42:00.000Z",
-    },
-  ];
+export function toExpenseMutationInput(expense: ExpenseRecord): ExpenseMutationInput {
+  return {
+    expenseDate: expense.expenseDate,
+    category: expense.category,
+    vendor: expense.vendor,
+    description: expense.description,
+    amountCents: expense.amountCents,
+    paymentStatus: expense.paymentStatus,
+    paymentMethod: expense.paymentMethod,
+    relatedAsset: expense.relatedAsset,
+    taxDeductible: expense.taxDeductible,
+    receiptReference: expense.receiptReference,
+    notes: expense.notes,
+  };
+}
+
+export function normalizeExpenseMutationInput(input: ExpenseMutationInput): ExpenseMutationInput {
+  return {
+    expenseDate: cleanText(input.expenseDate),
+    category: input.category,
+    vendor: cleanText(input.vendor),
+    description: cleanText(input.description),
+    amountCents: Number.isFinite(input.amountCents) ? Math.round(input.amountCents) : 0,
+    paymentStatus: input.paymentStatus,
+    paymentMethod: input.paymentMethod,
+    relatedAsset: cleanText(input.relatedAsset),
+    taxDeductible: Boolean(input.taxDeductible),
+    receiptReference: cleanText(input.receiptReference),
+    notes: cleanText(input.notes),
+  };
+}
+
+export function validateExpense(input: ExpenseMutationInput): ExpenseFormErrors {
+  const normalized = normalizeExpenseMutationInput(input);
+  const errors: ExpenseFormErrors = {};
+
+  if (!normalized.expenseDate) errors.expenseDate = "Expense date is required.";
+  if (!normalized.vendor) errors.vendor = "Vendor or payee is required.";
+  if (!normalized.description) errors.description = "Description is required.";
+  if (normalized.amountCents <= 0) errors.amountCents = "Amount must be greater than zero.";
+
+  return errors;
 }

@@ -2,6 +2,13 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+import {
+  BanknotesIcon,
+  BuildingOffice2Icon,
+  CalendarDaysIcon,
+  ChartBarIcon,
+  ScaleIcon,
+} from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { BookingResultsSection } from "@/app/admin/financials/booking-results-section";
 import { FinancialFiltersCard } from "@/app/admin/financials/financial-filters-card";
@@ -207,6 +214,18 @@ function summaryCardShell(
             : "border-teal-200/70 bg-teal-50/55";
 
   return `rounded-[28px] border shadow-sm ${toneClasses} ${extra}`;
+}
+
+function summaryCardIconClasses(tone: "green" | "blue" | "violet" | "amber" | "teal") {
+  return tone === "green"
+    ? "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90"
+    : tone === "blue"
+      ? "bg-sky-100/95 text-sky-700 ring-sky-200/90"
+      : tone === "violet"
+        ? "bg-violet-100/95 text-violet-700 ring-violet-200/90"
+        : tone === "amber"
+          ? "bg-amber-100/95 text-amber-700 ring-amber-200/90"
+          : "bg-teal-100/95 text-teal-700 ring-teal-200/90";
 }
 
 function compareNullableText(a: string | null, b: string | null) {
@@ -560,57 +579,56 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <div className={summaryCardShell("green", "p-5")}>
-          <p className="text-sm font-medium text-slate-500">Revenue this month</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {formatUsd(revenueThisMonth, { maximumFractionDigits: 0 })}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Delivered and picked up jobs by delivery date
-          </p>
-        </div>
-
-        <div className={summaryCardShell("blue", "p-5")}>
-          <p className="text-sm font-medium text-slate-500">Revenue last 30 days</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {formatUsd(revenueLast30Days, { maximumFractionDigits: 0 })}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Rolling 30-day operational revenue
-          </p>
-        </div>
-
-        <div className={summaryCardShell("violet", "p-5")}>
-          <p className="text-sm font-medium text-slate-500">Average booking value</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {formatUsd(averageBookingValue, { maximumFractionDigits: 0 })}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            All revenue-producing jobs
-          </p>
-        </div>
-
-        <div className={summaryCardShell("amber", "p-5")}>
-          <p className="text-sm font-medium text-slate-500">
-            Revenue-producing jobs
-          </p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {numberFmt(totalRevenueJobs)}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Delivered and picked up bookings
-          </p>
-        </div>
-
-        <div className={summaryCardShell("teal", "p-5")}>
-          <p className="text-sm font-medium text-slate-500">Highest value ZIP</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            {topZipAllTime?.[0] ?? "—"}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            {topZipAllTime ? `${formatUsd(topZipAllTime[1], { maximumFractionDigits: 0 })} all time` : "No data yet"}
-          </p>
-        </div>
+        {[
+          {
+            tone: "green" as const,
+            label: "Revenue this month",
+            value: formatUsd(revenueThisMonth, { maximumFractionDigits: 0 }),
+            icon: CalendarDaysIcon,
+          },
+          {
+            tone: "blue" as const,
+            label: "Revenue last 30 days",
+            value: formatUsd(revenueLast30Days, { maximumFractionDigits: 0 }),
+            icon: BanknotesIcon,
+          },
+          {
+            tone: "violet" as const,
+            label: "Average booking value",
+            value: formatUsd(averageBookingValue, { maximumFractionDigits: 0 }),
+            icon: ScaleIcon,
+          },
+          {
+            tone: "amber" as const,
+            label: "Revenue-producing jobs",
+            value: numberFmt(totalRevenueJobs),
+            icon: ChartBarIcon,
+          },
+          {
+            tone: "teal" as const,
+            label: "Highest value ZIP",
+            value: topZipAllTime?.[0] ?? "—",
+            icon: BuildingOffice2Icon,
+          },
+        ].map((card) => (
+          <div key={card.label} className={summaryCardShell(card.tone, "h-full p-5")}>
+            <div className="flex gap-4">
+              <span
+                className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${summaryCardIconClasses(card.tone)}`}
+              >
+                <card.icon className="h-6 w-6" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex h-12 items-center text-sm font-medium leading-5 text-slate-600">
+                  {card.label}
+                </div>
+                <div className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                  {card.value}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </section>
 
       <FinancialFiltersCard

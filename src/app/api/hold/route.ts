@@ -1,7 +1,9 @@
 // src/app/api/hold/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getPooledDumpsterAvailabilityBySize } from "@/lib/admin/dumpster-availability";
 import { getManagedDumpsterFleetSize } from "@/lib/admin/equipment";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { addDaysYmd, getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabase } from "@/lib/supabase";
@@ -55,6 +57,10 @@ export async function POST(req: Request) {
     const deliveryDate = (body?.deliveryDate || "").trim();
     const rentalDaysRaw = body?.rentalDays;
     const zip = (body?.zip || "").trim();
+    const selectedDumpster = resolveSelectedDumpster({
+      dumpsterSize: body?.dumpsterSize,
+      dumpsterProductId: body?.dumpsterProductId,
+    });
     const pricingSettings = await getPricingSettingsSnapshot();
     const requestedRentalDays =
       Number.isFinite(Number(rentalDaysRaw)) && Number(rentalDaysRaw) > 0
@@ -103,7 +109,7 @@ export async function POST(req: Request) {
     // 0) If this client already has an active hold for THIS date, reuse it.
     const existingHold = await supabase
       .from("booking_holds")
-      .select("id, delivery_date, expires_at, zip")
+      .select("id, delivery_date, expires_at, zip, dumpster_size, dumpster_product_id")
       .eq("client_id", clientId)
       .eq("delivery_date", deliveryDate)
       .eq("status", "active")
@@ -170,23 +176,42 @@ export async function POST(req: Request) {
     }
 
     // 2) Check current remaining capacity for this date
-    const availRes = await supabase.rpc("get_delivery_availability", {
-      p_delivery_date: deliveryDate,
-      p_days: rentalPeriod.bookedRentalDays,
-    });
+    let remaining = 0;
 
-    console.log("HOLD AVAIL RESPONSE:", availRes.data);
+    try {
+      const pooled = await getPooledDumpsterAvailabilityBySize({
+        dumpsterSize: selectedDumpster.dumpsterSize,
+        dumpsterProductId: selectedDumpster.dumpsterProductId,
+        deliveryDate,
+        pickupDate: requestedPickupDate,
+      });
 
-    if (availRes.error) {
-      return NextResponse.json(
-        { ok: false, error: availRes.error.message },
-        { status: 500 }
-      );
+      remaining = Number(pooled.available ?? 0);
+    } catch (pooledError) {
+      // Leave the legacy RPC fallback in place for hold enforcement so a pooled
+      // inventory failure degrades safely instead of blocking all new holds.
+      console.error("Pooled hold availability failed, falling back to legacy RPC.", pooledError);
+
+      const availRes = await supabase.rpc("get_delivery_availability", {
+        p_delivery_date: deliveryDate,
+        p_days: rentalPeriod.bookedRentalDays,
+      });
+
+      console.log("HOLD AVAIL RESPONSE:", availRes.data);
+
+      if (availRes.error) {
+        return NextResponse.json(
+          { ok: false, error: availRes.error.message },
+          { status: 500 }
+        );
+      }
+
+      // This mock fleet-size fallback is legacy-only and is reached only if the
+      // RPC returns no row while the pooled helper has already failed above.
+      const fleetSize = getManagedDumpsterFleetSize();
+      const row = availRes.data?.[0] ?? { capacity: fleetSize, used: 0, remaining: fleetSize };
+      remaining = Number(row.remaining ?? 0);
     }
-
-    const fleetSize = getManagedDumpsterFleetSize();
-    const row = availRes.data?.[0] ?? { capacity: fleetSize, used: 0, remaining: fleetSize };
-    const remaining = Number(row.remaining ?? 0);
 
     if (!Number.isFinite(remaining) || remaining <= 0) {
       return NextResponse.json(
@@ -214,8 +239,10 @@ export async function POST(req: Request) {
         expires_at: expiresAtIso,
         client_id: clientId, // ✅ important
         zip: zip || null,
+        dumpster_size: selectedDumpster.dumpsterSize,
+        dumpster_product_id: selectedDumpster.dumpsterProductId,
       })
-      .select("id, delivery_date, expires_at, zip")
+      .select("id, delivery_date, expires_at, zip, dumpster_size, dumpster_product_id")
       .single();
 
     if (insert.error) {
@@ -226,6 +253,7 @@ export async function POST(req: Request) {
     }
 
     // 4) Re-check remaining after hold (nice UX)
+    // Nice-to-have post-hold remaining count still uses the legacy RPC for now.
     const availAfter = await supabase.rpc("get_delivery_availability", {
       p_delivery_date: deliveryDate,
       p_days: rentalPeriod.bookedRentalDays,

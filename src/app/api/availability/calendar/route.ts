@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getPooledDumpsterAvailabilityBySize } from "@/lib/admin/dumpster-availability";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
@@ -41,6 +43,8 @@ async function getAvailabilityEntry(
   today: string,
   blockedLabel: string | null,
   standardRentalDays: number,
+  dumpsterSize: string,
+  dumpsterProductId: string | null,
 ): Promise<CalendarAvailabilityResult> {
   if (blockedLabel) {
     return {
@@ -53,19 +57,43 @@ async function getAvailabilityEntry(
     };
   }
 
-  const { data, error } = await supabase.rpc("get_delivery_availability", {
-    p_delivery_date: date,
-    p_days: standardRentalDays,
-  });
+  let capacity = 0;
+  let used = 0;
+  let remaining = 0;
 
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const pooled = await getPooledDumpsterAvailabilityBySize({
+      dumpsterSize,
+      dumpsterProductId,
+      deliveryDate: date,
+      pickupDate: null,
+    });
+
+    capacity = Number(pooled.totalBookable ?? 0);
+    used = Number(pooled.reservedOrInUse ?? 0);
+    remaining = Math.max(0, Number(pooled.available ?? capacity - used));
+  } catch (pooledError) {
+    // Keep a per-date legacy fallback here so one pooled-inventory failure does not
+    // blank out the full customer calendar response.
+    console.error(
+      "Calendar pooled availability helper failed, falling back to legacy RPC.",
+      pooledError,
+    );
+
+    const { data, error } = await supabase.rpc("get_delivery_availability", {
+      p_delivery_date: date,
+      p_days: standardRentalDays,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const row = data?.[0];
+    capacity = Number(row?.capacity ?? 0);
+    used = Number(row?.used ?? 0);
+    remaining = Math.max(0, Number(row?.remaining ?? capacity - used));
   }
-
-  const row = data?.[0];
-  const capacity = Number(row?.capacity ?? 0);
-  const used = Number(row?.used ?? 0);
-  const remaining = Math.max(0, Number(row?.remaining ?? capacity - used));
 
   let state: "available" | "limited" | "unavailable" | "past" = "unavailable";
   if (date < today) {
@@ -90,6 +118,10 @@ async function getAvailabilityEntry(
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const start = (url.searchParams.get("start") || "").trim();
+  const selectedDumpster = resolveSelectedDumpster({
+    dumpsterSize: url.searchParams.get("dumpsterSize"),
+    dumpsterProductId: url.searchParams.get("dumpsterProductId"),
+  });
   const rawDays = Number(url.searchParams.get("days") || 0);
   const days = Math.min(186, Math.max(28, Math.floor(rawDays || 112)));
 
@@ -115,6 +147,8 @@ export async function GET(req: Request) {
             today,
             closure.blocked ? closure.label : null,
             pricingSettings.standardRentalDays,
+            selectedDumpster.dumpsterSize,
+            selectedDumpster.dumpsterProductId,
           );
         }),
       );

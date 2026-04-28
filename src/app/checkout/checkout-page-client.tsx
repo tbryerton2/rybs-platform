@@ -24,6 +24,8 @@ type BookingDraft = {
   zip?: string;
   county?: string;
   town?: string;
+  dumpsterSize?: string;
+  dumpsterProductId?: string | null;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;

@@ -37,6 +37,8 @@ type CreateBookingRecordInput = {
     total_price_cents?: number | null;
     service_county?: string | null;
     service_town?: string | null;
+    dumpster_size?: string | null;
+    dumpster_product_id?: string | null;
     notes?: string | null;
   };
   identity: BookingIdentityInput;
@@ -106,6 +108,8 @@ export async function createBookingRecord({
 
   const baseInsertRow = {
     ...legacyBaseInsertRow,
+    dumpster_size: booking.dumpster_size?.trim() || null,
+    dumpster_product_id: booking.dumpster_product_id?.trim() || null,
     base_rental_price_cents: pricing?.base_rental_price_cents ?? null,
     included_rental_days: pricing?.included_rental_days ?? null,
     rental_duration_days: pricing?.rental_duration_days ?? null,

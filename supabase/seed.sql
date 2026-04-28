@@ -1,6 +1,7 @@
 begin;
 
 truncate table
+  public.business_expenses,
   public.business_employees,
   public.rental_action_requests,
   public.booking_requests,
@@ -437,6 +438,139 @@ cross join (
   license_state,
   license_class,
   license_expiration
+);
+
+with resolved_business as (
+  select id
+  from public.tenants
+  where slug = 'tan-can-man'
+  limit 1
+), fallback_business as (
+  select id
+  from public.tenants
+  order by created_at asc
+  limit 1
+), selected_business as (
+  select id from resolved_business
+  union all
+  select id from fallback_business
+  where not exists (select 1 from resolved_business)
+)
+insert into public.business_expenses (
+  id,
+  business_id,
+  expense_date,
+  category,
+  vendor,
+  description,
+  amount_cents,
+  status,
+  payment_method,
+  asset_reference,
+  tax_deductible,
+  receipt_reference,
+  notes,
+  created_at,
+  updated_at
+)
+select
+  seeded.id,
+  selected_business.id,
+  seeded.expense_date,
+  seeded.category,
+  seeded.vendor,
+  seeded.description,
+  seeded.amount_cents,
+  seeded.status,
+  seeded.payment_method,
+  seeded.asset_reference,
+  seeded.tax_deductible,
+  seeded.receipt_reference,
+  seeded.notes,
+  seeded.created_at,
+  seeded.updated_at
+from selected_business
+cross join (
+  values
+    (
+      '13000000-0000-4000-8000-000000000001'::uuid,
+      current_date - 19,
+      'Fuel'::text,
+      'Fleet Fuel Services'::text,
+      'Weekly diesel top-up for route trucks'::text,
+      48620,
+      'Paid'::text,
+      'Card'::text,
+      'Truck 12'::text,
+      true,
+      'INV-24018'::text,
+      'Included two emergency after-hours fills.'::text,
+      now() - interval '19 days',
+      now() - interval '19 days'
+    ),
+    (
+      '13000000-0000-4000-8000-000000000002'::uuid,
+      current_date - 22,
+      'Vehicle maintenance'::text,
+      'North Yard Truck Repair'::text,
+      'Brake service and inspection'::text,
+      129500,
+      'Outstanding'::text,
+      'ACH'::text,
+      'Truck 08'::text,
+      true,
+      'WO-8821'::text,
+      'Payment due net 15.'::text,
+      now() - interval '22 days',
+      now() - interval '21 days'
+    ),
+    (
+      '13000000-0000-4000-8000-000000000003'::uuid,
+      current_date - 24,
+      'Dump fees / disposal'::text,
+      'County Transfer Station'::text,
+      'Disposal charges for mixed debris loads'::text,
+      73200,
+      'Paid'::text,
+      'ACH'::text,
+      null::text,
+      true,
+      'CTS-19037'::text,
+      ''::text,
+      now() - interval '24 days',
+      now() - interval '24 days'
+    ),
+    (
+      '13000000-0000-4000-8000-000000000004'::uuid,
+      current_date - 26,
+      'Payroll'::text,
+      'Weekly payroll'::text,
+      'Driver and yard payroll batch'::text,
+      428000,
+      'Paid'::text,
+      'Payroll run'::text,
+      null::text,
+      true,
+      'PAY-2026-14'::text,
+      'Includes overtime for Saturday route support.'::text,
+      now() - interval '26 days',
+      now() - interval '26 days'
+    )
+) as seeded(
+  id,
+  expense_date,
+  category,
+  vendor,
+  description,
+  amount_cents,
+  status,
+  payment_method,
+  asset_reference,
+  tax_deductible,
+  receipt_reference,
+  notes,
+  created_at,
+  updated_at
 );
 
 insert into public.bookings (
