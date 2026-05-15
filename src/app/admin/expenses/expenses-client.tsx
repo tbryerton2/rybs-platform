@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useDeferredValue, useMemo, useState } from "react";
 import {
   BanknotesIcon,
@@ -22,6 +23,7 @@ import {
 
 type ExpensesClientProps = {
   initialExpenses: ExpenseRecord[];
+  initialStatusFilter: ExpenseRecord["paymentStatus"] | "All";
   loadError: string | null;
 };
 
@@ -42,11 +44,26 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
-export function ExpensesClient({ initialExpenses, loadError }: ExpensesClientProps) {
+export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError }: ExpensesClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [savedExpenses] = useState<ExpenseRecord[]>(initialExpenses);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ExpenseRecord["paymentStatus"] | "All">("All");
+  const [statusFilter, setStatusFilter] = useState<ExpenseRecord["paymentStatus"] | "All">(initialStatusFilter);
   const deferredSearch = useDeferredValue(search);
+
+  function setStatusFilterWithUrl(nextFilter: ExpenseRecord["paymentStatus"] | "All") {
+    setStatusFilter(nextFilter);
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextFilter === "All") {
+      params.delete("status");
+    } else {
+      params.set("status", nextFilter);
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   const filteredExpenses = useMemo(() => {
     const normalizedSearch = deferredSearch.trim().toLowerCase();
@@ -99,6 +116,7 @@ export function ExpensesClient({ initialExpenses, loadError }: ExpensesClientPro
       icon: ClockIcon,
       cardClassName: adminSummaryCardShell("rose", "h-full p-5"),
       iconClassName: "bg-rose-100/95 text-rose-700 ring-rose-200/90",
+      statusFilter: "Outstanding" as const,
     },
     {
       label: "Largest category",
@@ -121,7 +139,7 @@ export function ExpensesClient({ initialExpenses, loadError }: ExpensesClientPro
 
   function clearFilters() {
     setSearch("");
-    setStatusFilter("All");
+    setStatusFilterWithUrl("All");
   }
 
   return (
@@ -141,9 +159,18 @@ export function ExpensesClient({ initialExpenses, loadError }: ExpensesClientPro
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCards.map((stat) => (
-          <div
+          <button
             key={stat.label}
-            className={stat.cardClassName}
+            type="button"
+            onClick={stat.statusFilter ? () => setStatusFilterWithUrl(stat.statusFilter) : undefined}
+            disabled={!stat.statusFilter}
+            aria-pressed={stat.statusFilter ? statusFilter === stat.statusFilter : undefined}
+            className={[
+              stat.cardClassName,
+              "text-left transition",
+              stat.statusFilter ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2" : "",
+              stat.statusFilter && statusFilter === stat.statusFilter ? "ring-2 ring-rose-300/90 shadow-md shadow-rose-200/35" : "",
+            ].join(" ")}
           >
             <div className="flex gap-4">
               <div className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${stat.iconClassName}`}>
@@ -156,7 +183,7 @@ export function ExpensesClient({ initialExpenses, loadError }: ExpensesClientPro
                 </div>
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </section>
 
@@ -180,7 +207,7 @@ export function ExpensesClient({ initialExpenses, loadError }: ExpensesClientPro
           </label>
           <select
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+            onChange={(event) => setStatusFilterWithUrl(event.target.value as typeof statusFilter)}
             className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
           >
             <option value="All">All statuses</option>

@@ -5,12 +5,8 @@ import { isMissingPricingSettingsRentalPeriodColumnsError } from "@/lib/pricing-
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type PricingSettingsFormValues = {
-  basePrice: string;
-  standardRentalDays: string;
-  dailyOveragePrice: string;
   maxRentalDays: string;
   allowExtendedRentalAtBooking: boolean;
-  includedTons: string;
   tonOveragePrice: string;
 };
 
@@ -36,6 +32,46 @@ export type PricingSettingsFormState = {
   messageKey: number;
 };
 
+export type DumpsterProductSettingsFormValues = {
+  dumpsterSize: string;
+  dumpsterProductId: string;
+  displayName: string;
+  shortDescription: string;
+  customerBulletPoints: string;
+  dimensions: string;
+  includedWeightTons: string;
+  includedRentalDays: string;
+  extraDayPrice: string;
+  basePrice: string;
+  isPublic: boolean;
+  sortOrder: string;
+};
+
+export type DumpsterProductSettingsFieldErrors = Partial<
+  Record<
+    | "displayName"
+    | "shortDescription"
+    | "customerBulletPoints"
+    | "dimensions"
+    | "includedWeightTons"
+    | "includedRentalDays"
+    | "extraDayPrice"
+    | "basePrice"
+    | "isPublic"
+    | "sortOrder",
+    string
+  >
+>;
+
+export type DumpsterProductSettingsFormState = {
+  success: boolean;
+  message: string;
+  error?: string;
+  fieldErrors: DumpsterProductSettingsFieldErrors;
+  values: DumpsterProductSettingsFormValues;
+  messageKey: number;
+};
+
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value : "";
 }
@@ -50,13 +86,26 @@ function normalizeCurrency(value: string) {
 
 function buildValues(formData: FormData): PricingSettingsFormValues {
   return {
-    basePrice: normalizeCurrency(asString(formData.get("basePrice"))),
-    standardRentalDays: asString(formData.get("standardRentalDays")).trim(),
-    dailyOveragePrice: normalizeCurrency(asString(formData.get("dailyOveragePrice"))),
     maxRentalDays: asString(formData.get("maxRentalDays")).trim(),
     allowExtendedRentalAtBooking: asBoolean(formData.get("allowExtendedRentalAtBooking")),
-    includedTons: asString(formData.get("includedTons")).trim(),
     tonOveragePrice: normalizeCurrency(asString(formData.get("tonOveragePrice"))),
+  };
+}
+
+function buildDumpsterProductValues(formData: FormData): DumpsterProductSettingsFormValues {
+  return {
+    dumpsterSize: asString(formData.get("dumpsterSize")).trim(),
+    dumpsterProductId: asString(formData.get("dumpsterProductId")).trim(),
+    displayName: asString(formData.get("displayName")).trim(),
+    shortDescription: asString(formData.get("shortDescription")).trim(),
+    customerBulletPoints: asString(formData.get("customerBulletPoints")).trim(),
+    dimensions: asString(formData.get("dimensions")).trim(),
+    includedWeightTons: asString(formData.get("includedWeightTons")).trim(),
+    includedRentalDays: asString(formData.get("includedRentalDays")).trim(),
+    extraDayPrice: normalizeCurrency(asString(formData.get("extraDayPrice"))),
+    basePrice: normalizeCurrency(asString(formData.get("basePrice"))),
+    isPublic: asBoolean(formData.get("isPublic")),
+    sortOrder: asString(formData.get("sortOrder")).trim(),
   };
 }
 
@@ -65,6 +114,21 @@ function invalidState(
   fieldErrors: PricingSettingsFieldErrors,
   error = "Please fix the highlighted pricing fields."
 ): PricingSettingsFormState {
+  return {
+    success: false,
+    message: "",
+    error,
+    fieldErrors,
+    values,
+    messageKey: Date.now(),
+  };
+}
+
+function invalidDumpsterProductState(
+  values: DumpsterProductSettingsFormValues,
+  fieldErrors: DumpsterProductSettingsFieldErrors,
+  error = "Please fix the highlighted product fields."
+): DumpsterProductSettingsFormState {
   return {
     success: false,
     message: "",
@@ -95,11 +159,31 @@ function parseCurrency(
   return Number(parsed.toFixed(2));
 }
 
-function parseRequiredInteger(
+function parseProductCurrency(
   rawValue: string,
-  fieldName: keyof PricingSettingsFieldErrors,
+  fieldName: keyof DumpsterProductSettingsFieldErrors,
   fieldLabel: string,
-  fieldErrors: PricingSettingsFieldErrors,
+  fieldErrors: DumpsterProductSettingsFieldErrors,
+) {
+  if (!rawValue) {
+    fieldErrors[fieldName] = `${fieldLabel} is required.`;
+    return null;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    fieldErrors[fieldName] = `${fieldLabel} must be 0 or more.`;
+    return null;
+  }
+
+  return Number(parsed.toFixed(2));
+}
+
+function parseProductRequiredInteger(
+  rawValue: string,
+  fieldName: keyof DumpsterProductSettingsFieldErrors,
+  fieldLabel: string,
+  fieldErrors: DumpsterProductSettingsFieldErrors,
 ) {
   if (!rawValue) {
     fieldErrors[fieldName] = `${fieldLabel} is required.`;
@@ -132,11 +216,28 @@ function parseOptionalInteger(
   return parsed;
 }
 
-function parseDecimal(
+function parseProductOptionalInteger(
   rawValue: string,
-  fieldName: keyof PricingSettingsFieldErrors,
+  fieldName: keyof DumpsterProductSettingsFieldErrors,
   fieldLabel: string,
-  fieldErrors: PricingSettingsFieldErrors,
+  fieldErrors: DumpsterProductSettingsFieldErrors,
+) {
+  if (!rawValue) return null;
+
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed)) {
+    fieldErrors[fieldName] = `${fieldLabel} must be a whole number.`;
+    return null;
+  }
+
+  return parsed;
+}
+
+function parseProductDecimal(
+  rawValue: string,
+  fieldName: keyof DumpsterProductSettingsFieldErrors,
+  fieldLabel: string,
+  fieldErrors: DumpsterProductSettingsFieldErrors,
 ) {
   if (!rawValue) {
     fieldErrors[fieldName] = `${fieldLabel} is required.`;
@@ -171,26 +272,12 @@ export async function updatePricingSettingsAction(
 
   const fieldErrors: PricingSettingsFieldErrors = {};
 
-  const basePrice = parseCurrency(values.basePrice, "basePrice", "Base price", fieldErrors);
-  const standardRentalDays = parseRequiredInteger(
-    values.standardRentalDays,
-    "standardRentalDays",
-    "Standard rental period",
-    fieldErrors,
-  );
-  const dailyOveragePrice = parseCurrency(
-    values.dailyOveragePrice,
-    "dailyOveragePrice",
-    "Extra day rate",
-    fieldErrors,
-  );
   const maxRentalDays = parseOptionalInteger(
     values.maxRentalDays,
     "maxRentalDays",
     "Max rental length",
     fieldErrors,
   );
-  const includedTons = parseDecimal(values.includedTons, "includedTons", "Included tons", fieldErrors);
   const tonOveragePrice = parseCurrency(
     values.tonOveragePrice,
     "tonOveragePrice",
@@ -198,13 +285,8 @@ export async function updatePricingSettingsAction(
     fieldErrors,
   );
 
-  if (
-    maxRentalDays !== null &&
-    standardRentalDays !== null &&
-    maxRentalDays < standardRentalDays
-  ) {
-    fieldErrors.maxRentalDays =
-      "Max rental length must be at least as long as the standard rental period.";
+  if (maxRentalDays !== null && maxRentalDays < 1) {
+    fieldErrors.maxRentalDays = "Max rental length must be at least 1 day.";
   }
 
   if (Object.keys(fieldErrors).length > 0) {
@@ -214,13 +296,8 @@ export async function updatePricingSettingsAction(
   const { error } = await supabaseAdmin
     .from("pricing_settings")
     .update({
-      standard_rental_price: basePrice,
-      scheduled_pickup_price: basePrice,
-      included_rental_days: standardRentalDays,
-      daily_overage_price: dailyOveragePrice,
       max_rental_days: maxRentalDays,
       allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
-      included_tons: includedTons,
       ton_overage_price: tonOveragePrice,
     })
     .eq("id", id);
@@ -253,6 +330,111 @@ export async function updatePricingSettingsAction(
   return {
     success: true,
     message: "Pricing settings updated.",
+    fieldErrors: {},
+    values,
+    messageKey: Date.now(),
+  };
+}
+
+export async function updateDumpsterProductSettingAction(
+  prevState: DumpsterProductSettingsFormState,
+  formData: FormData
+): Promise<DumpsterProductSettingsFormState> {
+  const id = asString(formData.get("id")).trim();
+  const values = buildDumpsterProductValues(formData);
+
+  if (!id && (!values.dumpsterSize || !values.dumpsterProductId)) {
+    return {
+      ...prevState,
+      success: false,
+      error: "Missing dumpster product settings record.",
+      message: "",
+      messageKey: Date.now(),
+    };
+  }
+
+  const fieldErrors: DumpsterProductSettingsFieldErrors = {};
+
+  if (!values.dumpsterSize) {
+    fieldErrors.displayName = "Missing dumpster size for this product.";
+  }
+
+  if (!values.dumpsterProductId) {
+    fieldErrors.displayName = "Missing dumpster product ID for this product.";
+  }
+
+  if (!values.displayName) {
+    fieldErrors.displayName = "Display name is required.";
+  }
+
+  const includedWeightTons = parseProductDecimal(
+    values.includedWeightTons,
+    "includedWeightTons",
+    "Included weight",
+    fieldErrors,
+  );
+  const includedRentalDays = parseProductRequiredInteger(
+    values.includedRentalDays,
+    "includedRentalDays",
+    "Included rental days",
+    fieldErrors,
+  );
+  const extraDayPrice = parseProductCurrency(
+    values.extraDayPrice,
+    "extraDayPrice",
+    "Extra day price",
+    fieldErrors,
+  );
+  const basePrice = parseProductCurrency(values.basePrice, "basePrice", "Base price", fieldErrors);
+  const sortOrder = parseProductOptionalInteger(values.sortOrder, "sortOrder", "Sort order", fieldErrors);
+
+  if (Object.keys(fieldErrors).length > 0) {
+    return invalidDumpsterProductState(values, fieldErrors);
+  }
+
+  const payload = {
+      dumpster_size: values.dumpsterSize,
+      dumpster_product_id: values.dumpsterProductId,
+      display_name: values.displayName,
+      short_description: values.shortDescription || null,
+      customer_bullet_points: values.customerBulletPoints || null,
+      dimensions: values.dimensions || null,
+      included_weight_tons: includedWeightTons,
+      included_rental_days: includedRentalDays,
+      extra_day_price: extraDayPrice,
+      base_price: basePrice,
+      is_public: values.isPublic,
+      sort_order: sortOrder ?? 0,
+    };
+
+  const query = id
+    ? supabaseAdmin
+        .from("dumpster_product_settings")
+        .update(payload)
+        .eq("id", id)
+    : supabaseAdmin.from("dumpster_product_settings").upsert(payload, {
+        onConflict: "dumpster_size",
+      });
+
+  const { error } = await query;
+
+  if (error) {
+    return {
+      success: false,
+      message: "",
+      error: error.message,
+      fieldErrors: {},
+      values,
+      messageKey: Date.now(),
+    };
+  }
+
+  revalidatePath("/admin/settings/pricing");
+  revalidatePath("/pricing");
+
+  return {
+    success: true,
+    message: "Dumpster product settings updated.",
     fieldErrors: {},
     values,
     messageKey: Date.now(),

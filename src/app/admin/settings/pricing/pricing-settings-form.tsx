@@ -16,12 +16,8 @@ import {
 type PricingSettingsFormProps = {
   pricing: {
     id: string;
-    basePrice: number;
-    standardRentalDays: number;
-    dailyOveragePrice: number;
     maxRentalDays: number | null;
     allowExtendedRentalAtBooking: boolean;
-    includedTons: number;
     tonOveragePrice: number;
   };
 };
@@ -34,12 +30,12 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 
 function toFormValues(pricing: PricingSettingsFormProps["pricing"]): PricingSettingsFormValues {
   return {
-    basePrice: String(pricing.basePrice),
-    standardRentalDays: String(pricing.standardRentalDays),
-    dailyOveragePrice: String(pricing.dailyOveragePrice),
+    basePrice: "",
+    standardRentalDays: "",
+    dailyOveragePrice: "",
     maxRentalDays: pricing.maxRentalDays == null ? "" : String(pricing.maxRentalDays),
     allowExtendedRentalAtBooking: pricing.allowExtendedRentalAtBooking,
-    includedTons: String(pricing.includedTons),
+    includedTons: "",
     tonOveragePrice: String(pricing.tonOveragePrice),
   };
 }
@@ -58,35 +54,15 @@ function parseInteger(value: string) {
 
 function validate(values: PricingSettingsFormValues): PricingSettingsFieldErrors {
   const fieldErrors: PricingSettingsFieldErrors = {};
-  const standardRentalDays = parseInteger(values.standardRentalDays);
-  const basePrice = parseCurrency(values.basePrice);
-  const dailyOveragePrice = parseCurrency(values.dailyOveragePrice);
   const maxRentalDays = values.maxRentalDays.trim() ? parseInteger(values.maxRentalDays) : null;
-  const includedTons = parseCurrency(values.includedTons);
   const tonOveragePrice = parseCurrency(values.tonOveragePrice);
-
-  if (standardRentalDays === null || standardRentalDays < 1) {
-    fieldErrors.standardRentalDays = "Enter at least 1 day.";
-  }
-
-  if (basePrice === null || basePrice < 0) {
-    fieldErrors.basePrice = "Enter a valid amount of $0 or more.";
-  }
-
-  if (dailyOveragePrice === null || dailyOveragePrice < 0) {
-    fieldErrors.dailyOveragePrice = "Enter a valid amount of $0 or more.";
-  }
 
   if (values.maxRentalDays.trim()) {
     if (maxRentalDays === null) {
       fieldErrors.maxRentalDays = "Use a whole number of days.";
-    } else if (standardRentalDays !== null && maxRentalDays < standardRentalDays) {
-      fieldErrors.maxRentalDays = "Must be at least the standard rental period.";
+    } else if (maxRentalDays < 1) {
+      fieldErrors.maxRentalDays = "Use a whole number of at least 1 day.";
     }
-  }
-
-  if (includedTons === null || includedTons < 0) {
-    fieldErrors.includedTons = "Enter 0 or more tons.";
   }
 
   if (tonOveragePrice === null || tonOveragePrice < 0) {
@@ -94,22 +70,6 @@ function validate(values: PricingSettingsFormValues): PricingSettingsFieldErrors
   }
 
   return fieldErrors;
-}
-
-function previewDurations(standardRentalDays: number, maxRentalDays: number | null) {
-  const candidates = [standardRentalDays, standardRentalDays + 2, standardRentalDays + 5];
-
-  if (maxRentalDays !== null && maxRentalDays > standardRentalDays) {
-    candidates.push(maxRentalDays);
-  }
-
-  return [...new Set(candidates)]
-    .filter((days) => days >= standardRentalDays && (maxRentalDays == null || days <= maxRentalDays))
-    .sort((left, right) => left - right);
-}
-
-function formatMoney(value: number) {
-  return moneyFormatter.format(value);
 }
 
 function Field({
@@ -344,17 +304,9 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
     return next;
   }, [clientErrors, state.fieldErrors, touched]);
 
-  const parsedStandardRentalDays = parseInteger(values.standardRentalDays) ?? pricing.standardRentalDays;
-  const parsedBasePrice = parseCurrency(values.basePrice) ?? pricing.basePrice;
-  const parsedDailyOveragePrice =
-    parseCurrency(values.dailyOveragePrice) ?? pricing.dailyOveragePrice;
   const parsedMaxRentalDays = values.maxRentalDays.trim()
     ? parseInteger(values.maxRentalDays)
     : null;
-  const previewLines = previewDurations(
-    Math.max(1, parsedStandardRentalDays),
-    parsedMaxRentalDays !== null && parsedMaxRentalDays >= 1 ? parsedMaxRentalDays : null,
-  );
 
   function updateTextValue(
     name: Exclude<keyof PricingSettingsFormValues, "allowExtendedRentalAtBooking">,
@@ -386,8 +338,7 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
       <input type="hidden" name="id" value={pricing.id} />
 
       <Section
-        title={undefined}
-        description={undefined}
+        title="Global booking behavior"
       >
         <div className="space-y-8">
           <FadingFormMessage
@@ -397,49 +348,11 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
           />
 
           <div className="space-y-5">
-            <div className="grid gap-y-5 xl:grid-cols-[16rem_16rem_1px_16rem] xl:items-start xl:justify-start xl:gap-x-40">
+            <div className="grid gap-y-5 xl:grid-cols-[16rem_1px_16rem_20rem] xl:items-start xl:justify-start xl:gap-x-12">
               <div className="space-y-5">
                 <FormSectionHeading
-                  title="Rental pricing"
-                  tooltip="Set the included rental period, base price, and what happens if a customer needs more time."
-                />
-                <Field
-                  label="Standard rental period"
-                  labelTone="blue"
-                  name="standardRentalDays"
-                  value={values.standardRentalDays}
-                  onChange={updateTextValue}
-                  error={mergedErrors.standardRentalDays}
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  step="1"
-                  suffix="days"
-                />
-                <Field
-                  label="Extra day rate"
-                  labelTone="amber"
-                  name="dailyOveragePrice"
-                  value={values.dailyOveragePrice}
-                  onChange={updateTextValue}
-                  error={mergedErrors.dailyOveragePrice}
-                  prefix="$"
-                  inputMode="decimal"
-                  suffix="per day"
-                />
-              </div>
-
-              <div className="space-y-5">
-                <div className="hidden min-h-7 xl:block" aria-hidden="true" />
-                <Field
-                  label="Base price"
-                  labelTone="green"
-                  name="basePrice"
-                  value={values.basePrice}
-                  onChange={updateTextValue}
-                  error={mergedErrors.basePrice}
-                  prefix="$"
-                  inputMode="decimal"
+                  title="Booking rules"
+                  tooltip="These settings apply across the booking flow. Size-specific price, included days, and included weight are managed in the dumpster product settings below."
                 />
                 <Field
                   label="Max rental length"
@@ -450,7 +363,7 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
                   error={mergedErrors.maxRentalDays}
                   type="number"
                   inputMode="numeric"
-                  min={values.standardRentalDays || "1"}
+                  min="1"
                   step="1"
                   suffix="days"
                   placeholder="No hard cap"
@@ -462,19 +375,6 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
               <div className="space-y-5 xl:pl-3">
                 <FormSectionHeading title="Weight overages" />
                 <Field
-                  label="Included tons"
-                  labelTone="slate"
-                  name="includedTons"
-                  value={values.includedTons}
-                  onChange={updateTextValue}
-                  error={mergedErrors.includedTons}
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  suffix="tons"
-                />
-                <Field
                   label="Price per ton over"
                   labelTone="slate"
                   name="tonOveragePrice"
@@ -485,6 +385,37 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
                   inputMode="decimal"
                   suffix="per ton"
                 />
+              </div>
+
+              <div className="rounded-3xl border border-orange-200 bg-orange-50/60 p-5">
+                <ul className="space-y-2 text-sm text-slate-700">
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
+                    <span>
+                      {parsedMaxRentalDays !== null && parsedMaxRentalDays >= 1
+                        ? `Customers can keep the dumpster for up to ${parsedMaxRentalDays} days.`
+                        : "No maximum rental length is set."}
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
+                    <span>
+                      {values.allowExtendedRentalAtBooking
+                        ? "Customers can request extra days during online booking."
+                        : "Customers can only book the standard rental period online."}
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
+                    <span>
+                      Weight overages above a product&apos;s included tons are billed at{" "}
+                      {moneyFormatter.format(
+                        parseCurrency(values.tonOveragePrice) ?? pricing.tonOveragePrice,
+                      )}{" "}
+                      per ton.
+                    </span>
+                  </li>
+                </ul>
               </div>
             </div>
 
@@ -508,69 +439,15 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
             </div>
           </div>
 
-          
-
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-3">
-             
               <InlineActionMessage
                 success={false}
                 message={!state.success && !isSubmitting ? state.error ?? "" : ""}
               />
             </div>
-            <FormSubmitButton>Save pricing settings</FormSubmitButton>
+            <FormSubmitButton>Save</FormSubmitButton>
           </div>
-        </div>
-      </Section>
-
-      <Section
-        title="Live pricing preview"
-      >
-        <div className="rounded-3xl border border-orange-200 bg-orange-50/60 p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-orange-700">
-            Example quotes
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {previewLines.map((days) => {
-              const overageDays = Math.max(0, days - parsedStandardRentalDays);
-              const total = parsedBasePrice + overageDays * parsedDailyOveragePrice;
-
-              return (
-                <div
-                  key={days}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200/70 bg-white px-4 py-3 text-sm text-slate-700"
-                >
-                  <span>
-                    {days}-day rental
-                    {overageDays > 0 ? ` (${overageDays} extra)` : ""}
-                  </span>
-                  <span className="text-base font-semibold text-slate-950">
-                    {formatMoney(total)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          <ul className="mt-4 space-y-2 text-sm text-slate-700">
-            <li className="flex items-start gap-2">
-              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
-              <span>
-                {parsedMaxRentalDays !== null && parsedMaxRentalDays >= parsedStandardRentalDays
-                  ? `Customers can keep the dumpster for up to ${parsedMaxRentalDays} days.`
-                  : "No maximum rental length is set."}
-              </span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
-              <span>
-                {values.allowExtendedRentalAtBooking
-                  ? "Customers can request extra days during online booking."
-                  : "Customers can only book the standard rental period online."}
-              </span>
-            </li>
-          </ul>
         </div>
       </Section>
     </form>

@@ -4,19 +4,23 @@ import { useState } from "react";
 
 type DeleteZipButtonProps = {
   zip: string;
+  className?: string;
 };
 
-export function DeleteZipButton({ zip }: DeleteZipButtonProps) {
+export function DeleteZipButton({ zip, className }: DeleteZipButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <button
         type="button"
-        className="text-sm font-medium text-red-600 hover:text-red-700"
+        className={
+          className ??
+          "inline-flex h-10 items-center justify-center rounded-2xl border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+        }
         onClick={() => setOpen(true)}
       >
-        Delete
+        Delete ZIP
       </button>
 
       {open ? (

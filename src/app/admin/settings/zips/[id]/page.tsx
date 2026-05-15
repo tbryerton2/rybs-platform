@@ -3,27 +3,33 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { InteractiveInfoPopover } from "@/app/admin/customers/[id]/interactive-info-popover";
+import { formatDumpsterSizeFromCapacity } from "@/lib/booking-product";
+import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { LocationDetailsForm } from "./location-details-form";
 import { PricingOverrideForm } from "./pricing-override-form";
-import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
+import { ZipStatusToggleForm } from "./zip-status-toggle-form";
+import { DeleteZipButton } from "../delete-zip-button";
 import {
-  toggleZipActiveAction,
-} from "./actions";
-import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+  deleteServiceZipAction,
+} from "../actions";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ status?: string }>;
 };
 
-function money(value: number | null) {
-  if (value == null) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+function formatDumpsterOverrideLabel(size: string) {
+  return `${size.trim().replace(/\s+yard$/i, "-yard")} price override`;
+}
+
+function parseDumpsterSize(value: string) {
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)/);
+  if (!match) return Number.POSITIVE_INFINITY;
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
 }
 
 function statusBadge(active: boolean) {
@@ -44,203 +50,169 @@ function fieldValue(value: string | null) {
 
 export default async function AdminZipDetailPage({
   params,
-  searchParams,
 }: PageProps) {
   const resolvedParams = await params;
-  const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   const id = Number(resolvedParams.id);
-  const status = resolvedSearchParams?.status;
 
   if (!Number.isFinite(id)) notFound();
 
-  const { data: zipRecord, error } = await supabaseAdmin
-    .from("service_area_zips")
-    .select("id, zip, county, active, town, price_14_yard_override")
-    .eq("id", id)
-    .single();
+  const [{ data: zipRecord, error }, productSettings, pricingOverridesResult] =
+    await Promise.all([
+      supabaseAdmin
+        .from("service_area_zips")
+        .select("id, zip, county, active, town, price_14_yard_override")
+        .eq("id", id)
+        .single(),
+      getEditableDumpsterProductSettings(),
+      supabaseAdmin
+        .from("service_area_zip_pricing_overrides")
+        .select("dumpster_size, price_override")
+        .eq("service_area_zip_id", id),
+    ]);
 
   if (error || !zipRecord) notFound();
+  if (pricingOverridesResult.error) {
+    throw new Error(pricingOverridesResult.error.message);
+  }
 
-  const isCustomPricing = zipRecord.price_14_yard_override != null;
+  const pricingOverridesBySize = new Map(
+    ((pricingOverridesResult.data ?? []) as Array<{
+      dumpster_size: string | number;
+      price_override: number | null;
+    }>)
+      .map((row) => {
+        const dumpsterSize = formatDumpsterSizeFromCapacity(row.dumpster_size);
+        if (!dumpsterSize) return null;
+
+        return [
+          dumpsterSize,
+          row.price_override == null ? null : Number(row.price_override),
+        ] as const;
+      })
+      .filter((entry) => entry !== null),
+  );
+
+  const pricingOverrides = productSettings
+    .filter((setting) => setting.isActiveSize)
+    .sort((left, right) => {
+      const sizeDelta = parseDumpsterSize(left.dumpsterSize) - parseDumpsterSize(right.dumpsterSize);
+      if (sizeDelta !== 0) return sizeDelta;
+      return left.dumpsterSize.localeCompare(right.dumpsterSize);
+    })
+    .map((setting) => ({
+      dumpsterSize: setting.dumpsterSize,
+      label: formatDumpsterOverrideLabel(setting.dumpsterSize),
+      priceOverride:
+        pricingOverridesBySize.get(setting.dumpsterSize.trim().toLowerCase()) ?? null,
+    }));
 
   return (
-    <AdminPage className="py-8">
-      <Link
-        href="/admin/settings/zips"
-        className="inline-flex items-center text-sm font-medium text-slate-500 transition hover:text-slate-900"
-      >
-        ← Back to ZIP settings
-      </Link>
+    <AdminPage className="space-y-6 py-8" width="wide">
+      <div>
+        <Link
+          href="/admin/settings/zips"
+          className="text-sm font-medium text-slate-600 hover:text-slate-900"
+        >
+          ← Back to ZIP settings
+        </Link>
+      </div>
 
-      <AdminPageHeader
-        title="ZIP Settings"
-        description="Manage service area details and ZIP-level pricing overrides."
-        className="mt-4"
-        actions={
-          <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div>
+      <section className="space-y-3">
+        <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+          ZIP CODE DETAILS
+        </div>
+      </section>
+
+      <div className="space-y-6">
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">ZIP Overview</h2>
+
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <form action={deleteServiceZipAction}>
+                  <input type="hidden" name="id" value={zipRecord.id} />
+                  <DeleteZipButton zip={zipRecord.zip} />
+                </form>
+
+                <ZipStatusToggleForm
+                  id={zipRecord.id}
+                  initialActive={zipRecord.active}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 px-6 py-6 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 ZIP Code
               </div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">
+              <div className="mt-2 text-lg font-semibold text-slate-900">
                 {zipRecord.zip}
               </div>
             </div>
-            {statusBadge(zipRecord.active)}
+
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                Status
+              </div>
+              <div className="mt-2">{statusBadge(zipRecord.active)}</div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                Town
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-900">
+                {fieldValue(zipRecord.town)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                County
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-900">
+                {fieldValue(zipRecord.county)}
+              </div>
+            </div>
           </div>
-        }
-      />
+        </section>
 
-      <AdminToastTrigger
-        success={
-          status
-            ? (() => {
-                const [action] = status.split("-");
-                return `ZIP ${action}.`;
-              })()
-            : null
-        }
-        trigger={status}
-        clearParam="status"
-      />
+        <section
+          id="location-details"
+          className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm"
+        >
+          <div className="border-b border-slate-200 px-6 py-5">
+            <h2 className="text-lg font-semibold text-slate-900">Location Details</h2>
+          </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-6">
-          <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-5">
-              <h2 className="text-lg font-semibold text-slate-900">ZIP Overview</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Review coverage details and control whether this ZIP can be booked.
-              </p>
-            </div>
+          <LocationDetailsForm
+            id={zipRecord.id}
+            town={zipRecord.town}
+            county={zipRecord.county}
+          />
+        </section>
 
-            <div className="grid gap-4 px-6 py-6 sm:grid-cols-2">
-              <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  ZIP Code
-                </div>
-                <div className="mt-2 text-lg font-semibold text-slate-900">
-                  {zipRecord.zip}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Status
-                </div>
-                <div className="mt-2">{statusBadge(zipRecord.active)}</div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Town
-                </div>
-                <div className="mt-2 text-sm font-medium text-slate-900">
-                  {fieldValue(zipRecord.town)}
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  County
-                </div>
-                <div className="mt-2 text-sm font-medium text-slate-900">
-                  {fieldValue(zipRecord.county)}
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-200 px-6 py-5">
-              <form action={toggleZipActiveAction}>
-                <input type="hidden" name="id" value={zipRecord.id} />
-                <input
-                  type="hidden"
-                  name="nextActive"
-                  value={zipRecord.active ? "false" : "true"}
-                />
-                <button
-                  type="submit"
-                  className={
-                    zipRecord.active
-                      ? "inline-flex items-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-                      : "inline-flex items-center rounded-2xl bg-[#F97316] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-500"
-                  }
-                >
-                  {zipRecord.active ? "Disable ZIP" : "Enable ZIP"}
-                </button>
-              </form>
-            </div>
-          </section>
-
-          <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-5">
-              <h2 className="text-lg font-semibold text-slate-900">Location Details</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Update the town and county shown for this service area ZIP.
-              </p>
-            </div>
-
-            <LocationDetailsForm
-              id={zipRecord.id}
-              town={zipRecord.town}
-              county={zipRecord.county}
-            />
-          </section>
-        </div>
-
-        <div className="space-y-6">
-          <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-5">
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-6 py-5">
+            <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Pricing Override</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Control whether this ZIP uses the global default price or a custom ZIP-specific override.
-              </p>
+              <InteractiveInfoPopover
+                label="About Pricing Override"
+                body="Control whether this ZIP uses the global default price or a custom ZIP-specific override."
+              />
             </div>
+          </div>
 
-            <div className="px-6 pt-6">
-              <div
-                className={
-                  isCustomPricing
-                    ? "mb-5 rounded-2xl bg-orange-50 px-4 py-4 ring-1 ring-orange-200"
-                    : "mb-5 rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200"
-                }
-              >
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                  Pricing Mode
-                </div>
+          <PricingOverrideForm
+            id={zipRecord.id}
+            pricingOverrides={pricingOverrides}
+          />
+        </section>
 
-                <div className="mt-2 text-sm font-semibold text-slate-900">
-                  {isCustomPricing ? "Custom ZIP pricing" : "Using global default pricing"}
-                </div>
-
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {isCustomPricing
-                    ? `This ZIP overrides the default 14-yard price with ${money(
-                        zipRecord.price_14_yard_override
-                      )}.`
-                    : "No ZIP-level override is set. This ZIP will use the default 14-yard price from global pricing settings."}
-                </p>
-              </div>
-            </div>
-
-            <PricingOverrideForm
-              id={zipRecord.id}
-              price_14_yard_override={zipRecord.price_14_yard_override}
-            />
-          </section>
-
-          <section className="overflow-hidden rounded-[28px] border border-dashed border-slate-300 bg-slate-50">
-            <div className="px-6 py-5">
-              <h2 className="text-base font-semibold text-slate-900">Future-ready structure</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                This section is intentionally structured so more ZIP-level pricing controls can
-                be added later, such as scheduled pickup pricing, included days, daily overage,
-                included tonnage, and ton overage.
-              </p>
-            </div>
-          </section>
-        </div>
       </div>
     </AdminPage>
   );

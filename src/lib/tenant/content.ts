@@ -299,7 +299,7 @@ const HOME_HOW_IT_WORKS_FALLBACK: HomeHowItWorksContent = {
       body: "When you’re ready, request pickup and we’ll haul it away.",
     },
   ],
-  footnote: "Includes up to 3 tons. Overages billed only if exceeded.",
+  footnote: "Included weight allowances vary by dumpster size. Overages billed only if exceeded.",
 };
 
 const HOME_FAQ_FALLBACK: HomeFaqContent = {
@@ -343,13 +343,13 @@ const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
   productBody:
     "Base pricing includes delivery, pickup, the standard rental period, and the standard weight allowance.",
   dimensionLabel: "7' × 14' × 4'",
-  featureList: ["Driveway friendly", "Up to 3 tons included", "Flexible rental period"],
+  featureList: ["Included weight shown by dumpster size"],
   includedHeading: "What’s included in your rental",
   includedPricePrefix: "All included in the",
   includedPriceSuffix: "flat rate",
   includedItems: [
     "Delivery & pickup included",
-    "Up to 3 tons included",
+    "Included weight shown by dumpster size",
     "Standard rental period included",
     "No hidden fees",
   ],
@@ -400,7 +400,7 @@ const BOOKING_DATE_FALLBACK: BookingDateContent = {
   title: "Choose an open delivery day",
   description: "Availability is visible up front, so the next opening is easy to spot.",
   earliestAvailablePrefix: "Earliest available:",
-  holdNoteTemplate: "Note: Continuing will create a temporary {minutes}-minute hold.",
+  holdNoteTemplate: "We'll hold your selected dates for {minutes} minutes while you finish booking.",
   footerNote: "Disabled dates are not bookable online. Availability updates automatically as inventory changes.",
   nextAvailablePrefix: "Next available delivery date:",
   availabilityError: "Could not load calendar availability.",

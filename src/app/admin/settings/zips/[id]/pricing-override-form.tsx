@@ -11,7 +11,10 @@ import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 
 type Props = {
   id: number;
-  price_14_yard_override: number | null;
+  pricingOverrides: Array<{
+    dumpsterSize: string;
+    priceOverride: number | null;
+  }>;
 };
 
 const initialState: ZipFormState = {
@@ -22,7 +25,7 @@ const initialState: ZipFormState = {
 
 export function PricingOverrideForm({
   id,
-  price_14_yard_override,
+  pricingOverrides,
 }: Props) {
   const [state, formAction] = useActionState(updateZipPricingAction, initialState);
 
@@ -45,30 +48,40 @@ export function PricingOverrideForm({
       <form action={formAction} className="px-6 pb-6">
         <input type="hidden" name="id" value={id} />
 
-        <label className="block">
-          <div className="mb-2 text-sm font-medium text-slate-700">
-            14-yard price override
-          </div>
+        <div className="space-y-6">
+          {pricingOverrides.map((override) => (
+            <div key={override.dumpsterSize} className="space-y-3">
+              <h3 className="text-base font-semibold text-slate-900">
+                {override.dumpsterSize.trim()} dumpster
+              </h3>
 
-          <div className="relative">
-            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">
-              $
-            </span>
-            <input
-              type="number"
-              name="price_14_yard_override"
-              inputMode="numeric"
-              min="0"
-              step="1"
-              defaultValue={price_14_yard_override ?? ""}
-              placeholder="Leave blank to use default"
-              className="w-full rounded-2xl border border-slate-300 bg-white py-3 pl-8 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
-            />
-          </div>
-        </label>
+              <label className="block">
+                <div className="mb-2 text-sm font-medium text-slate-700">
+                  Base price for this zip code
+                </div>
+
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    name={`price_override:${override.dumpsterSize}`}
+                    inputMode="numeric"
+                    min="0"
+                    step="1"
+                    defaultValue={override.priceOverride ?? ""}
+                    placeholder="Leave blank to use default"
+                    className="w-full rounded-2xl border border-slate-300 bg-white py-3 pl-8 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                  />
+                </div>
+              </label>
+            </div>
+          ))}
+        </div>
 
         <div className="mt-5">
-          <FormSubmitButton>Save pricing override</FormSubmitButton>
+          <FormSubmitButton>Save pricing overrides</FormSubmitButton>
         </div>
       </form>
     </>

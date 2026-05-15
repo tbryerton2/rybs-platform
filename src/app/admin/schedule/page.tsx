@@ -2,22 +2,12 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import Link from "next/link";
-import type { ComponentType, SVGProps } from "react";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
-  CalendarDaysIcon,
-  ExclamationTriangleIcon,
-  InboxStackIcon,
-  MapPinIcon,
-  TruckIcon,
 } from "@heroicons/react/24/outline";
-import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
-import {
-  getActiveDumpsterFilterOptions,
-  getDumpsterInventorySummary,
-} from "@/lib/admin/dumpster-inventory";
+import { getDumpsterInventorySummary } from "@/lib/admin/dumpster-inventory";
 import { getScheduleJobs } from "@/lib/admin/schedule";
 import {
   getPlacementCompactSignals,
@@ -28,11 +18,9 @@ import {
   buildPickupPlanningModel,
   getAvailabilityRiskClasses,
 } from "@/lib/pickup-planning";
-import ScheduleBoard from "../_components/admin/schedule/schedule-board";
+import ScheduleBoardView from "../_components/admin/schedule/schedule-board-view";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type AssignmentFilter = "all" | "assigned" | "unassigned";
-type DumpsterFilter = "all" | "unassigned" | string;
 
 type BookingRow = {
   id: string;
@@ -69,11 +57,6 @@ type BookingRow = {
 function sp(obj: SearchParams, key: string) {
   const value = obj[key];
   return Array.isArray(value) ? value[0] : value;
-}
-
-function clean(value: string | null | undefined) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : "";
 }
 
 function todayETDate(): Date {
@@ -231,7 +214,7 @@ function isDeliveryForDay(job: BookingRow, dayISO: string) {
 }
 
 function isPickupForDay(job: BookingRow, dayISO: string) {
-  return sameISO(job.pickup_date, dayISO) && job.status === "delivered";
+  return sameISO(job.pickup_date, dayISO);
 }
 
 function isPickupRequest(job: BookingRow) {
@@ -260,29 +243,9 @@ function assignedDumpsterLabel(job: BookingRow, fallback: "unassigned" | "assign
   return [displayName, equipmentId].filter(Boolean).join(" • ");
 }
 
-function hasAssignedDumpster(job: BookingRow) {
-  return Boolean(
-    job.assigned_dumpster?.display_name?.trim() ||
-      job.assigned_dumpster?.equipment_id?.trim(),
-  );
-}
-
-function matchesAssignmentFilter(job: BookingRow, assignment: AssignmentFilter) {
-  if (assignment === "all") return true;
-  return assignment === "assigned" ? hasAssignedDumpster(job) : !hasAssignedDumpster(job);
-}
-
-function matchesDumpsterFilter(job: BookingRow, dumpster: DumpsterFilter) {
-  if (dumpster === "all") return true;
-  if (dumpster === "unassigned") return !hasAssignedDumpster(job);
-  return job.dumpster_id === dumpster;
-}
-
-function buildScheduleHref(weekIso: string, assignment: AssignmentFilter, dumpster: DumpsterFilter) {
+function buildScheduleHref(weekIso: string) {
   const params = new URLSearchParams();
   params.set("week", weekIso);
-  if (assignment !== "all") params.set("assignment", assignment);
-  if (dumpster !== "all") params.set("dumpster", dumpster);
   return `/admin/schedule?${params.toString()}`;
 }
 
@@ -319,59 +282,6 @@ function attentionPriority(job: BookingRow) {
   if (tag === "Pickup requested") return 1;
   if (tag === "Long on-site") return 2;
   return 3;
-}
-
-type StatTone = "orange" | "blue" | "emerald" | "slate" | "rose";
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  label: string;
-  value: number;
-  tone: StatTone;
-}) {
-  const toneClasses: Record<StatTone, { card: string; icon: string }> = {
-    orange: {
-      card: adminSummaryCardShell("amber", "h-full p-5"),
-      icon: "bg-amber-100/95 text-amber-700 ring-amber-200/90",
-    },
-    blue: {
-      card: adminSummaryCardShell("blue", "h-full p-5"),
-      icon: "bg-sky-100/95 text-sky-700 ring-sky-200/90",
-    },
-    emerald: {
-      card: adminSummaryCardShell("green", "h-full p-5"),
-      icon: "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90",
-    },
-    slate: {
-      card: adminSummaryCardShell("violet", "h-full p-5"),
-      icon: "bg-violet-100/95 text-violet-700 ring-violet-200/90",
-    },
-    rose: {
-      card: adminSummaryCardShell("rose", "h-full p-5"),
-      icon: "bg-rose-100/95 text-rose-700 ring-rose-200/90",
-    },
-  };
-
-  return (
-    <div className={toneClasses[tone].card}>
-      <div className="flex gap-4">
-        <div
-          className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${toneClasses[tone].icon}`}
-        >
-          <Icon className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex h-12 items-center text-sm font-medium leading-5 text-slate-600">{label}</div>
-          <div className="mt-2 text-lg font-semibold tracking-tight text-slate-950">{value}</div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function QueuePanel({
@@ -747,8 +657,6 @@ export default async function AdminSchedulePage({
 }) {
   const params = await searchParams;
   const requestedWeek = sp(params, "week");
-  const assignmentFilter = (clean(sp(params, "assignment")) || "all") as AssignmentFilter;
-  const dumpsterFilter = clean(sp(params, "dumpster")) || "all";
 
   const weekStart = getWeekStartMonday(requestedWeek);
   const weekEnd = addDays(weekStart, 6);
@@ -759,15 +667,11 @@ export default async function AdminSchedulePage({
   const weekEndISO = toISODate(weekEnd);
   const todayISO = toISODate(todayETDate());
 
-  const [allJobs, inventorySummary, dumpsterOptions] = await Promise.all([
+  const [allJobs, inventorySummary] = await Promise.all([
     getScheduleJobs(weekStartISO, weekEndISO),
     getDumpsterInventorySummary(),
-    getActiveDumpsterFilterOptions(),
   ]);
-  const jobs = (allJobs as BookingRow[]).filter((job) =>
-    matchesAssignmentFilter(job, assignmentFilter) &&
-    matchesDumpsterFilter(job, dumpsterFilter),
-  );
+  const jobs = allJobs as BookingRow[];
   const bookableFleetSize = inventorySummary.bookableCount;
 
   const baseDays = Array.from({ length: 7 }, (_, index) => {
@@ -837,11 +741,10 @@ export default async function AdminSchedulePage({
       return (a.delivery_date ?? "").localeCompare(b.delivery_date ?? "");
     });
 
-  const dumpstersOnSiteToday = jobs.filter((job) => {
+  const overdueDeliveryJobs = jobs.filter((job) => {
     if (!job.delivery_date) return false;
-    if (job.status === "cancelled" || job.status === "picked_up") return false;
-    return job.delivery_date <= todayISO && (!job.pickup_date || job.pickup_date > todayISO);
-  }).length;
+    return job.delivery_date < todayISO && ["confirmed", "scheduled"].includes(job.status);
+  });
 
   const futureDeliveryDates = jobs
     .filter((job) => ["confirmed", "scheduled"].includes(job.status) && Boolean(job.delivery_date))
@@ -849,127 +752,50 @@ export default async function AdminSchedulePage({
 
   const totalDeliveries = days.reduce((sum, day) => sum + day.deliveries.length, 0);
   const totalPickups = days.reduce((sum, day) => sum + day.pickups.length, 0);
+  const totalStops = totalDeliveries + totalPickups;
 
   return (
     <AdminPage width="wide" className="max-w-[1500px]">
       <AdminPageHeader
         title="Schedule"
-        description={`Fleet planning is projected against ${bookableFleetSize} bookable dumpster${bookableFleetSize === 1 ? "" : "s"}.`}
-        className="mb-6"
+        description={formatWeekRange(weekStart, weekEnd)}
+        className="mb-6 !flex-row !items-start !justify-between"
         actions={
-          <div className="flex flex-col items-start gap-4 sm:items-end">
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              <Link
-                href={buildScheduleHref(toISODate(prevWeek), assignmentFilter, dumpsterFilter)}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                <ArrowLeftIcon className="h-4 w-4" />
-                Previous week
-              </Link>
+          <>
+            <Link
+              href={buildScheduleHref(toISODate(prevWeek))}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
+              Previous week
+            </Link>
 
-              <Link
-                href={buildScheduleHref(toISODate(getWeekStartMonday()), assignmentFilter, dumpsterFilter)}
-                className="inline-flex h-10 items-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:opacity-90"
-              >
-                This week
-              </Link>
+            <Link
+              href={buildScheduleHref(toISODate(getWeekStartMonday()))}
+              className="inline-flex h-10 items-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:opacity-90"
+            >
+              This week
+            </Link>
 
-              <Link
-                href={buildScheduleHref(toISODate(nextWeek), assignmentFilter, dumpsterFilter)}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Next week
-                <ArrowRightIcon className="h-4 w-4" />
-              </Link>
-            </div>
-
-            <div className="flex flex-col gap-2 pt-1 sm:items-end">
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                {([
-                  { key: "all", label: "All" },
-                  { key: "assigned", label: "Planned" },
-                  { key: "unassigned", label: "Unplanned" },
-                ] as Array<{ key: AssignmentFilter; label: string }>).map((option) => (
-                  <Link
-                    key={option.key}
-                    href={buildScheduleHref(weekStartISO, option.key, dumpsterFilter)}
-                    className={`inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium transition ${
-                      assignmentFilter === option.key
-                        ? "bg-[#F97316] text-white shadow-sm shadow-orange-100/80"
-                        : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
-                    }`}
-                  >
-                    {option.label}
-                  </Link>
-                ))}
-              </div>
-              <form action="/admin/schedule" method="GET" className="flex items-center gap-2 sm:justify-end">
-                <input type="hidden" name="week" value={weekStartISO} />
-                <input type="hidden" name="assignment" value={assignmentFilter} />
-                <select
-                  name="dumpster"
-                  defaultValue={dumpsterFilter}
-                  className="h-10 min-w-[240px] rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
-                >
-                  <option value="all">All dumpsters</option>
-                  <option value="unassigned">Unplanned</option>
-                  {dumpsterOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Apply
-                </button>
-              </form>
-              <div className="text-sm font-semibold text-slate-700 sm:text-right">
-                {formatWeekRange(weekStart, weekEnd)}
-              </div>
-            </div>
-          </div>
+            <Link
+              href={buildScheduleHref(toISODate(nextWeek))}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Next week
+              <ArrowRightIcon className="h-4 w-4" />
+            </Link>
+          </>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard
-          icon={TruckIcon}
-          label="Week deliveries"
-          value={totalDeliveries}
-          tone="orange"
-        />
-        <SummaryCard
-          icon={CalendarDaysIcon}
-          label="Week pickups"
-          value={totalPickups}
-          tone="blue"
-        />
-        <SummaryCard
-          icon={InboxStackIcon}
-          label="Open pickup requests"
-          value={pickupRequests.length}
-          tone="emerald"
-        />
-        <SummaryCard
-          icon={MapPinIcon}
-          label="Dumpsters on-site"
-          value={dumpstersOnSiteToday}
-          tone="slate"
-        />
-        <SummaryCard
-          icon={ExclamationTriangleIcon}
-          label="Overdue pickups"
-          value={overduePickupJobs.length}
-          tone="rose"
-        />
-      </div>
-
-      <div className="mt-6">
-        <ScheduleBoard days={days} />
-      </div>
+      <ScheduleBoardView
+        days={days}
+        totalStops={totalStops}
+        totalDeliveries={totalDeliveries}
+        totalPickups={totalPickups}
+        overdueDeliveriesCount={overdueDeliveryJobs.length}
+        overduePickupsCount={overduePickupJobs.length}
+      />
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">
         <PickupRequestPanel requests={pickupRequests} futureDeliveryDates={futureDeliveryDates} />

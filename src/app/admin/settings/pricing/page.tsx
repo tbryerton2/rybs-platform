@@ -3,15 +3,15 @@ export const revalidate = 0;
 
 import type { ComponentType, SVGProps } from "react";
 import {
-  CalendarDaysIcon,
   CalendarIcon,
   ClockIcon,
-  CurrencyDollarIcon,
   InformationCircleIcon,
   PlusCircleIcon,
 } from "@heroicons/react/24/outline";
 import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { DumpsterProductSettingsForm } from "@/app/admin/settings/pricing/dumpster-product-settings-form";
+import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import { isMissingPricingSettingsRentalPeriodColumnsError } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { PricingSettingsForm } from "./pricing-settings-form";
@@ -211,7 +211,10 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
 }
 
 export default async function AdminPricingSettingsPage() {
-  const pricing = await getPricingSettings();
+  const [pricing, productSettings] = await Promise.all([
+    getPricingSettings(),
+    getEditableDumpsterProductSettings(),
+  ]);
   const maxRentalSummary =
     pricing.max_rental_days == null ? "No hard cap" : `${pricing.max_rental_days} days`;
 
@@ -231,8 +234,7 @@ export default async function AdminPricingSettingsPage() {
                 role="tooltip"
                 className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
               >
-                Control the default rental period and overage pricing customers see during
-                booking.
+                Control global booking rules here. Size-specific price, included days, and included weight now live in the dumpster product settings below.
               </span>
             </button>
           </span>
@@ -240,22 +242,10 @@ export default async function AdminPricingSettingsPage() {
       />
 
       <section className="mb-8">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SummaryMetricCard
-            label="Standard Rental Period"
-            value={`${pricing.included_rental_days} days`}
-            tone="blue"
-            icon={CalendarDaysIcon}
-          />
-          <SummaryMetricCard
-            label="Base Price"
-            value={formatMoney(pricing.standard_rental_price)}
-            tone="green"
-            icon={CurrencyDollarIcon}
-          />
-          <SummaryMetricCard
-            label="Extra Day Rate"
-            value={formatMoney(pricing.daily_overage_price)}
+            label="Ton Overage Rate"
+            value={formatMoney(pricing.ton_overage_price)}
             tone="amber"
             icon={ClockIcon}
           />
@@ -277,15 +267,37 @@ export default async function AdminPricingSettingsPage() {
       <PricingSettingsForm
         pricing={{
           id: pricing.id,
-          basePrice: pricing.standard_rental_price,
-          standardRentalDays: pricing.included_rental_days,
-          dailyOveragePrice: pricing.daily_overage_price,
           maxRentalDays: pricing.max_rental_days,
           allowExtendedRentalAtBooking: pricing.allow_extended_rental_at_booking,
-          includedTons: pricing.included_tons,
           tonOveragePrice: pricing.ton_overage_price,
         }}
       />
+
+      <section className="mt-8">
+        <div className="mb-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-950">
+              Dumpster product settings
+            </h2>
+            <button
+              type="button"
+              aria-label="Dumpster product settings details"
+              className="group relative rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+            >
+              <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-0 top-7 z-50 w-80 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+              >
+                Edit the customer-facing display, pricing, and rental details for each offered
+                dumpster size. Active sizes from the dumpsters table appear here automatically,
+                even before a settings row exists.
+              </span>
+            </button>
+          </div>
+        </div>
+        <DumpsterProductSettingsForm settings={productSettings} />
+      </section>
     </AdminPage>
   );
 }

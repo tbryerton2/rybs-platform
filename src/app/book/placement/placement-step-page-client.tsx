@@ -18,6 +18,16 @@ import {
 } from "@/lib/placement";
 
 type BookingDraft = {
+  zip?: string;
+  dumpsterSize?: string;
+  dumpsterProductId?: string | null;
+  deliveryDate?: string;
+  pickupDate?: string;
+  priceQuote?: { effectivePickupDate?: string | null } | null;
+  holdId?: string;
+  holdExpiresAt?: string;
+  customerName?: string;
+  customerEmail?: string;
   customerPhone?: string;
   customerStreet?: string;
   customerCity?: string;
@@ -63,6 +73,10 @@ function formatPhoneUS(raw: string) {
 
 function digitsOnly(raw: string) {
   return raw.replace(/\D/g, "").slice(0, 10);
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
 }
 
 function cardInputClass(multiline = false) {
@@ -126,15 +140,31 @@ type PlacementStepPageClientProps = {
 export default function PlacementStepPageClient({ content }: PlacementStepPageClientProps) {
   const router = useRouter();
 
-  const initialDraft = useMemo(() => readDraft(), []);
-  const addressSummary = [
-    initialDraft.customerStreet,
-    [initialDraft.customerCity, initialDraft.customerState].filter(Boolean).join(", "),
-    initialDraft.customerZip,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const [hasHydratedDraft, setHasHydratedDraft] = useState(false);
+  const [draft, setDraft] = useState<BookingDraft>({});
+  const initialDraft = draft;
+  const serviceZip = (initialDraft.zip || initialDraft.customerZip || "").replace(/\D/g, "").slice(0, 5);
+  const hasDumpsterSelection = Boolean(
+    (initialDraft.dumpsterSize || "").trim() || (initialDraft.dumpsterProductId || "").trim(),
+  );
+  const hasDeliveryDate = /^\d{4}-\d{2}-\d{2}$/.test((initialDraft.deliveryDate || "").trim());
+  const hasPickupDate = /^\d{4}-\d{2}-\d{2}$/.test(
+    (initialDraft.pickupDate || initialDraft.priceQuote?.effectivePickupDate || "").trim(),
+  );
+  const holdExpiresAtMs = Date.parse(initialDraft.holdExpiresAt || "");
+  const hasActiveHold =
+    Boolean(initialDraft.holdId && initialDraft.holdExpiresAt) &&
+    Number.isFinite(holdExpiresAtMs) &&
+    holdExpiresAtMs > Date.now();
+  const hasRequiredPriorSteps =
+    /^\d{5}$/.test(serviceZip) && hasDumpsterSelection && hasDeliveryDate && hasPickupDate && hasActiveHold;
 
+  const [name, setName] = useState(initialDraft.customerName ?? "");
+  const [email, setEmail] = useState(initialDraft.customerEmail ?? "");
+  const [phone, setPhone] = useState(formatPhoneUS(initialDraft.customerPhone ?? ""));
+  const [street, setStreet] = useState(initialDraft.customerStreet ?? "");
+  const [city, setCity] = useState(initialDraft.customerCity ?? "");
+  const [stateCode, setStateCode] = useState(initialDraft.customerState ?? "");
   const [placementPreference, setPlacementPreference] = useState<PlacementPreference | "">(
     initialDraft.placementPreference ?? "",
   );
@@ -167,10 +197,55 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   const [showTips, setShowTips] = useState(false);
 
   useEffect(() => {
-    if (!addressSummary) {
+    const nextDraft = readDraft();
+    setDraft(nextDraft);
+    setName(nextDraft.customerName ?? "");
+    setEmail(nextDraft.customerEmail ?? "");
+    setPhone(formatPhoneUS(nextDraft.customerPhone ?? ""));
+    setStreet(nextDraft.customerStreet ?? "");
+    setCity(nextDraft.customerCity ?? "");
+    setStateCode(nextDraft.customerState ?? "");
+    setPlacementPreference(nextDraft.placementPreference ?? "");
+    setPlacementDetails(nextDraft.placementDetails ?? "");
+    setAccessIssues(nextDraft.accessIssues ?? []);
+    setGateInstructions(nextDraft.gateInstructions ?? "");
+    setDeliveryPresence(nextDraft.deliveryPresence ?? "");
+    setAlternateContactName(nextDraft.alternateContactName ?? "");
+    setAlternateContactPhone(formatPhoneUS(nextDraft.alternateContactPhone ?? ""));
+    setPlacementPhotoUrl(nextDraft.placementPhotoUrl ?? "");
+    setSpecialDeliveryInstructions(nextDraft.specialDeliveryInstructions ?? "");
+    setShowAccessDetails((nextDraft.accessIssues?.length ?? 0) > 0 || !!nextDraft.gateInstructions);
+    setShowAlternateContact(!!nextDraft.alternateContactName || !!nextDraft.alternateContactPhone);
+    setShowPhotoUpload(!!nextDraft.placementPhotoUrl);
+    setShowSpecialInstructions(!!nextDraft.specialDeliveryInstructions);
+    setHasHydratedDraft(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedDraft) return;
+
+    if (!/^\d{5}$/.test(serviceZip)) {
       router.replace("/book/address");
+      return;
     }
-  }, [addressSummary, router]);
+
+    if (!hasDumpsterSelection) {
+      router.replace(`/book?zip=${encodeURIComponent(serviceZip)}`);
+      return;
+    }
+
+    if (!hasDeliveryDate || !hasPickupDate || !hasActiveHold) {
+      router.replace("/book/date");
+    }
+  }, [
+    hasActiveHold,
+    hasDeliveryDate,
+    hasDumpsterSelection,
+    hasHydratedDraft,
+    hasPickupDate,
+    router,
+    serviceZip,
+  ]);
 
   const sanitizedPlacement = useMemo(
     () =>
@@ -205,7 +280,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   const validationError = validatePlacementDetails(sanitizedPlacement);
   const gateFieldVisible = showAccessDetails && accessIssues.includes("gated_property");
   const streetPermitNoteVisible = placementPreference === "street_curb";
-  const defaultContactSummary = formatPhoneUS(initialDraft.customerPhone ?? "") || "Use main booking phone";
+  const defaultContactSummary = formatPhoneUS(phone) || "Use main booking phone";
   const alternateContactSummary =
     showAlternateContact && (alternateContactName || alternateContactPhone)
       ? [alternateContactName, formatPhoneUS(alternateContactPhone)]
@@ -217,7 +292,16 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
     ? "Special instructions added"
     : "Add any extra notes for dispatch or the driver";
 
-  if (!addressSummary) return null;
+  const contactError = useMemo(() => {
+    if (!name.trim()) return "Enter your name.";
+    if (!isValidEmail(email)) return "Enter a valid email address.";
+    if (digitsOnly(phone).length !== 10) return "Enter a valid 10-digit phone number.";
+    if (!street.trim()) return "Enter the delivery street address.";
+    if (!city.trim()) return "Enter the delivery city.";
+    if (!/^[A-Z]{2}$/.test(stateCode.trim().toUpperCase())) return "Enter a valid 2-letter state code.";
+    if (!/^\d{5}$/.test(serviceZip)) return "Service ZIP is missing. Please check your service area again.";
+    return null;
+  }, [city, email, name, phone, serviceZip, stateCode, street]);
 
   function persistDraft() {
     const existing = readDraft();
@@ -226,6 +310,14 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
       getBookingStorageKey(),
       JSON.stringify({
         ...existing,
+        customerName: name.trim(),
+        customerEmail: email.trim(),
+        customerPhone: digitsOnly(phone),
+        customerStreet: street.trim(),
+        customerCity: city.trim(),
+        customerState: stateCode.trim().toUpperCase(),
+        customerZip: serviceZip,
+        zip: serviceZip,
         placementPreference: sanitizedPlacement.placementPreference,
         placementDetails: sanitizedPlacement.placementDetails,
         accessIssues: sanitizedPlacement.accessIssues,
@@ -278,41 +370,158 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   }
 
   function handleContinue() {
+    if (contactError) return;
     if (validationError) return;
     persistDraft();
-    router.push("/book/date");
+    router.push("/confirm");
   }
 
-  const canContinue = !validationError && !isUploadingPhoto;
+  const canContinue = !contactError && !validationError && !isUploadingPhoto;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
       <div className="mx-auto max-w-2xl px-6 pb-16 pt-10">
         <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
+          {!hasHydratedDraft || !hasRequiredPriorSteps ? (
+            <div className="space-y-6">
+              <div className="mx-auto mb-4 w-full max-w-2xl">
+                <div className="flex flex-col gap-2">
+                  <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
+                    Step 4 of 4
+                  </div>
+
+                  <div className="h-2 w-full rounded-full bg-slate-200/60">
+                    <div className="h-2 w-full rounded-full bg-[#F97316]" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">Your details</h1>
+                <p className="text-[#475569]">Checking your booking details...</p>
+              </div>
+            </div>
+          ) : (
+            <>
           <div className="space-y-3">
             <div className="mx-auto mb-4 w-full max-w-2xl">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 3 of 6
+                  Step 4 of 4
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-1/2 rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-full rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>
 
-            <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">{content.title}</h1>
+            <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">Your details</h1>
             <p className="text-[#475569]">
-              {content.description}
+              Add your contact information and delivery details now that your date is available.
             </p>
           </div>
 
           <section className="mt-8 space-y-5">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="text-sm text-slate-600">
-                {content.addressSummaryPrefix} <span className="font-semibold text-slate-900">{addressSummary}</span>
+                Service ZIP: <span className="font-semibold text-slate-900">{serviceZip}</span>
               </div>
+            </div>
+
+            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-slate-900">Contact & delivery address</h2>
+                <p className="text-sm leading-6 text-slate-500">
+                  This is where we will deliver the dumpster and how we will contact you about the job.
+                </p>
+              </div>
+
+              <div className="mt-5 grid gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Name</label>
+                  <input
+                    className={cardInputClass()}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g., John Doe"
+                    autoComplete="name"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Email</label>
+                  <input
+                    className={cardInputClass()}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g., you@email.com"
+                    type="email"
+                    autoComplete="email"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Phone</label>
+                  <input
+                    className={cardInputClass()}
+                    value={phone}
+                    onChange={(e) => setPhone(formatPhoneUS(digitsOnly(e.target.value)))}
+                    placeholder="e.g., (315) 555-1234"
+                    inputMode="tel"
+                    autoComplete="tel"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Street address</label>
+                  <input
+                    className={cardInputClass()}
+                    value={street}
+                    onChange={(e) => setStreet(e.target.value)}
+                    placeholder="e.g., 123 Main St"
+                    autoComplete="street-address"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">City</label>
+                  <input
+                    className={cardInputClass()}
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="e.g., Chittenango"
+                    autoComplete="address-level2"
+                  />
+                </div>
+
+                <div className="grid gap-5 sm:grid-cols-[1fr_120px]">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">State</label>
+                    <input
+                      className={cardInputClass()}
+                      value={stateCode}
+                      onChange={(e) => setStateCode(e.target.value.toUpperCase())}
+                      placeholder="e.g., NY"
+                      autoComplete="address-level1"
+                      maxLength={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">ZIP</label>
+                    <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900">
+                      {serviceZip}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {contactError ? (
+                <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                  {contactError}
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
@@ -655,16 +864,18 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                 className="group h-14 w-full rounded-2xl bg-[#F97316] text-base font-semibold text-white shadow-md transition-all duration-200 ease-out hover:bg-[#EA6A10] hover:shadow-lg active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="flex items-center justify-center gap-2">
-                  Continue
+                  Review booking
                   <span className="text-white/90 transition-transform group-hover:translate-x-1">→</span>
                 </span>
               </button>
             </div>
 
-            <a href="/book/address" className="text-sm text-slate-600 transition-colors hover:text-slate-900">
+            <a href="/book/date" className="text-sm text-slate-600 transition-colors hover:text-slate-900">
               ← Back
             </a>
           </section>
+            </>
+          )}
         </div>
       </div>
     </main>

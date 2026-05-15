@@ -2,6 +2,25 @@ export type EquipmentTrackerStatus = "Online" | "Offline" | "Needs attention" | 
 export type DumpsterOperationalStatus = "Available" | "On rent" | "In yard" | "Maintenance hold";
 export type DumpsterMaintenanceStatus = "Current" | "Due soon" | "Needs service";
 export type ServiceStatus = "Ready" | "Inspection due" | "Out of service";
+export type DumpsterDerivedOperationalStatus =
+  | "Available"
+  | "Scheduled"
+  | "On rent"
+  | "Maintenance / unavailable";
+export type DumpsterServiceWarning = {
+  label: "Service due soon" | "Service date soon";
+  tone: "urgent" | "soon";
+};
+export type DumpsterServiceDateType = "Inspection" | "Maintenance" | "Repair" | "Cleaning" | "Other";
+export type FleetEquipmentServiceDateType =
+  | "Inspection"
+  | "Registration"
+  | "Insurance"
+  | "Maintenance"
+  | "Repair"
+  | "Cleaning"
+  | "Other";
+export type ServiceDateType = DumpsterServiceDateType | FleetEquipmentServiceDateType;
 export type VehicleEquipmentType = "Truck" | "Trailer";
 export type ComplianceStatus = "Current" | "Due soon" | "Expired";
 export type VehicleMaintenanceStatus = "Current" | "Due soon" | "Needs service";
@@ -38,7 +57,19 @@ export type DumpsterRecord = {
   nextInspectionDue: string;
   assetTag: string;
   updatedAt: string;
+  derivedOperationalStatus: DumpsterDerivedOperationalStatus;
+  serviceWarning: DumpsterServiceWarning | null;
   tracker: TrackerConfig;
+};
+
+export type DumpsterServiceDateRecord = {
+  id: string;
+  dumpsterId: string;
+  serviceDate: string;
+  serviceType: DumpsterServiceDateType;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type VehicleRecord = {
@@ -81,6 +112,22 @@ export const dumpsterOperationalStatusOptions: DumpsterOperationalStatus[] = [
 ];
 export const dumpsterMaintenanceStatusOptions: DumpsterMaintenanceStatus[] = ["Current", "Due soon", "Needs service"];
 export const serviceStatusOptions: ServiceStatus[] = ["Ready", "Inspection due", "Out of service"];
+export const dumpsterServiceDateTypeOptions: DumpsterServiceDateType[] = [
+  "Inspection",
+  "Maintenance",
+  "Repair",
+  "Cleaning",
+  "Other",
+];
+export const fleetEquipmentServiceDateTypeOptions: FleetEquipmentServiceDateType[] = [
+  "Inspection",
+  "Registration",
+  "Insurance",
+  "Maintenance",
+  "Repair",
+  "Cleaning",
+  "Other",
+];
 export const trackerStatusOptions: EquipmentTrackerStatus[] = [
   "Online",
   "Offline",
@@ -126,39 +173,8 @@ export function createEmptyDumpster(): DumpsterRecord {
     nextInspectionDue: "",
     assetTag: "",
     updatedAt: "",
-    tracker: emptyTracker(),
-  };
-}
-
-export function createEmptyVehicle(): VehicleRecord {
-  return {
-    id: "",
-    equipmentId: "",
-    unitName: "",
-    equipmentType: "Truck",
-    make: "",
-    model: "",
-    year: "",
-    vin: "",
-    plateNumber: "",
-    registrationExpiration: "",
-    inspectionStatus: "Current",
-    inspectionExpiration: "",
-    insuranceStatus: "Current",
-    insuranceRenewalDate: "",
-    mileage: "",
-    gvwr: "",
-    assignedTeam: "",
-    inServiceDate: "",
-    maintenanceStatus: "Current",
-    lastServiceDate: "",
-    nextServiceDue: "",
-    conditionNotes: "",
-    titleStatus: "",
-    defaultLocation: "",
-    active: true,
-    notes: "",
-    updatedAt: "",
+    derivedOperationalStatus: "Available",
+    serviceWarning: null,
     tracker: emptyTracker(),
   };
 }
@@ -187,6 +203,8 @@ export function createMockDumpsters(): DumpsterRecord[] {
       nextInspectionDue: "2026-06-14",
       assetTag: "TAG-101",
       updatedAt: "2026-04-08T12:10:00.000Z",
+      derivedOperationalStatus: "Available",
+      serviceWarning: null,
       tracker: {
         enabled: true,
         provider: "Samsara",
@@ -219,6 +237,8 @@ export function createMockDumpsters(): DumpsterRecord[] {
       nextInspectionDue: "2026-04-20",
       assetTag: "TAG-102",
       updatedAt: "2026-04-09T15:20:00.000Z",
+      derivedOperationalStatus: "On rent",
+      serviceWarning: null,
       tracker: {
         enabled: true,
         provider: "Samsara",
@@ -251,6 +271,8 @@ export function createMockDumpsters(): DumpsterRecord[] {
       nextInspectionDue: "2026-05-18",
       assetTag: "TAG-103",
       updatedAt: "2026-04-10T09:15:00.000Z",
+      derivedOperationalStatus: "Available",
+      serviceWarning: null,
       tracker: {
         enabled: false,
         provider: "",
@@ -283,6 +305,8 @@ export function createMockDumpsters(): DumpsterRecord[] {
       nextInspectionDue: "2026-04-30",
       assetTag: "TAG-104",
       updatedAt: "2026-04-04T11:40:00.000Z",
+      derivedOperationalStatus: "Maintenance / unavailable",
+      serviceWarning: null,
       tracker: {
         enabled: true,
         provider: "Azuga",
@@ -291,125 +315,6 @@ export function createMockDumpsters(): DumpsterRecord[] {
         lastCheckIn: "2026-04-03T18:02:00.000Z",
         status: "Needs attention",
         notes: "Intermittent check-ins during repair bay work.",
-      },
-    },
-  ];
-}
-
-export function createMockVehicles(): VehicleRecord[] {
-  return [
-    {
-      id: "vehicle_1",
-      equipmentId: "TRK-12",
-      unitName: "Truck 12",
-      equipmentType: "Truck",
-      make: "Freightliner",
-      model: "M2",
-      year: "2022",
-      vin: "1FVACWFC8NH123456",
-      plateNumber: "NY-4812",
-      registrationExpiration: "2026-09-30",
-      inspectionStatus: "Current",
-      inspectionExpiration: "2026-08-15",
-      insuranceStatus: "Current",
-      insuranceRenewalDate: "2026-10-01",
-      mileage: "84210",
-      gvwr: "33,000 lb",
-      assignedTeam: "Lead route",
-      inServiceDate: "2022-02-10",
-      maintenanceStatus: "Current",
-      lastServiceDate: "2026-03-21",
-      nextServiceDue: "2026-05-21",
-      conditionNotes: "Brake inspection cleared last service.",
-      titleStatus: "Owned",
-      defaultLocation: "North Yard",
-      active: true,
-      notes: "Primary weekday roll-off truck.",
-      updatedAt: "2026-04-09T10:20:00.000Z",
-      tracker: {
-        enabled: true,
-        provider: "Samsara",
-        trackerId: "TRK-12-GPS",
-        installationDate: "2024-11-10",
-        lastCheckIn: "2026-04-11T08:50:00.000Z",
-        status: "Online",
-        notes: "",
-      },
-    },
-    {
-      id: "vehicle_2",
-      equipmentId: "TRL-04",
-      unitName: "Trailer 04",
-      equipmentType: "Trailer",
-      make: "Big Tex",
-      model: "14LX",
-      year: "2021",
-      vin: "16V1U2527M1234567",
-      plateNumber: "NY-TR404",
-      registrationExpiration: "2026-07-31",
-      inspectionStatus: "Due soon",
-      inspectionExpiration: "2026-04-28",
-      insuranceStatus: "Current",
-      insuranceRenewalDate: "2026-10-01",
-      mileage: "",
-      gvwr: "14,000 lb",
-      assignedTeam: "Overflow support",
-      inServiceDate: "2021-04-16",
-      maintenanceStatus: "Due soon",
-      lastServiceDate: "2025-12-12",
-      nextServiceDue: "2026-04-20",
-      conditionNotes: "Tire tread should be rechecked next week.",
-      titleStatus: "Owned",
-      defaultLocation: "South Yard",
-      active: true,
-      notes: "Useful for extra can swaps and staging.",
-      updatedAt: "2026-04-07T13:05:00.000Z",
-      tracker: {
-        enabled: true,
-        provider: "Azuga",
-        trackerId: "TRL-04-GPS",
-        installationDate: "2025-06-30",
-        lastCheckIn: "2026-04-10T17:45:00.000Z",
-        status: "Online",
-        notes: "",
-      },
-    },
-    {
-      id: "vehicle_3",
-      equipmentId: "TRK-08",
-      unitName: "Truck 08",
-      equipmentType: "Truck",
-      make: "Mack",
-      model: "Granite",
-      year: "2019",
-      vin: "1M2AX09C7KM987654",
-      plateNumber: "NY-4708",
-      registrationExpiration: "2026-05-31",
-      inspectionStatus: "Due soon",
-      inspectionExpiration: "2026-05-05",
-      insuranceStatus: "Current",
-      insuranceRenewalDate: "2026-10-01",
-      mileage: "132480",
-      gvwr: "35,000 lb",
-      assignedTeam: "Backup route",
-      inServiceDate: "2019-08-01",
-      maintenanceStatus: "Needs service",
-      lastServiceDate: "2026-01-10",
-      nextServiceDue: "2026-04-15",
-      conditionNotes: "Brake work scheduled before reactivation.",
-      titleStatus: "Owned",
-      defaultLocation: "Repair bay",
-      active: false,
-      notes: "Inactive pending service completion.",
-      updatedAt: "2026-04-05T16:30:00.000Z",
-      tracker: {
-        enabled: true,
-        provider: "Samsara",
-        trackerId: "TRK-08-GPS",
-        installationDate: "2024-10-02",
-        lastCheckIn: "2026-04-05T09:18:00.000Z",
-        status: "Offline",
-        notes: "No check-in since repair downtime started.",
       },
     },
   ];

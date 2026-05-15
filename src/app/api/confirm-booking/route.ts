@@ -1,12 +1,14 @@
 // src/app/api/confirm-booking/route.ts
 import { NextResponse } from "next/server";
 import { getRentalPeriodDetails } from "@/lib/booking-pricing";
+import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { createBookingRecord } from "@/lib/booking-records";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
+import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabase } from "@/lib/supabase";
 import { normalizePhone } from "@/lib/customers";
-import { get14YardPriceForZip } from "@/lib/pricing";
+import { getDumpsterPriceForZip } from "@/lib/pricing";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -187,11 +189,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const pricing = await get14YardPriceForZip(customerZip, {
-      deliveryDate,
-      pickupDate,
-      pickupMode,
-    });
+    const pricing = await getDumpsterPriceForZip(
+      customerZip,
+      selectedDumpster,
+      {
+        deliveryDate,
+        pickupDate,
+        pickupMode,
+      },
+    );
 
     if (!pricing.serviceable || !pricing.priceQuote) {
       await supabase
@@ -266,6 +272,40 @@ export async function POST(req: Request) {
 
       return NextResponse.json(
         { ok: false, error: "We couldn’t determine the rental duration for this booking." },
+        { status: 409 },
+      );
+    }
+
+    try {
+      await ensureRentalWindowAvailability({
+        unavailableMessage:
+          "That rental window is no longer available. Please choose another delivery date.",
+        check: () =>
+          getDeliveryAvailabilitySnapshot({
+            deliveryDate,
+            rpcDays: rentalPeriod.bookedRentalDays ?? pricing.pricingSettings.standardRentalDays,
+            dumpsterSize: selectedDumpster.dumpsterSize,
+            dumpsterProductId: selectedDumpster.dumpsterProductId,
+            pickupDate: effectivePickup,
+            excludeHoldIds: [holdId],
+            logContext: "api/confirm-booking",
+          }),
+      });
+    } catch (availabilityError) {
+      await supabase
+        .from("booking_holds")
+        .update({ status: "active" })
+        .eq("id", holdId)
+        .eq("status", "converting");
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            availabilityError instanceof Error
+              ? availabilityError.message
+              : "That rental window is no longer available. Please choose another delivery date.",
+        },
         { status: 409 },
       );
     }

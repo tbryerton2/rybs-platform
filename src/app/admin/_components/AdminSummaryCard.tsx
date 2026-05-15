@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 
-type SummaryCardTone = "green" | "blue" | "violet" | "amber" | "teal" | "rose";
+type SummaryCardTone = "green" | "blue" | "violet" | "indigo" | "amber" | "teal" | "rose";
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -13,6 +13,8 @@ export function adminSummaryCardShell(tone: SummaryCardTone, extra = "") {
       ? "border-emerald-200/70 bg-emerald-50/55"
       : tone === "blue"
         ? "border-sky-200/70 bg-sky-50/55"
+        : tone === "indigo"
+          ? "border-indigo-200/70 bg-indigo-50/55"
         : tone === "violet"
           ? "border-violet-200/70 bg-violet-50/50"
           : tone === "amber"
@@ -29,13 +31,31 @@ function chipToneClasses(tone: SummaryCardTone) {
     ? "bg-emerald-100/90 text-emerald-700 ring-1 ring-inset ring-emerald-200/80"
     : tone === "blue"
       ? "bg-sky-100/90 text-sky-700 ring-1 ring-inset ring-sky-200/80"
+      : tone === "indigo"
+        ? "bg-indigo-100/90 text-indigo-700 ring-1 ring-inset ring-indigo-200/80"
       : tone === "violet"
         ? "bg-violet-100/90 text-violet-700 ring-1 ring-inset ring-violet-200/80"
-        : tone === "amber"
-          ? "bg-amber-100/90 text-amber-700 ring-1 ring-inset ring-amber-200/80"
+      : tone === "amber"
+        ? "bg-amber-100/90 text-amber-700 ring-1 ring-inset ring-amber-200/80"
           : tone === "teal"
             ? "bg-teal-100/90 text-teal-700 ring-1 ring-inset ring-teal-200/80"
             : "bg-rose-100/90 text-rose-700 ring-1 ring-inset ring-rose-200/80";
+}
+
+function activeToneClasses(tone: SummaryCardTone) {
+  return tone === "green"
+    ? "ring-2 ring-emerald-300/90 shadow-md shadow-emerald-200/35"
+    : tone === "blue"
+      ? "ring-2 ring-sky-300/90 shadow-md shadow-sky-200/35"
+      : tone === "indigo"
+        ? "ring-2 ring-indigo-300/90 shadow-md shadow-indigo-200/35"
+        : tone === "violet"
+          ? "ring-2 ring-violet-300/90 shadow-md shadow-violet-200/35"
+          : tone === "amber"
+            ? "ring-2 ring-amber-300/90 shadow-md shadow-amber-200/35"
+            : tone === "teal"
+              ? "ring-2 ring-teal-300/90 shadow-md shadow-teal-200/35"
+              : "ring-2 ring-rose-300/90 shadow-md shadow-rose-200/35";
 }
 
 export function AdminSummaryCard({
@@ -44,6 +64,7 @@ export function AdminSummaryCard({
   icon: Icon,
   tone,
   href,
+  onClick,
   detail,
   compact = false,
   stretch = false,
@@ -55,6 +76,7 @@ export function AdminSummaryCard({
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   tone: SummaryCardTone;
   href?: string;
+  onClick?: () => void;
   detail?: string;
   compact?: boolean;
   stretch?: boolean;
@@ -69,7 +91,7 @@ export function AdminSummaryCard({
         : "p-5 transition hover:-translate-y-0.5 hover:shadow-md",
     ),
     stretch && "flex h-full flex-col",
-    active && "ring-2 ring-slate-900/12 shadow-md shadow-slate-900/8",
+    active && activeToneClasses(tone),
     active && compact && "-translate-y-0.5",
   );
 
@@ -127,5 +149,17 @@ export function AdminSummaryCard({
     >
       {content}
     </Link>
+  ) : onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={joinClasses(
+        stretch && "block h-full w-full text-left",
+        "cursor-pointer rounded-[28px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
+      )}
+    >
+      {content}
+    </button>
   ) : content;
 }

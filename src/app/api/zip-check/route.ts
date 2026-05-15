@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getActiveServiceAreaZip, sanitizeServiceAreaZip } from "@/lib/service-area";
-import { get14YardPriceForZip } from "@/lib/pricing";
+import { getDumpsterPriceForZip } from "@/lib/pricing";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -8,6 +9,10 @@ export async function GET(req: Request) {
   const deliveryDate = searchParams.get("deliveryDate");
   const pickupDate = searchParams.get("pickupDate");
   const pickupMode = searchParams.get("pickupMode");
+  const selectedDumpster = resolveSelectedDumpster({
+    dumpsterSize: searchParams.get("dumpsterSize"),
+    dumpsterProductId: searchParams.get("dumpsterProductId"),
+  });
 
   if (!/^\d{5}$/.test(zip)) {
     return NextResponse.json({ ok: false, error: "Invalid ZIP" }, { status: 400 });
@@ -18,11 +23,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, serviced: false });
   }
 
-  const pricing = await get14YardPriceForZip(zip, {
-    deliveryDate,
-    pickupDate,
-    pickupMode: pickupMode === "date" ? "date" : "unspecified",
-  });
+  const pricing = await getDumpsterPriceForZip(
+    zip,
+    selectedDumpster,
+    {
+      deliveryDate,
+      pickupDate,
+      pickupMode: pickupMode === "date" ? "date" : "unspecified",
+    },
+  );
 
   if (pricing.rentalValidationError) {
     return NextResponse.json(

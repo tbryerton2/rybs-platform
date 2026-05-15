@@ -1,8 +1,5 @@
-import { getBookingPickupContent } from "@/lib/tenant/content";
-import PickupStepPageClient from "./pickup-step-page-client";
+import { redirect } from "next/navigation";
 
 export default async function PickupStepPage() {
-  const content = await getBookingPickupContent();
-
-  return <PickupStepPageClient content={content} />;
+  redirect("/confirm");
 }

@@ -1,5 +1,11 @@
 import { addDaysYmd, isYmd } from "@/lib/booking-pricing";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
+import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
+import {
+  evaluateRentalWindowAvailability,
+  RENTAL_WINDOW_BLOCKING_RULE,
+  type RentalWindowBlocker,
+  type RentalWindowDumpster,
+} from "@/lib/rental-window-availability";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type DumpsterAvailabilityInput = {
@@ -7,6 +13,8 @@ export type DumpsterAvailabilityInput = {
   dumpsterProductId?: string | null;
   deliveryDate: string;
   pickupDate?: string | null;
+  excludeHoldIds?: string[];
+  excludeBookingIds?: string[];
 };
 
 export type OverlappingBookingDetail = {
@@ -14,18 +22,23 @@ export type OverlappingBookingDetail = {
   status: string | null;
   deliveryDate: string;
   effectivePickupDate: string;
+  assignedDumpsterId: string | null;
+  dumpsterProductId: string | null;
 };
 
 export type OverlappingHoldDetail = {
   id: string;
   status: string | null;
   deliveryDate: string;
+  effectivePickupDate: string;
   expiresAt: string;
+  dumpsterProductId: string | null;
 };
 
 export type DumpsterAvailabilityResult = {
   dumpsterSize: string;
   dumpsterProductId: string | null;
+  productName: string | null;
   requestedDeliveryDate: string;
   requestedPickupDate: string;
   totalBookable: number;
@@ -39,6 +52,32 @@ export type DumpsterAvailabilityResult = {
   overlappingHoldCount: number;
   overlappingHoldIds: string[];
   overlappingHolds: OverlappingHoldDetail[];
+  blockingRule: string;
+  compatibleDumpstersConsidered: RentalWindowDumpster[];
+  availableDumpsterIds: string[];
+  dumpsterDebug: ReturnType<typeof evaluateRentalWindowAvailability>["dumpsters"];
+  debugSummary: {
+    requestedSelection: {
+      dumpsterSize: string;
+      dumpsterProductId: string | null;
+      productName: string | null;
+      normalizedSizeKey: string;
+      capacityYards: number | null;
+    };
+    compatibleInventory: Array<{
+      dumpsterId: string;
+      label: string;
+      rawSize: string;
+      normalizedSizeKey: string;
+      capacityYards: number | null;
+      active: boolean;
+      operationalStatus: string | null;
+      maintenanceStatus: string | null;
+      serviceStatus: string | null;
+      assetTag: string | null;
+      matchedBy: "size";
+    }>;
+  };
 };
 
 type BookingWindowRow = {
@@ -48,12 +87,26 @@ type BookingWindowRow = {
   pickup_date: string | null;
   included_rental_days: number | null;
   dumpster_size: string | null;
+  dumpster_product_id: string | null;
+  dumpster_id: string | null;
+};
+
+type DumpsterRow = {
+  id: string;
+  display_name: string | null;
+  size: string | null;
+  active: boolean | null;
+  operational_status: string | null;
+  maintenance_status: string | null;
+  service_status: string | null;
+  asset_tag: string | null;
 };
 
 type HoldRow = {
   id: string;
   status: string | null;
   delivery_date: string | null;
+  pickup_date: string | null;
   expires_at: string | null;
   dumpster_size: string | null;
   dumpster_product_id: string | null;
@@ -82,12 +135,26 @@ function shouldCountHoldStatus(status: string | null | undefined) {
   return ACTIVE_HOLD_STATUSES.has(normalized);
 }
 
-function windowsOverlap(startA: string, endA: string, startB: string, endB: string) {
-  return startA <= endB && endA >= startB;
-}
-
 function normalizeDumpsterSize(value: string | null | undefined) {
   return String(value ?? "").trim();
+}
+
+function extractCapacityYards(value: string | null | undefined) {
+  const match = String(value ?? "").trim().match(/(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function normalizeSizeKey(value: string | null | undefined) {
+  const capacity = extractCapacityYards(value);
+  return capacity == null ? normalizeDumpsterSize(value).toLowerCase() : `${capacity}-yard`;
+}
+
+function canUseDumpsterForAvailability(row: DumpsterRow) {
+  return (
+    Boolean(row.active) &&
+    normalizeStatus(row.operational_status) !== "maintenance hold" &&
+    normalizeStatus(row.service_status) !== "out of service"
+  );
 }
 
 function normalizeDumpsterProductId(value: string | null | undefined) {
@@ -108,11 +175,14 @@ export async function getPooledDumpsterAvailabilityBySize(
     throw new Error("deliveryDate must use YYYY-MM-DD.");
   }
 
-  const pricingSettings = await getPricingSettingsSnapshot();
+  const rentalPolicy = await getDumpsterRentalPolicy({
+    dumpsterSize,
+    dumpsterProductId,
+  });
   const requestedPickupDate =
     input.pickupDate && isYmd(input.pickupDate)
       ? input.pickupDate
-      : addDaysYmd(input.deliveryDate, pricingSettings.standardRentalDays);
+      : addDaysYmd(input.deliveryDate, rentalPolicy.standardRentalDays);
 
   if (!isYmd(requestedPickupDate)) {
     throw new Error("pickupDate must use YYYY-MM-DD.");
@@ -127,20 +197,19 @@ export async function getPooledDumpsterAvailabilityBySize(
   const [dumpstersResult, bookingsResult, holdsResult] = await Promise.all([
     supabaseAdmin
       .from("dumpsters")
-      .select("id", { count: "exact", head: true })
-      .eq("size", dumpsterSize)
-      .eq("active", true)
-      .eq("service_status", "Ready")
-      .neq("operational_status", "Maintenance hold"),
+      .select("id, display_name, size, active, operational_status, maintenance_status, service_status, asset_tag")
+      .eq("active", true),
     supabaseAdmin
       .from("bookings")
-      .select("id, status, delivery_date, pickup_date, included_rental_days, dumpster_size")
+      .select(
+        "id, status, delivery_date, pickup_date, included_rental_days, dumpster_size, dumpster_product_id, dumpster_id",
+      )
       .eq("dumpster_size", dumpsterSize)
       .not("delivery_date", "is", null)
       .order("delivery_date", { ascending: true }),
     supabaseAdmin
       .from("booking_holds")
-      .select("id, status, delivery_date, expires_at, dumpster_size, dumpster_product_id")
+      .select("id, status, delivery_date, pickup_date, expires_at, dumpster_size, dumpster_product_id")
       .eq("dumpster_size", dumpsterSize)
       .gt("expires_at", nowIso)
       .order("delivery_date", { ascending: true }),
@@ -158,39 +227,60 @@ export async function getPooledDumpsterAvailabilityBySize(
     throw new Error(holdsResult.error.message);
   }
 
-  const totalBookable = Number(dumpstersResult.count ?? 0);
+  const requestedSelectionDebug = {
+    dumpsterSize,
+    dumpsterProductId,
+    productName: rentalPolicy.productName,
+    normalizedSizeKey: normalizeSizeKey(dumpsterSize),
+    capacityYards: extractCapacityYards(dumpsterSize),
+  };
+  const inventoryRows = ((dumpstersResult.data ?? []) as DumpsterRow[])
+    .filter((dumpster) => canUseDumpsterForAvailability(dumpster))
+    .filter((dumpster) => normalizeSizeKey(dumpster.size) === requestedSelectionDebug.normalizedSizeKey);
+  const compatibleDumpstersConsidered = inventoryRows.map((dumpster) => ({
+    id: dumpster.id,
+    label: dumpster.display_name?.trim() || dumpster.asset_tag?.trim() || dumpster.id,
+  }));
+  const totalBookable = compatibleDumpstersConsidered.length;
   const bookings = (bookingsResult.data ?? []) as BookingWindowRow[];
   const holds = (holdsResult.data ?? []) as HoldRow[];
   const overlappingBookings: OverlappingBookingDetail[] = [];
   const overlappingHolds: OverlappingHoldDetail[] = [];
+  const blockers: RentalWindowBlocker[] = [];
 
   for (const booking of bookings) {
     if (!shouldCountBookingStatus(booking.status)) continue;
     if (!isYmd(booking.delivery_date)) continue;
+    const bookingDeliveryDate = String(booking.delivery_date);
 
     const effectivePickupDate =
       booking.pickup_date && isYmd(booking.pickup_date)
         ? booking.pickup_date
         : addDaysYmd(
-            booking.delivery_date,
-            Math.max(1, booking.included_rental_days ?? pricingSettings.standardRentalDays),
+            bookingDeliveryDate,
+            Math.max(1, booking.included_rental_days ?? rentalPolicy.standardRentalDays),
           );
 
-    if (
-      windowsOverlap(
-        booking.delivery_date,
-        effectivePickupDate,
-        input.deliveryDate,
-        requestedPickupDate,
-      )
-    ) {
-      overlappingBookings.push({
-        id: booking.id,
-        status: booking.status,
-        deliveryDate: booking.delivery_date,
-        effectivePickupDate,
-      });
-    }
+    const detail: OverlappingBookingDetail = {
+      id: booking.id,
+      status: booking.status,
+      deliveryDate: bookingDeliveryDate,
+      effectivePickupDate,
+      assignedDumpsterId: booking.dumpster_id ?? null,
+      dumpsterProductId: normalizeDumpsterProductId(booking.dumpster_product_id),
+    };
+
+    overlappingBookings.push(detail);
+    blockers.push({
+      id: booking.id,
+      type: "booking",
+      status: booking.status,
+      deliveryDate: bookingDeliveryDate,
+      effectivePickupDate,
+      assignedDumpsterId: booking.dumpster_id ?? null,
+      dumpsterSize,
+      dumpsterProductId: normalizeDumpsterProductId(booking.dumpster_product_id),
+    });
   }
 
   for (const hold of holds) {
@@ -198,40 +288,88 @@ export async function getPooledDumpsterAvailabilityBySize(
     if (!isYmd(hold.delivery_date)) continue;
     if (!hold.expires_at) continue;
     if (normalizeDumpsterSize(hold.dumpster_size) !== dumpsterSize) continue;
-
+    const holdDeliveryDate = String(hold.delivery_date);
+    const effectivePickupDate =
+      hold.pickup_date && isYmd(hold.pickup_date)
+        ? hold.pickup_date
+        : addDaysYmd(holdDeliveryDate, rentalPolicy.standardRentalDays);
     const holdProductId = normalizeDumpsterProductId(hold.dumpster_product_id);
-    if (dumpsterProductId && holdProductId && holdProductId !== dumpsterProductId) continue;
 
-    if (windowsOverlap(hold.delivery_date, hold.delivery_date, input.deliveryDate, requestedPickupDate)) {
-      overlappingHolds.push({
-        id: hold.id,
-        status: hold.status,
-        deliveryDate: hold.delivery_date,
-        expiresAt: hold.expires_at,
-      });
-    }
+    const detail: OverlappingHoldDetail = {
+      id: hold.id,
+      status: hold.status,
+      deliveryDate: holdDeliveryDate,
+      effectivePickupDate,
+      expiresAt: hold.expires_at,
+      dumpsterProductId: holdProductId,
+    };
+
+    overlappingHolds.push(detail);
+    blockers.push({
+      id: hold.id,
+      type: "hold",
+      status: hold.status,
+      deliveryDate: holdDeliveryDate,
+      effectivePickupDate,
+      assignedDumpsterId: null,
+      dumpsterSize,
+      dumpsterProductId: holdProductId,
+    });
   }
 
-  const reservedOrInUseFromBookings = overlappingBookings.length;
-  const reservedFromHolds = overlappingHolds.length;
-  const reservedOrInUse = reservedOrInUseFromBookings + reservedFromHolds;
+  const windowAvailability = evaluateRentalWindowAvailability({
+    requestedDeliveryDate: input.deliveryDate,
+    requestedPickupDate,
+    dumpsters: compatibleDumpstersConsidered,
+    blockers,
+    excludeBlockerIds: [...(input.excludeBookingIds ?? []), ...(input.excludeHoldIds ?? [])],
+  });
 
   return {
     dumpsterSize,
     dumpsterProductId,
+    productName: rentalPolicy.productName,
     requestedDeliveryDate: input.deliveryDate,
     requestedPickupDate,
     totalBookable,
-    reservedOrInUseFromBookings,
-    reservedFromHolds,
-    reservedOrInUse,
-    available: Math.max(totalBookable - reservedOrInUse, 0),
-    overlappingBookingCount: overlappingBookings.length,
-    overlappingBookingIds: overlappingBookings.map((booking) => booking.id),
-    overlappingBookings,
-    overlappingHoldCount: overlappingHolds.length,
-    overlappingHoldIds: overlappingHolds.map((hold) => hold.id),
-    overlappingHolds,
+    reservedOrInUseFromBookings: overlappingBookings.length,
+    reservedFromHolds: overlappingHolds.length,
+    reservedOrInUse: totalBookable - windowAvailability.availableCount,
+    available: windowAvailability.availableCount,
+    overlappingBookingCount: windowAvailability.blockersConsidered.filter((blocker) => blocker.type === "booking").length,
+    overlappingBookingIds: windowAvailability.blockersConsidered
+      .filter((blocker) => blocker.type === "booking")
+      .map((blocker) => blocker.id),
+    overlappingBookings: overlappingBookings.filter((booking) =>
+      windowAvailability.blockersConsidered.some((blocker) => blocker.id === booking.id && blocker.type === "booking"),
+    ),
+    overlappingHoldCount: windowAvailability.blockersConsidered.filter((blocker) => blocker.type === "hold").length,
+    overlappingHoldIds: windowAvailability.blockersConsidered
+      .filter((blocker) => blocker.type === "hold")
+      .map((blocker) => blocker.id),
+    overlappingHolds: overlappingHolds.filter((hold) =>
+      windowAvailability.blockersConsidered.some((blocker) => blocker.id === hold.id && blocker.type === "hold"),
+    ),
+    blockingRule: windowAvailability.blockingRule,
+    compatibleDumpstersConsidered: windowAvailability.compatibleDumpstersConsidered,
+    availableDumpsterIds: windowAvailability.availableDumpsterIds,
+    dumpsterDebug: windowAvailability.dumpsters,
+    debugSummary: {
+      requestedSelection: requestedSelectionDebug,
+      compatibleInventory: inventoryRows.map((dumpster) => ({
+        dumpsterId: dumpster.id,
+        label: dumpster.display_name?.trim() || dumpster.asset_tag?.trim() || dumpster.id,
+        rawSize: dumpster.size?.trim() || "",
+        normalizedSizeKey: normalizeSizeKey(dumpster.size),
+        capacityYards: extractCapacityYards(dumpster.size),
+        active: Boolean(dumpster.active),
+        operationalStatus: dumpster.operational_status,
+        maintenanceStatus: dumpster.maintenance_status,
+        serviceStatus: dumpster.service_status,
+        assetTag: dumpster.asset_tag,
+        matchedBy: "size" as const,
+      })),
+    },
   };
 }
 
@@ -240,10 +378,9 @@ export const INTERNAL_DUMPSTER_AVAILABILITY_RULES = {
   bookingStatusesExcluded: Array.from(EXCLUDED_BOOKING_STATUSES),
   holdStatusesIncluded: Array.from(ACTIVE_HOLD_STATUSES),
   holdStatusesExcluded: Array.from(EXCLUDED_HOLD_STATUSES),
-  bookingOverlapRule:
-    "existing.delivery_date <= requested_pickup_date AND existing.effective_pickup_date >= requested_delivery_date",
-  holdOverlapRule:
-    "hold.delivery_date BETWEEN requested_delivery_date AND requested_pickup_date",
+  bookingOverlapRule: "booking blocks a dumpster when its delivery-through-pickup window overlaps the requested window",
+  holdOverlapRule: "hold blocks a dumpster window when its reserved delivery-through-pickup window overlaps the requested window",
   holdMatchingNotes:
-    "Holds count only when dumpster_size matches the requested size. If both the request and the hold have dumpster_product_id, the product must also match. Holds still overlap by delivery date only because booking_holds does not yet persist a hold end date.",
+    "Compatibility is enforced by dumpster size. dumpster_product_id is preserved for the selected request, pricing, and debug output, but physical unit availability resolves against compatible dumpsters of the requested size.",
+  rentalWindowBlockingRule: RENTAL_WINDOW_BLOCKING_RULE,
 } as const;

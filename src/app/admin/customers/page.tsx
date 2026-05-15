@@ -315,8 +315,8 @@ export default async function AdminCustomersPage({
             </div>
           </div>
         ) : (
-          <div className="px-6 py-5 sm:px-8">
-            <table className="w-full table-fixed border-separate border-spacing-y-3">
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
               <colgroup>
                 <col style={{ width: "230px" }} />
                 <col style={{ width: "200px" }} />
@@ -326,38 +326,38 @@ export default async function AdminCustomersPage({
                 <col style={{ width: "50px" }} />
               </colgroup>
 
-              <thead>
-                <tr>
-                  <th className="rounded-l-[22px] border-y border-l border-slate-200/90 bg-slate-100 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+              <thead className="bg-slate-50/80">
+                <tr className="text-left">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 sm:px-8">
                     Customer
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Portal Status
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Total Bookings
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 pl-[60px] py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 pl-[60px] text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Latest booking
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 pr-[120px] py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 pr-[120px] text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Lifetime value
                   </th>
-                  <th className="rounded-r-[22px] border-y border-r border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-6 py-3.5 text-center sm:px-8">
                     <span className="sr-only">Open</span>
                   </th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-200/70">
                 {customers.map((customer) => (
                   <ClickableTableRow
                     key={customer.id}
                     href={`/admin/customers/${customer.id}`}
                     ariaLabel={`Open customer ${customer.name || customer.email || customer.id}`}
-                    className="group cursor-pointer outline-none transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-300"
+                    className="group cursor-pointer bg-white outline-none transition hover:bg-slate-50/70 focus-visible:bg-slate-50/70 focus-visible:outline-none"
                   >
-                    <td className="rounded-l-[24px] border-y border-l border-slate-200 bg-white px-5 py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                    <td className="px-6 py-4 align-top sm:px-8">
                       <div className="min-w-0">
                         <div className="font-semibold text-slate-900 transition group-hover:text-slate-950 group-focus-visible:text-slate-950">
                           {customer.name || "Unnamed customer"}
@@ -367,7 +367,7 @@ export default async function AdminCustomersPage({
                       </div>
                     </td>
 
-                    <td className="border-y border-slate-200 bg-white px-4 py-[18px] text-center align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                    <td className="px-4 py-4 text-center align-top">
                       <span
                         className={[
                           "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
@@ -382,11 +382,11 @@ export default async function AdminCustomersPage({
                       </span>
                     </td>
 
-                    <td className="border-y border-slate-200 bg-white px-4 py-[18px] text-center align-top text-sm font-medium text-slate-900 transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                    <td className="px-4 py-4 text-center align-top text-sm font-medium text-slate-900">
                       {customer.bookingCount}
                     </td>
 
-                    <td className="border-y border-slate-200 bg-white px-4 pl-[60px] py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                    <td className="px-4 py-4 pl-[60px] align-top">
                       {customer.latestBooking ? (
                         <div className="min-w-0 text-sm text-slate-700">
                           <div className="font-semibold text-slate-900">
@@ -402,11 +402,11 @@ export default async function AdminCustomersPage({
                       )}
                     </td>
 
-                    <td className="border-y border-slate-200 bg-white px-4 pr-[120px] py-[18px] text-right align-top text-sm font-semibold text-slate-900 transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                    <td className="px-4 py-4 pr-[120px] text-right align-top text-sm font-semibold text-slate-900">
                       {formatUsd(customer.lifetimeValue)}
                     </td>
 
-                    <td className="rounded-r-[24px] border-y border-r border-slate-200 bg-white px-3 py-[18px] align-middle transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                    <td className="px-6 py-4 align-middle sm:px-8">
                       <div className="flex items-center justify-center">
                         <span
                           aria-hidden="true"

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import {
-  DUMPSTER_SELECT,
-  type DumpsterRow,
   buildDumpsterInsert,
   mapDumpsterRowToRecord,
   validateDumpsterRecord,
-} from "@/lib/admin/dumpster-inventory";
+  DUMPSTER_SELECT,
+  getNextDumpsterEquipmentIdFromValues,
+  type DumpsterRow,
+} from "@/lib/admin/dumpster-inventory-shared";
+import { decorateDumpstersWithOperationalStatus } from "@/lib/admin/dumpster-operational-status";
 import type { DumpsterRecord } from "@/lib/admin/equipment";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -30,9 +32,22 @@ export async function POST(req: Request) {
       );
     }
 
+    const { data: equipmentRows, error: equipmentError } = await supabaseAdmin
+      .from("dumpsters")
+      .select("equipment_id");
+
+    if (equipmentError) {
+      return NextResponse.json({ ok: false, error: equipmentError.message }, { status: 400 });
+    }
+
+    const nextEquipmentId = getNextDumpsterEquipmentIdFromValues(
+      ((equipmentRows ?? []) as Array<{ equipment_id: string | null }>).map((row) => row.equipment_id ?? ""),
+    );
+    const createRecord = { ...dumpster, equipmentId: nextEquipmentId };
+
     const { data, error } = await supabaseAdmin
       .from("dumpsters")
-      .insert(buildDumpsterInsert(dumpster))
+      .insert(buildDumpsterInsert(createRecord))
       .select(DUMPSTER_SELECT)
       .single<DumpsterRow>();
 
@@ -40,9 +55,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
     }
 
+    const [savedDumpster] = await decorateDumpstersWithOperationalStatus([
+      mapDumpsterRowToRecord(data),
+    ]);
+
     return NextResponse.json({
       ok: true,
-      dumpster: mapDumpsterRowToRecord(data),
+      dumpster: savedDumpster,
     });
   } catch (error) {
     return NextResponse.json(

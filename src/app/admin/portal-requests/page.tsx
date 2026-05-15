@@ -73,6 +73,7 @@ export default async function AdminPortalRequestsPage({
         actions={
           <>
             <FilterLink href="/admin/portal-requests?filter=all" label="All" active={filter === "all"} />
+            <FilterLink href="/admin/portal-requests?filter=attention" label="Needs attention" active={filter === "attention"} />
             <FilterLink href="/admin/portal-requests?filter=submitted" label="New" active={filter === "submitted"} />
             <FilterLink
               href="/admin/portal-requests?filter=under_review"

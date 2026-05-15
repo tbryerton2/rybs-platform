@@ -23,6 +23,12 @@ begin
 end
 $$;
 
+alter table public.service_area_zips
+  add column if not exists created_at timestamptz not null default now();
+
+alter table public.service_area_zips
+  add column if not exists updated_at timestamptz not null default now();
+
 create index if not exists service_area_zips_active_idx
   on public.service_area_zips (active);
 

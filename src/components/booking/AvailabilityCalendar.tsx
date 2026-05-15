@@ -9,6 +9,7 @@ export type CalendarAvailabilityEntry = {
   remaining: number;
   capacity: number;
   used: number;
+  requestedPickupDate?: string | null;
   state: CalendarAvailabilityState;
   label?: string;
 };
@@ -18,6 +19,19 @@ type CalendarLegendItem = {
   dotClassName: string;
 };
 
+type CalendarTileContext = {
+  date: string;
+  isCurrentMonth: boolean;
+  isSelected: boolean;
+};
+
+type CalendarTileVariant =
+  | "rental-day"
+  | "rental-pickup"
+  | "rental-preview-start"
+  | "rental-preview-day"
+  | "rental-preview-pickup";
+
 type AvailabilityCalendarProps = {
   selectedDate: string;
   onSelectDate: (date: string) => void;
@@ -25,9 +39,13 @@ type AvailabilityCalendarProps = {
   loading?: boolean;
   loadError?: string | null;
   nextAvailableDate?: string | null;
-  getTileLabel?: (entry: CalendarAvailabilityEntry | undefined, context: { isCurrentMonth: boolean }) => string | null;
+  getTileLabel?: (entry: CalendarAvailabilityEntry | undefined, context: CalendarTileContext) => string | null;
+  getTileVariant?: (entry: CalendarAvailabilityEntry | undefined, context: CalendarTileContext) => CalendarTileVariant | null;
   legendItems?: CalendarLegendItem[];
   loadingMessage?: string;
+  loadingSecondaryMessage?: string;
+  errorMessage?: string;
+  onRetry?: () => void;
   emptyMonthMessage?: (monthLabel: string, nextAvailableDate?: string | null) => string;
   getAriaLabel?: (entry: CalendarAvailabilityEntry | undefined, date: string) => string;
 };
@@ -105,7 +123,7 @@ function formatDateLong(ymd: string) {
 function getStatusLabel(entry: CalendarAvailabilityEntry | undefined) {
   if (!entry) return "Not loaded";
   if (entry.state === "past") return "Past";
-  if (entry.state === "limited") return "Limited";
+  if (entry.state === "limited") return "Available";
   if (entry.state === "available") return "Available";
   return "Unavailable";
 }
@@ -118,8 +136,12 @@ export function AvailabilityCalendar({
   loadError,
   nextAvailableDate,
   getTileLabel,
+  getTileVariant,
   legendItems,
   loadingMessage = "Loading calendar availability…",
+  loadingSecondaryMessage = "This usually takes a few seconds.",
+  errorMessage = "We couldn’t load availability. Please try again.",
+  onRetry,
   emptyMonthMessage,
   getAriaLabel,
 }: AvailabilityCalendarProps) {
@@ -171,12 +193,15 @@ export function AvailabilityCalendar({
 
   const resolvedLegendItems = legendItems ?? [
     { label: "Available", dotClassName: "bg-emerald-500" },
-    { label: "Limited", dotClassName: "bg-amber-500" },
     { label: "Unavailable", dotClassName: "bg-slate-400" },
+    { label: "Selected rental", dotClassName: "bg-[#F97316]" },
   ];
 
   return (
-    <div className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.45)] sm:p-4">
+    <div
+      className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.45)] sm:p-4"
+      aria-busy={loading}
+    >
       <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
@@ -187,7 +212,7 @@ export function AvailabilityCalendar({
           <button
             type="button"
             onClick={() => setVisibleMonth((month) => addMonths(month, -1))}
-            disabled={Boolean(minLoadedMonth && addMonths(visibleMonth, -1) < minLoadedMonth)}
+            disabled={loading || Boolean(minLoadedMonth && addMonths(visibleMonth, -1) < minLoadedMonth)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full text-sm text-slate-700 transition hover:bg-white hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
             aria-label="Previous month"
           >
@@ -196,7 +221,7 @@ export function AvailabilityCalendar({
           <button
             type="button"
             onClick={() => setVisibleMonth((month) => addMonths(month, 1))}
-            disabled={Boolean(maxLoadedMonth && addMonths(visibleMonth, 1) > maxLoadedMonth)}
+            disabled={loading || Boolean(maxLoadedMonth && addMonths(visibleMonth, 1) > maxLoadedMonth)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full text-sm text-slate-700 transition hover:bg-white hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent"
             aria-label="Next month"
           >
@@ -205,148 +230,202 @@ export function AvailabilityCalendar({
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 sm:gap-1.5 sm:text-[11px]">
-        {WEEKDAY_LABELS.map((label) => (
-          <div key={label} className="py-1.5">
-            {label}
+      <div className="relative">
+        <div
+          className={`transition duration-200 ${
+            loading ? "pointer-events-none select-none opacity-45 blur-[1px]" : ""
+          }`}
+          aria-hidden={loading}
+        >
+          <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 sm:gap-1.5 sm:text-[11px]">
+            {WEEKDAY_LABELS.map((label) => (
+              <div key={label} className="py-1.5">
+                {label}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="mt-1 grid grid-cols-7 gap-1 sm:gap-1.5">
-        {monthDates.map((date) => {
-          const ymd = toYmd(date);
-          const entry = availabilityByDate.get(ymd);
-          const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-          const isSelected = ymd === selectedDate;
-          const isToday = ymd === today;
-          const isDisabled =
-            !isCurrentMonth ||
-            !entry ||
-            entry.state === "past" ||
-            entry.state === "unavailable";
+          <div className="mt-1 grid grid-cols-7 gap-1 sm:gap-1.5">
+            {monthDates.map((date) => {
+              const ymd = toYmd(date);
+              const entry = availabilityByDate.get(ymd);
+              const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
+              const isSelected = ymd === selectedDate;
+              const isToday = ymd === today;
+              const isPastDate = ymd < today;
+              const tileContext = { date: ymd, isCurrentMonth, isSelected };
+              const tileVariant = isCurrentMonth && !loading ? getTileVariant?.(entry, tileContext) ?? null : null;
+              const isDisabled =
+                loading ||
+                !isCurrentMonth ||
+                !entry ||
+                entry.state === "past" ||
+                entry.state === "unavailable";
 
-          const baseClassName =
-            "group relative min-h-[56px] rounded-[16px] border px-2 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 sm:min-h-[74px] sm:px-2.5 sm:py-2.5";
+              const baseClassName =
+                "group relative min-h-[56px] rounded-[16px] border px-2 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 sm:min-h-[74px] sm:px-2.5 sm:py-2.5";
 
-          let stateClassName =
-            "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50";
+              let stateClassName =
+                "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50";
 
-          if (!isCurrentMonth) {
-            stateClassName = "border-transparent bg-slate-50/20 text-slate-300";
-          } else if (!entry || entry.state === "past") {
-            stateClassName = "border-slate-200/70 bg-slate-100/70 text-slate-400";
-          } else if (entry.state === "unavailable") {
-            stateClassName = "border-slate-200 bg-slate-100/95 text-slate-400";
-          } else if (entry.state === "limited") {
-            stateClassName =
-              "border-amber-300 bg-amber-50/95 text-amber-950 ring-1 ring-amber-200/60 hover:border-amber-400 hover:bg-amber-100/85";
-          } else {
-            stateClassName =
-              "border-emerald-200 bg-emerald-50/90 text-emerald-950 hover:border-emerald-300 hover:bg-emerald-100/80";
-          }
-
-          if (isSelected) {
-            stateClassName =
-              "border-[#F97316] bg-[#F97316] text-white shadow-[0_16px_30px_-18px_rgba(249,115,22,0.85)]";
-          }
-
-          return (
-            <button
-              key={ymd}
-              type="button"
-              disabled={isDisabled}
-              onClick={() => onSelectDate(ymd)}
-              aria-pressed={isSelected}
-              aria-label={getAriaLabel ? getAriaLabel(entry, ymd) : `${formatDateLong(ymd)}. ${getStatusLabel(entry)}.`}
-              className={`${baseClassName} ${stateClassName} ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-              title={
-                !entry
-                  ? "Availability not loaded"
-                  : entry.state === "unavailable"
-                    ? `${formatDateLong(ymd)} is unavailable`
-                    : entry.state === "past"
-                      ? `${formatDateLong(ymd)} is no longer bookable`
-                      : `${formatDateLong(ymd)} has ${entry.remaining} dumpster${entry.remaining === 1 ? "" : "s"} available`
+              if (!isCurrentMonth) {
+                stateClassName = "border-transparent bg-slate-50/20 text-slate-300";
+              } else if (loading && !isPastDate) {
+                stateClassName = "border-slate-200 bg-slate-50 text-slate-400";
+              } else if (tileVariant === "rental-pickup") {
+                stateClassName =
+                  "border-[#F97316]/70 bg-[#FFF7ED] text-[#9A3412] ring-2 ring-[#F97316]/30 hover:border-[#F97316] hover:bg-[#FFEDD5]";
+              } else if (tileVariant === "rental-day") {
+                stateClassName =
+                  "border-[#FDBA74]/80 bg-[#FFF7ED] text-[#9A3412] ring-1 ring-[#F97316]/15 hover:border-[#F97316]/60 hover:bg-[#FFEDD5]";
+              } else if (tileVariant === "rental-preview-pickup") {
+                stateClassName =
+                  "border-[#FDBA74]/75 bg-[#FFF7ED]/70 text-[#9A3412] ring-1 ring-[#FDBA74]/45 hover:border-[#F97316]/50 hover:bg-[#FFF7ED]";
+              } else if (tileVariant === "rental-preview-start") {
+                stateClassName =
+                  "border-[#FDBA74]/70 bg-[#FFF7ED]/60 text-[#9A3412] ring-1 ring-[#FDBA74]/35 hover:border-[#F97316]/50 hover:bg-[#FFF7ED]";
+              } else if (tileVariant === "rental-preview-day") {
+                stateClassName =
+                  "border-[#FED7AA]/80 bg-[#FFF7ED]/55 text-[#9A3412] ring-1 ring-[#FED7AA]/45 hover:border-[#FDBA74]/70 hover:bg-[#FFF7ED]/90";
+              } else if (!entry || entry.state === "past") {
+                stateClassName = "border-slate-200/70 bg-slate-100/70 text-slate-400";
+              } else if (entry.state === "unavailable") {
+                stateClassName = "border-slate-200 bg-slate-100/95 text-slate-400";
+              } else {
+                stateClassName =
+                  "border-emerald-200 bg-emerald-50/90 text-emerald-950 hover:border-emerald-300 hover:bg-emerald-100/80";
               }
-            >
-              <div className="flex items-start justify-between gap-1">
-                <span
-                  className={`text-base font-semibold sm:text-lg ${!isCurrentMonth ? "opacity-55" : ""} ${isSelected ? "text-white" : ""}`}
+
+              if (isSelected) {
+                stateClassName =
+                  "border-[#F97316] bg-[#F97316] text-white shadow-[0_16px_30px_-18px_rgba(249,115,22,0.85)]";
+              }
+
+              const ariaLabel = getAriaLabel
+                ? getAriaLabel(entry, ymd)
+                : `${formatDateLong(ymd)}. ${getStatusLabel(entry)}.`;
+
+              return (
+                <button
+                  key={ymd}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => onSelectDate(ymd)}
+                  aria-pressed={isSelected}
+                  aria-label={ariaLabel}
+                  className={`${baseClassName} ${stateClassName} ${isDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                  title={
+                    loading
+                      ? "Availability is loading"
+                      : ariaLabel
+                  }
                 >
-                  {date.getDate()}
-                </span>
-                {isToday && (
-                  <span
-                    className={`inline-flex h-2.5 w-2.5 rounded-full ring-2 ${
-                      isSelected ? "bg-white ring-white/35" : "bg-[#F97316] ring-[#F97316]/20"
-                    }`}
-                    aria-hidden="true"
-                  />
-                )}
-              </div>
-
-              <div className="mt-1.5 flex min-h-[14px] items-end">
-                {(() => {
-                  const label = getTileLabel
-                    ? getTileLabel(entry, { isCurrentMonth })
-                    : !isCurrentMonth
-                      ? null
-                      : !entry || entry.state === "past"
-                        ? "Past"
-                        : entry.state === "unavailable"
-                          ? "Sold out"
-                          : `${entry.remaining} left`;
-
-                  return label ? (
+                  <div className="flex items-start justify-between gap-1">
                     <span
-                      className={`text-[10px] font-medium ${
-                        !entry || entry.state === "unavailable" || entry.state === "past"
-                          ? isSelected
-                            ? "text-white/85"
-                            : "text-slate-500"
-                          : isSelected
-                            ? "text-white/85"
-                            : "text-current/80"
-                      }`}
+                      className={`text-base font-semibold sm:text-lg ${!isCurrentMonth ? "opacity-55" : ""} ${isSelected ? "text-white" : ""}`}
                     >
-                      {label}
+                      {date.getDate()}
                     </span>
-                  ) : null;
-                })()}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                    {isToday && (
+                      <span
+                        className={`inline-flex h-2.5 w-2.5 rounded-full ring-2 ${
+                          isSelected ? "bg-white ring-white/35" : "bg-[#F97316] ring-[#F97316]/20"
+                        }`}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
 
-      <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/80 pt-2">
-        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
-          {resolvedLegendItems.map((item) => (
-            <div key={item.label} className="inline-flex items-center gap-2 rounded-full bg-slate-100/70 px-2.5 py-1">
-              <span className={`inline-flex h-2.5 w-2.5 rounded-full ${item.dotClassName}`} aria-hidden="true" />
-              {item.label}
+                  <div className="mt-1.5 flex min-h-[14px] items-end">
+                    {(() => {
+                      const label =
+                        loading && isCurrentMonth && !isPastDate
+                          ? null
+                          : getTileLabel
+                            ? getTileLabel(entry, tileContext)
+                            : !isCurrentMonth
+                              ? null
+                              : !entry || entry.state === "past"
+                                ? "Past"
+                                : entry.state === "unavailable"
+                                  ? "Sold out"
+                                  : `${entry.remaining} left`;
+
+                      return label ? (
+                        <span
+                          className={`text-[10px] font-medium ${
+                            !entry || entry.state === "unavailable" || entry.state === "past"
+                              ? isSelected
+                                ? "text-white/85"
+                                : "text-slate-500"
+                              : isSelected
+                                ? "text-white/85"
+                                : "text-current/80"
+                          }`}
+                        >
+                          {label}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/80 pt-2">
+            <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+              {resolvedLegendItems.map((item) => (
+                <div key={item.label} className="inline-flex items-center gap-2 rounded-full bg-slate-100/70 px-2.5 py-1">
+                  <span className={`inline-flex h-2.5 w-2.5 rounded-full ${item.dotClassName}`} aria-hidden="true" />
+                  {item.label}
+                </div>
+              ))}
             </div>
-          ))}
+
+            {loadError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                <div>{errorMessage}</div>
+                {onRetry ? (
+                  <button
+                    type="button"
+                    onClick={onRetry}
+                    className="mt-2 inline-flex h-9 items-center justify-center rounded-full border border-red-200 bg-white px-3.5 text-sm font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-200"
+                  >
+                    Retry
+                  </button>
+                ) : null}
+              </div>
+            ) : !loading && !monthHasLoadedDates ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                More dates are not loaded for this month yet.
+              </div>
+            ) : !loading && !monthHasAvailable ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                {emptyMonthMessage
+                  ? emptyMonthMessage(formatMonthLabel(visibleMonth), nextAvailableDate)
+                  : `No delivery dates available in ${formatMonthLabel(visibleMonth)}.${nextAvailableDate ? ` Next available: ${formatDateLong(nextAvailableDate)}.` : ""}`}
+              </div>
+            ) : null}
+          </div>
         </div>
 
-        {loadError ? (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-            {loadError}
-          </div>
-        ) : loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            {loadingMessage}
-          </div>
-        ) : !monthHasLoadedDates ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            More dates are not loaded for this month yet.
-          </div>
-        ) : !monthHasAvailable ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            {emptyMonthMessage
-              ? emptyMonthMessage(formatMonthLabel(visibleMonth), nextAvailableDate)
-              : `No delivery dates available in ${formatMonthLabel(visibleMonth)}.${nextAvailableDate ? ` Next available: ${formatDateLong(nextAvailableDate)}.` : ""}`}
+        {loading ? (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[22px] bg-white/75 px-4 backdrop-blur-sm">
+            <div
+              role="status"
+              aria-live="polite"
+              className="max-w-[280px] rounded-2xl border border-slate-200 bg-white px-5 py-4 text-center shadow-xl ring-1 ring-slate-200/70"
+            >
+              <div
+                className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-[#F97316]"
+                aria-hidden="true"
+              />
+              <div className="mt-3 text-sm font-semibold text-slate-950">{loadingMessage}</div>
+              {loadingSecondaryMessage ? (
+                <div className="mt-1 text-xs leading-5 text-slate-500">{loadingSecondaryMessage}</div>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>

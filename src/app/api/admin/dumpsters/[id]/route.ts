@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import {
-  DUMPSTER_SELECT,
-  type DumpsterRow,
   buildDumpsterInsert,
   mapDumpsterRowToRecord,
   validateDumpsterRecord,
-} from "@/lib/admin/dumpster-inventory";
+  DUMPSTER_SELECT,
+  type DumpsterRow,
+} from "@/lib/admin/dumpster-inventory-shared";
+import { decorateDumpstersWithOperationalStatus } from "@/lib/admin/dumpster-operational-status";
 import type { DumpsterRecord } from "@/lib/admin/equipment";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -42,9 +43,13 @@ export async function PATCH(
         return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
       }
 
+      const [savedDumpster] = await decorateDumpstersWithOperationalStatus([
+        mapDumpsterRowToRecord(data),
+      ]);
+
       return NextResponse.json({
         ok: true,
-        dumpster: mapDumpsterRowToRecord(data),
+        dumpster: savedDumpster,
       });
     }
 
@@ -60,9 +65,13 @@ export async function PATCH(
         return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
       }
 
+      const [savedDumpster] = await decorateDumpstersWithOperationalStatus([
+        mapDumpsterRowToRecord(data),
+      ]);
+
       return NextResponse.json({
         ok: true,
-        dumpster: mapDumpsterRowToRecord(data),
+        dumpster: savedDumpster,
       });
     }
 
@@ -70,6 +79,57 @@ export async function PATCH(
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : "Dumpster update failed." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+
+    const { count, error: bookingError } = await supabaseAdmin
+      .from("bookings")
+      .select("id", { count: "exact", head: true })
+      .eq("dumpster_id", id);
+
+    if (bookingError) {
+      return NextResponse.json({ ok: false, error: bookingError.message }, { status: 400 });
+    }
+
+    if ((count ?? 0) > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "This dumpster cannot be deleted because it is connected to existing bookings. Deactivate it instead.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const { error } = await supabaseAdmin.from("dumpsters").delete().eq("id", id);
+
+    if (error) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            error.message.includes("foreign key") || error.message.includes("constraint")
+              ? "This dumpster cannot be deleted because it is connected to existing bookings. Deactivate it instead."
+              : error.message,
+        },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "Dumpster delete failed." },
       { status: 500 },
     );
   }

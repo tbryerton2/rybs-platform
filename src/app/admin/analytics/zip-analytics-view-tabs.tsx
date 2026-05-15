@@ -12,7 +12,7 @@ export function ZipAnalyticsViewTabs({ active }: { active: "heat" | "map" }) {
             : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
         ].join(" ")}
       >
-        Heat Table
+        Table View
       </Link>
 
       <Link

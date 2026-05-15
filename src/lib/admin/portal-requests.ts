@@ -165,6 +165,10 @@ export async function getPortalRequests(filter: string): Promise<PortalRequestLi
     query = query.eq("status", filter);
   }
 
+  if (filter === "attention") {
+    query = query.in("status", ["submitted", "under_review", "approved"]);
+  }
+
   if (filter === "pickup_request" || filter === "extension_request" || filter === "issue_report") {
     query = query.eq("action_type", filter);
   }
@@ -177,7 +181,22 @@ export async function getPortalRequests(filter: string): Promise<PortalRequestLi
     return { requests: [], loadError };
   }
 
-  const requests = (data ?? []) as PortalRequestBaseRow[];
+  let requests = (data ?? []) as PortalRequestBaseRow[];
+
+  if (filter === "attention") {
+    const now = Date.now();
+    requests = requests.filter((request) => {
+      if (request.status === "submitted" || request.status === "under_review") {
+        return true;
+      }
+
+      if (request.status !== "approved") {
+        return false;
+      }
+
+      return now - new Date(request.submitted_at).getTime() >= 24 * 60 * 60 * 1000;
+    });
+  }
   const bookingsById = await loadBookings(uniqueIds(requests.map((request) => request.booking_id)));
   const customersById = await loadCustomers(
     uniqueIds(requests.map((request) => getRelatedCustomerId(request, bookingsById.get(request.booking_id)))),

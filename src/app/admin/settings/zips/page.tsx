@@ -4,6 +4,7 @@ export const revalidate = 0;
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
+import { InteractiveInfoPopover } from "@/app/admin/customers/[id]/interactive-info-popover";
 import { AddZipForm } from "./add-zip-form";
 import { ZipList } from "./zip-list";
 
@@ -15,23 +16,6 @@ type ServiceZipRow = {
   town: string | null;
   price_14_yard_override: number | null;
 };
-
-function StatCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="text-sm font-medium text-slate-500">{label}</div>
-      <div className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-        {value}
-      </div>
-    </div>
-  );
-}
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -61,15 +45,20 @@ export default async function AdminServiceAreaPage({
 
   const rows = (data ?? []) as ServiceZipRow[];
 
-  const totalCount = rows.length;
-  const activeCount = rows.filter((row) => row.active).length;
-  const disabledCount = totalCount - activeCount;
-
   return (
     <AdminPage>
       <AdminPageHeader
-        title="Service Area"
-        description="Manage ZIP codes where the business accepts bookings."
+        className="lg:flex-row lg:items-end lg:justify-between"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <span>Service Area</span>
+            <InteractiveInfoPopover
+              label="About Service Area"
+              body="Manage ZIP codes where the business accepts bookings."
+            />
+          </span>
+        }
+        actions={<AddZipForm compact />}
       />
 
       <AdminToastTrigger
@@ -96,24 +85,6 @@ export default async function AdminServiceAreaPage({
         trigger={toggled}
         clearParam="toggled"
       />
-
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total ZIP codes" value={totalCount} />
-        <StatCard label="Active ZIP codes" value={activeCount} />
-        <StatCard label="Disabled ZIP codes" value={disabledCount} />
-      </div>
-
-      <div className="mt-8 rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">Add ZIP code</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Add a new service ZIP. New ZIP codes are active by default.
-          </p>
-        </div>
-
-        <AddZipForm />
-      </div>
 
       <ZipList rows={rows} />
     </AdminPage>

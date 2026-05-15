@@ -26,6 +26,12 @@ type BookingDraft = {
   town?: string;
   dumpsterSize?: string;
   dumpsterProductId?: string | null;
+  dumpsterDisplayName?: string;
+  includedWeightTons?: number;
+  tonOveragePrice?: number;
+  includedRentalDays?: number;
+  extraDayPrice?: number;
+  basePrice?: number;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -149,7 +155,32 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     // Don't redirect until we've actually loaded sessionStorage
     if (!hydrated) return;
 
-    if (!draft.holdId || !draft.holdExpiresAt) {
+    const serviceZip = (draft.zip || draft.customerZip || "").replace(/\D/g, "").slice(0, 5);
+    const hasDumpsterSelection = Boolean(
+      (draft.dumpsterSize || "").trim() || (draft.dumpsterProductId || "").trim(),
+    );
+    const hasPickupDate = isYMD((draft.pickupDate || draft.priceQuote?.effectivePickupDate || "").trim());
+    const hasContactDetails = Boolean(
+      (draft.customerName || "").trim() &&
+        (draft.customerEmail || "").trim() &&
+        (draft.customerPhone || "").trim() &&
+        (draft.customerStreet || "").trim() &&
+        (draft.customerCity || "").trim() &&
+        (draft.customerState || "").trim() &&
+        (draft.customerZip || serviceZip).trim(),
+    );
+
+    if (!/^\d{5}$/.test(serviceZip)) {
+      router.replace("/book/address");
+      return;
+    }
+
+    if (!hasDumpsterSelection) {
+      router.replace(`/book?zip=${encodeURIComponent(serviceZip)}`);
+      return;
+    }
+
+    if (!draft.holdId || !draft.holdExpiresAt || !hasPickupDate) {
       router.replace("/book/date");
       return;
     }
@@ -157,16 +188,41 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     const expires = Date.parse(draft.holdExpiresAt);
     if (!Number.isFinite(expires) || expires <= nowMs) {
       router.replace("/book/date");
+      return;
     }
-  }, [hydrated, draft.holdId, draft.holdExpiresAt, nowMs, router]);
+
+    if (!hasContactDetails) {
+      router.replace("/book/placement");
+    }
+  }, [
+    hydrated,
+    draft.customerCity,
+    draft.customerEmail,
+    draft.customerName,
+    draft.customerPhone,
+    draft.customerState,
+    draft.customerStreet,
+    draft.customerZip,
+    draft.dumpsterProductId,
+    draft.dumpsterSize,
+    draft.holdExpiresAt,
+    draft.holdId,
+    draft.pickupDate,
+    draft.priceQuote,
+    draft.zip,
+    nowMs,
+    router,
+  ]);
 
   useEffect(() => {
     if (!hydrated) return;
 
     const bookingZip = (draft.customerZip || draft.zip || "").trim();
+    const selectedDumpsterSize = (draft.dumpsterSize || "").trim();
 
     if (
       !bookingZip ||
+      !selectedDumpsterSize ||
       priceQuoteMatchesSelection(draft.priceQuote, {
         zip: bookingZip,
         deliveryDate: draft.deliveryDate,
@@ -186,7 +242,12 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
           zip: bookingZip,
           deliveryDate: String(draft.deliveryDate ?? ""),
           pickupMode: draft.pickupMode === "date" ? "date" : "unspecified",
+          dumpsterSize: selectedDumpsterSize,
         });
+
+        if (draft.dumpsterProductId) {
+          params.set("dumpsterProductId", draft.dumpsterProductId);
+        }
 
         if (draft.pickupMode === "date" && isYMD(draft.pickupDate || "")) {
           params.set("pickupDate", String(draft.pickupDate));
@@ -227,7 +288,17 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     return () => {
       cancelled = true;
     };
-  }, [hydrated, draft.customerZip, draft.zip, draft.deliveryDate, draft.pickupDate, draft.pickupMode, draft.priceQuote]);
+  }, [
+    hydrated,
+    draft.customerZip,
+    draft.deliveryDate,
+    draft.dumpsterProductId,
+    draft.dumpsterSize,
+    draft.pickupDate,
+    draft.pickupMode,
+    draft.priceQuote,
+    draft.zip,
+  ]);
 
 
   const deliveryDateLabel = useMemo(
@@ -301,6 +372,12 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     const deliveryDateYMD = (draft.deliveryDate || draft.holdDeliveryDate || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDateYMD)) {
       setError("Delivery date is missing or invalid. Please go back and choose a new delivery date.");
+      return;
+    }
+
+    const pickupDateYMD = (draft.pickupDate || draft.priceQuote?.effectivePickupDate || "").trim();
+    if (!isYMD(pickupDateYMD)) {
+      setError("Pickup date is missing. Please go back and choose your rental timing.");
       return;
     }
 
@@ -421,7 +498,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 6 of 6
+                  Step 4 of 4
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
                   <div className="h-2 w-full rounded-full bg-[#F97316]" />
@@ -613,6 +690,34 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                 </div>
 
                 {/* 3) Delivery date */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold text-slate-900">Dumpster</div>
+                  <div className="mt-2 space-y-2 text-sm text-slate-700">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-500">Size</span>
+                      <span className="font-medium text-slate-900">
+                        {(draft.dumpsterDisplayName || draft.dumpsterSize || "").trim() || "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-500">Included weight</span>
+                      <span className="font-medium text-slate-900">
+                        {typeof draft.includedWeightTons === "number"
+                          ? `${draft.includedWeightTons} ton${draft.includedWeightTons === 1 ? "" : "s"}`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-500">Per-ton overage</span>
+                      <span className="font-medium text-slate-900">
+                        {typeof draft.tonOveragePrice === "number"
+                          ? `${fmtMoney(Math.round(draft.tonOveragePrice * 100))} per ton`
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-slate-200 bg-white p-4">
                   <div className="text-sm font-semibold text-slate-900">Delivery date</div>
                   <div className="mt-1 text-slate-700">{deliveryDateLabel}</div>

@@ -4,10 +4,10 @@ export const revalidate = 0;
 import Link from "next/link";
 import { CubeIcon, CurrencyDollarIcon, FireIcon, MapPinIcon, TrophyIcon } from "@heroicons/react/24/solid";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd } from "@/lib/money";
 import ZipMapClientWrapper from "./map-client-wrapper";
-import { ZipAnalyticsStatCard } from "../zip-analytics-stat-card";
 import { ZipAnalyticsViewTabs } from "../zip-analytics-view-tabs";
 
 type SearchParams = {
@@ -233,67 +233,63 @@ export default async function ZipMapPage({
 
   return (
     <AdminPage width="wide" className="space-y-6">
-      <AdminPageHeader
-        title="Heatmap"
-        description="Compare ZIP performance across bookings, revenue, and service coverage."
-        className="mb-0"
-        actions={
-          <div className="pt-2 lg:pt-0">
+      <AdminPageHeader title="Heatmap" className="mb-0" />
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
             <ZipAnalyticsViewTabs active="map" />
           </div>
-        }
-      />
-
-      <section className="-mt-3">
-        <div className="flex flex-col gap-2 lg:items-end">
-          <RangeTabs activeRange={selectedRange.key} metric={selectedMetric} />
-        </div>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold uppercase tracking-[0.16em] text-slate-700">
-              Snapshot
-            </h2>
+          <div className="lg:ml-auto">
+            <RangeTabs activeRange={selectedRange.key} metric={selectedMetric} />
           </div>
         </div>
 
-        <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <ZipAnalyticsStatCard
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <AdminSummaryCard
             label="Total bookings"
             value={number(totalBookings)}
-            hint="Mapped ZIP bookings"
+            detail="Mapped ZIP bookings"
             icon={CubeIcon}
-            accent="orange"
+            tone="amber"
+            layout="pricing"
+            stretch
           />
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Total revenue"
             value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
-            hint="Mapped ZIP booking totals"
+            detail="Mapped ZIP booking totals"
             icon={CurrencyDollarIcon}
-            accent="emerald"
+            tone="green"
+            layout="pricing"
+            stretch
           />
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="ZIPs on map"
             value={number(zipsOnMap)}
-            hint="Service ZIPs eligible for polygon matching"
+            detail="Service ZIPs eligible for polygon matching"
             icon={MapPinIcon}
-            accent="slate"
+            tone="violet"
+            layout="pricing"
+            stretch
           />
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Active ZIPs"
             value={number(activeZipsOnMap)}
-            hint="Currently bookable ZIPs in service settings"
+            detail="Currently bookable ZIPs in service settings"
             icon={FireIcon}
-            accent="orange"
+            tone="amber"
+            layout="pricing"
+            stretch
           />
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Top ZIP by bookings"
             value={topZip ? topZip.zip : "—"}
-            hint={topZip ? `${number(topZip.bookingCount)} bookings` : "No bookings in range"}
+            detail={topZip ? `${number(topZip.bookingCount)} bookings` : "No bookings in range"}
             icon={TrophyIcon}
-            accent="emerald"
+            tone="green"
+            layout="pricing"
+            stretch
           />
         </div>
       </section>

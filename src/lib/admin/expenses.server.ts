@@ -9,6 +9,7 @@ import {
   toExpenseMutationInput,
   validateExpense,
   type ExpenseFormErrors,
+  type ExpenseRecurrenceFrequency,
   type ExpenseMutationInput,
   type ExpensePaymentMethod,
   type ExpensePaymentStatus,
@@ -25,6 +26,8 @@ type BusinessExpenseRow = {
   amount_cents: number;
   status: string;
   payment_method: string;
+  is_recurring: boolean;
+  recurrence_frequency: string | null;
   asset_reference: string | null;
   tax_deductible: boolean;
   receipt_reference: string | null;
@@ -62,6 +65,8 @@ const BUSINESS_EXPENSE_SELECT = `
   amount_cents,
   status,
   payment_method,
+  is_recurring,
+  recurrence_frequency,
   asset_reference,
   tax_deductible,
   receipt_reference,
@@ -92,6 +97,8 @@ function mapRowToExpenseRecord(row: BusinessExpenseRow): ExpenseRecord {
     amountCents: row.amount_cents,
     paymentStatus: row.status as ExpensePaymentStatus,
     paymentMethod: row.payment_method as ExpensePaymentMethod,
+    isRecurring: row.is_recurring,
+    recurrenceFrequency: (row.recurrence_frequency as ExpenseRecurrenceFrequency | null) ?? "",
     relatedAsset: row.asset_reference ?? "",
     taxDeductible: row.tax_deductible,
     receiptReference: row.receipt_reference ?? "",
@@ -122,6 +129,8 @@ function buildExpenseWriteValues(
     amount_cents: normalizedInput.amountCents,
     status: normalizedInput.paymentStatus,
     payment_method: normalizedInput.paymentMethod,
+    is_recurring: normalizedInput.isRecurring,
+    recurrence_frequency: normalizedInput.isRecurring ? normalizedInput.recurrenceFrequency : null,
     asset_reference: cleanText(normalizedInput.relatedAsset),
     tax_deductible: normalizedInput.taxDeductible,
     receipt_reference: cleanText(normalizedInput.receiptReference),
@@ -302,6 +311,8 @@ export async function updateExpenseForCurrentBusiness(
         "amountCents",
         "paymentStatus",
         "paymentMethod",
+        "isRecurring",
+        "recurrenceFrequency",
         "relatedAsset",
         "taxDeductible",
         "receiptReference",

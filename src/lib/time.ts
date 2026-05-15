@@ -34,6 +34,31 @@ export function formatDateTimeET(value: string | Date | null | undefined) {
   }).format(date);
 }
 
+export function formatDateTimeLabelET(value: string | Date | null | undefined) {
+  if (!value) return "—";
+
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+
+  const lookup = new Map(parts.map((part) => [part.type, part.value]));
+  const month = lookup.get("month") ?? "";
+  const day = lookup.get("day") ?? "";
+  const year = lookup.get("year") ?? "";
+  const hour = lookup.get("hour") ?? "";
+  const minute = lookup.get("minute") ?? "";
+  const dayPeriod = lookup.get("dayPeriod") ?? "";
+
+  return `${month} ${day}, ${year}, ${hour}:${minute} ${dayPeriod}`.trim();
+}
+
 export function formatShortDateET(value: string | Date | null | undefined) {
   if (!value) return "";
 

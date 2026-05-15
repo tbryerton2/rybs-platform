@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
+import { getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { createBookingRecord } from "@/lib/booking-records";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
+import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
+import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isValidEmail } from "@/lib/identity";
 import { normalizePhone } from "@/lib/customers";
@@ -90,6 +94,52 @@ export async function POST(req: Request) {
     }
     if (customer_state && !/^[A-Za-z]{2}$/.test(String(customer_state).trim())) {
       return NextResponse.json({ ok: false, error: "A valid 2-letter customer_state is required." }, { status: 400 });
+    }
+
+    const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
+    const pickupModeForAvailability = pickup_mode === "schedule" ? "date" : "unspecified";
+    const rentalPeriod = getRentalPeriodDetails({
+      deliveryDate: delivery_date ?? null,
+      pickupDate: pickup_date ?? null,
+      pickupMode: pickupModeForAvailability,
+      standardRentalDays: rentalPolicy.standardRentalDays,
+      dailyOveragePrice: rentalPolicy.dailyOveragePrice,
+      maxRentalDays: rentalPolicy.maxRentalDays,
+      allowExtendedRentalAtBooking: rentalPolicy.allowExtendedRentalAtBooking,
+    });
+
+    if (delivery_date && (rentalPeriod.validationError || !rentalPeriod.effectivePickupDate)) {
+      return NextResponse.json(
+        { ok: false, error: rentalPeriod.validationError || "Invalid rental period." },
+        { status: 400 },
+      );
+    }
+
+    if (delivery_date && rentalPeriod.effectivePickupDate) {
+      try {
+        await ensureRentalWindowAvailability({
+          check: () =>
+            getDeliveryAvailabilitySnapshot({
+              deliveryDate: delivery_date,
+              rpcDays: rentalPeriod.bookedRentalDays ?? rentalPolicy.standardRentalDays,
+              dumpsterSize: selectedDumpster.dumpsterSize,
+              dumpsterProductId: selectedDumpster.dumpsterProductId,
+              pickupDate: rentalPeriod.effectivePickupDate,
+              logContext: "api/bookings",
+            }),
+        });
+      } catch (availabilityError) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              availabilityError instanceof Error
+                ? availabilityError.message
+                : "That rental window is unavailable.",
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const normalizedCustomerPhone = normalizePhone(customer_phone);

@@ -1,29 +1,66 @@
-import { get14YardPriceForZip, sanitizeZip } from "@/lib/pricing";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
-import {
-  getPricingIntroContent,
-  getPricingPromisesContent,
-} from "@/lib/tenant/content";
+import { sanitizeZip } from "@/lib/pricing";
+import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
+import { DEFAULT_PRICING_SETTINGS } from "@/lib/pricing-settings";
+import { getPricingIntroContent } from "@/lib/tenant/content";
 import BookOnlineButton from "@/components/BookOnlineButton";
+import { parseCustomerBulletPoints } from "@/lib/product-card-content";
 
 export const dynamic = "force-dynamic";
+
+const DIMENSIONS_FALLBACK = "Approximate dimensions available at booking";
+
+function formatDimensions(dimensions?: string | null) {
+  const trimmed = dimensions?.trim();
+  return trimmed ? trimmed.replace(/'/g, "\u0027") : DIMENSIONS_FALLBACK;
+}
+
+function formatIncludedWeight(tons: number) {
+  return `Includes ${tons} ton${tons === 1 ? "" : "s"}`;
+}
+
+function formatShortDescription(description?: string | null) {
+  return description?.trim() || "";
+}
 
 export default async function PricingPage({
   searchParams,
 }: {
-  searchParams: { zip?: string; preview?: string };
+  searchParams?: Promise<{ zip?: string; preview?: string }>;
 }) {
-  const sp = await Promise.resolve(searchParams);
+  const sp = await searchParams;
   const zip = sanitizeZip(sp?.zip);
   const zipValid = zip.length === 5;
   const preview = sp?.preview === "1";
 
-  const [{ price }, pricingSettings, pricingIntro, pricingPromises] = await Promise.all([
-    get14YardPriceForZip(zip),
-    getPricingSettingsSnapshot(),
+  const [pricingIntro, inventoryProducts] = await Promise.all([
     getPricingIntroContent({ preview }),
-    getPricingPromisesContent({ preview }),
+    getPublicDumpsterProducts(zip),
   ]);
+  const pricingProducts = inventoryProducts.length
+    ? inventoryProducts
+    : [
+        {
+          dumpsterSize: "14 yard",
+          dumpsterProductId: "default",
+          displayName: "14-yard dumpster",
+          shortDescription: "",
+          customerBulletPoints: "",
+          dimensions: "",
+          includedWeightTons: DEFAULT_PRICING_SETTINGS.includedTons,
+          tonOveragePrice: DEFAULT_PRICING_SETTINGS.tonOveragePrice,
+          includedRentalDays: DEFAULT_PRICING_SETTINGS.standardRentalDays,
+          extraDayPrice: DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
+          basePrice: DEFAULT_PRICING_SETTINGS.basePrice,
+          isPublic: true,
+          sortOrder: 10,
+        },
+      ];
+
+  const money = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
@@ -62,76 +99,71 @@ export default async function PricingPage({
         {/* Pricing Card */}
         <section>
           <div className="grid gap-8 md:grid-cols-2">
-            {/* Main Dumpster Option */}
-            <div className="rounded-[28px] bg-white p-8 shadow-sm ring-1 ring-slate-200">
-              <div className="text-sm font-semibold text-[#F97316]">
-                14-Foot Dumpster
-              </div>
-
-              <div className="mt-3 text-4xl font-semibold tracking-tight">
-                ${price}
-              </div>
-
-              <p className="mt-2 text-slate-600">
-                {pricingPromises.productBody}
-              </p>
-
-              <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50/70 p-4 text-sm text-slate-700">
-                <div className="font-semibold text-slate-900">
-                  Includes up to {pricingSettings.standardRentalDays} day{pricingSettings.standardRentalDays === 1 ? "" : "s"}
+            {pricingProducts.map((product) => (
+              <div
+                key={`${product.dumpsterSize}:${product.dumpsterProductId}`}
+                className="rounded-[28px] bg-white p-8 shadow-sm ring-1 ring-slate-200"
+              >
+                <div className="text-2xl font-semibold tracking-tight text-[#F97316] sm:text-3xl">
+                  {product.displayName}
                 </div>
-                <div className="mt-1">
-                  {new Intl.NumberFormat("en-US", {
-                    style: "currency",
-                    currency: "USD",
-                    maximumFractionDigits: 0,
-                  }).format(pricingSettings.dailyOveragePrice)}{" "}
-                  per extra day after day {pricingSettings.standardRentalDays}.
+
+                <div className="mt-2 text-sm font-medium text-slate-600">
+                  {formatDimensions(product.dimensions)}
                 </div>
-                {pricingSettings.maxRentalDays ? (
-                  <div className="mt-1">
-                    Maximum rental length: {pricingSettings.maxRentalDays} days.
+                <div className="mt-5 text-3xl font-semibold tracking-tight text-slate-950">
+                  {money.format(product.basePrice)}
+                </div>
+
+                <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50/70 p-4 text-sm text-slate-700">
+                  <div className="font-semibold text-slate-900">
+                    Includes up to {product.includedRentalDays} day{product.includedRentalDays === 1 ? "" : "s"}
                   </div>
-                ) : null}
-                <div className="mt-1">
-                  {pricingSettings.allowExtendedRentalAtBooking
-                    ? "Customers can request extra days during online booking."
-                    : "Online booking is limited to the included rental period."}
+                  <div className="mt-1">
+                    {money.format(product.extraDayPrice)} per extra day after day {product.includedRentalDays}.
+                  </div>
+                  <div className="mt-4 font-semibold text-slate-900">
+                    {formatIncludedWeight(product.includedWeightTons)}
+                  </div>
+                  <div className="mt-1">
+                    {money.format(product.tonOveragePrice)} per ton over.
+                  </div>
                 </div>
+
+                {(() => {
+                  const shortDescription = formatShortDescription(product.shortDescription);
+                  const bulletItems = parseCustomerBulletPoints(product.customerBulletPoints);
+
+                  return (
+                    <>
+                      {shortDescription ? (
+                        <p className="mt-6 text-sm leading-6 text-slate-600">{shortDescription}</p>
+                      ) : null}
+                      {bulletItems.length ? (
+                        <ul className="mt-4 space-y-3 text-sm text-slate-600">
+                          {bulletItems.map((item) => (
+                            <li key={item}>• {item}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </>
+                  );
+                })()}
+
+                <BookOnlineButton
+                  zip={zip}
+                  zipValid={zipValid}
+                  dumpsterSize={product.dumpsterSize}
+                  dumpsterProductId={product.dumpsterProductId}
+                  dumpsterDisplayName={product.displayName}
+                  includedWeightTons={product.includedWeightTons}
+                  tonOveragePrice={product.tonOveragePrice}
+                  includedRentalDays={product.includedRentalDays}
+                  extraDayPrice={product.extraDayPrice}
+                  basePrice={product.basePrice}
+                />
               </div>
-
-              <ul className="mt-6 space-y-3 text-sm text-slate-600">
-                <li>• {pricingPromises.dimensionLabel.replace(/'/g, "\u0027")}</li>
-                {pricingPromises.featureList.map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
-
-              <BookOnlineButton zip={zip} zipValid={zipValid} />
-            </div>
-
-            {/* Trust / Support Card */}
-            <div className="rounded-[20px] bg-slate-50 p-8 shadow-sm ring-1 ring-slate-200">
-              <h3 className="text-lg font-semibold text-[#0F172A]">
-                {pricingPromises.includedHeading}
-              </h3>
-              <p className="mt-1 text-sm text-[#475569]">
-                {pricingPromises.includedPricePrefix} ${price} {pricingPromises.includedPriceSuffix}
-              </p>
-
-              <ul className="mt-5 space-y-4 text-sm text-[#475569]">
-                {pricingPromises.includedItems.map((item) => (
-                  <li key={item} className="flex items-start gap-3">
-                    <span className="mt-1 h-2 w-2 rounded-full bg-[#F97316]" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-
-              <p className="mt-6 text-xs text-slate-500">
-                {pricingPromises.footnote}
-              </p>
-            </div>
+            ))}
           </div>
         </section>
       </div>

@@ -70,9 +70,9 @@ export const adminNavGroups: AdminNavGroup[] = [
       },
       {
         label: "Trucks & Trailers",
-        href: "/admin/equipment/trucks-trailers",
+        href: "/admin/trucks-trailers",
         icon: "trucksTrailers",
-        matchers: ["/admin/equipment/trucks-trailers"],
+        matchers: ["/admin/trucks-trailers", "/admin/equipment/trucks-trailers"],
       },
     ],
   },

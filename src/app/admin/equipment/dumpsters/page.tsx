@@ -1,32 +1,31 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
-import { type DumpsterRow, DUMPSTER_SELECT, mapDumpsterRowToRecord } from "@/lib/admin/dumpster-inventory";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { getDumpsters } from "./data";
 import { DumpstersClient } from "./dumpsters-client";
 
-async function getDumpsters() {
-  const { data, error } = await supabaseAdmin
-    .from("dumpsters")
-    .select(DUMPSTER_SELECT)
-    .order("active", { ascending: false })
-    .order("display_name", { ascending: true });
+type PageProps = {
+  searchParams?: Promise<{ deleted?: string; filter?: string }>;
+};
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return ((data ?? []) as DumpsterRow[]).map(mapDumpsterRowToRecord);
-}
-
-export default async function AdminDumpstersPage() {
+export default async function AdminDumpstersPage({ searchParams }: PageProps) {
   const dumpsters = await getDumpsters();
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const deleted = resolvedSearchParams.deleted;
+  const initialFilter = resolvedSearchParams.filter === "active" || resolvedSearchParams.filter === "tracker" || resolvedSearchParams.filter === "maintenance"
+    ? resolvedSearchParams.filter
+    : null;
 
   return (
     <AdminPage width="wide">
-      <AdminPageHeader title="Dumpsters" description="Manage active container inventory, service readiness, and tracker coverage." />
-      <DumpstersClient initialDumpsters={dumpsters} />
+      <AdminToastTrigger
+        success={deleted ? "Dumpster deleted." : null}
+        trigger={deleted}
+        clearParam="deleted"
+      />
+      <DumpstersClient initialDumpsters={dumpsters} initialSummaryFilter={initialFilter} />
     </AdminPage>
   );
 }

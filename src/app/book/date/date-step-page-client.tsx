@@ -2,9 +2,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import type { BookingPriceQuote } from "@/lib/booking-pricing";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  addDaysYmd,
+  getMaximumBookablePickupDate,
+  getRentalPeriodDetails,
+  priceQuoteMatchesSelection,
+  type BookingPriceQuote,
+} from "@/lib/booking-pricing";
+import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getHoldMinutes } from "@/lib/config";
+import { formatUsdFromCents } from "@/lib/money";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import {
   AvailabilityCalendar,
@@ -17,6 +25,12 @@ type BookingDraft = {
   town?: string;
   dumpsterSize?: string;
   dumpsterProductId?: string | null;
+  dumpsterDisplayName?: string;
+  includedWeightTons?: number;
+  tonOveragePrice?: number;
+  includedRentalDays?: number;
+  extraDayPrice?: number;
+  basePrice?: number;
 
   customerName?: string;
   customerEmail?: string;
@@ -32,6 +46,7 @@ type BookingDraft = {
   // hold info (created on step 2)
   holdId?: string;
   holdDeliveryDate?: string;
+  holdPickupDate?: string;
   holdExpiresAt?: string;
   priceQuote?: BookingPriceQuote | null;
 
@@ -42,18 +57,25 @@ type BookingDraft = {
   maxPickupDate?: string;          // YYYY-MM-DD (only when capped)
   maxDaysAllowed?: number;         // number
   limitedAck?: boolean;            // user checkbox
+  bookingOrigin?: string | null;
 };
 
 type AvailState =
   | { state: "idle" }
   | { state: "loading" }
-  | { state: "ok"; remaining: number }
+  | { state: "ok"; remaining: number; requestedPickupDate: string | null }
   | { state: "none" }
   | { state: "error"; message: string };
 
 type HoldState =
   | { state: "idle" }
   | { state: "creating" }
+  | { state: "error"; message: string };
+
+type PickupCapState =
+  | { state: "idle" }
+  | { state: "loading" }
+  | { state: "ready"; maxPickupDate: string | null; maxDaysAllowed: number | null }
   | { state: "error"; message: string };
 
 function isYmd(value: string) {
@@ -86,6 +108,15 @@ function formatDateLong(value: string) {
   }).format(parseYmd(value));
 }
 
+function formatDateShort(value: string) {
+  if (!isYmd(value)) return value || "—";
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(parseYmd(value));
+}
+
 function getBookingStorageKey() {
   return getTenantStorageKey(TENANT_STORAGE_KEYS.booking);
 }
@@ -104,44 +135,304 @@ type DateStepPageClientProps = {
 
 export default function DateStepPageClient({ content }: DateStepPageClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const holdMinutes = getHoldMinutes();
 
   const [deliveryDate, setDeliveryDate] = useState(""); // YYYY-MM-DD (from <input type="date">)
   const [availability, setAvailability] = useState<AvailState>({ state: "idle" });
   const [hold, setHold] = useState<HoldState>({ state: "idle" });
-  const [cap, setCap] = useState<null | { maxPickupDate: string; maxDaysAllowed: number }>(null);
-  const [limitedAck, setLimitedAck] = useState(false);
+  const [cap] = useState<null | { maxPickupDate: string; maxDaysAllowed: number }>(null);
+  const [limitedAck] = useState(false);
   const [calendarEntries, setCalendarEntries] = useState<CalendarAvailabilityEntry[]>([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [nextAvailableDate, setNextAvailableDate] = useState<string | null>(null);
+  const [selectedDumpster, setSelectedDumpster] = useState(resolveSelectedDumpster);
+  const [bookingZip, setBookingZip] = useState("");
+  const [ready, setReady] = useState(false);
+  const [draftQuote, setDraftQuote] = useState<BookingPriceQuote | null>(null);
+  const [pickupDate, setPickupDate] = useState("");
+  const [needsExtraDays, setNeedsExtraDays] = useState(false);
+  const [pickupCap, setPickupCap] = useState<PickupCapState>({ state: "idle" });
+  const [pickupCalendarEntries, setPickupCalendarEntries] = useState<CalendarAvailabilityEntry[]>([]);
+  const [pickupCalendarLoading, setPickupCalendarLoading] = useState(false);
+  const [pickupCalendarError, setPickupCalendarError] = useState<string | null>(null);
+  const [pickupNextAvailableDate, setPickupNextAvailableDate] = useState<string | null>(null);
+  const [pickupAvailabilityRetryKey, setPickupAvailabilityRetryKey] = useState(0);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [timingError, setTimingError] = useState<string | null>(null);
+
+  const queryZip = useMemo(
+    () => (searchParams.get("zip") || "").replace(/\D/g, "").slice(0, 5),
+    [searchParams],
+  );
+  const queryDumpsterSize = useMemo(() => (searchParams.get("dumpsterSize") || "").trim(), [searchParams]);
+  const queryDumpsterProductId = useMemo(
+    () => (searchParams.get("dumpsterProductId") || "").trim() || null,
+    [searchParams],
+  );
+  const hasQueryDumpsterSelection = Boolean(queryDumpsterSize || queryDumpsterProductId);
 
   // Load saved date (if user navigates back)
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(getBookingStorageKey());
-      if (!raw) return;
-      const data: BookingDraft = JSON.parse(raw);
-      if (data?.deliveryDate) setDeliveryDate(data.deliveryDate);
-      setLimitedAck(Boolean(data?.limitedAck));
-    } catch {
-      // ignore
-    }
-  }, []);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const raw = sessionStorage.getItem(getBookingStorageKey());
+        const data: BookingDraft = raw ? JSON.parse(raw) : {};
+        const storedZip = (data?.zip || data?.customerZip || "").replace(/\D/g, "").slice(0, 5);
+        const nextZip = queryZip || storedZip;
+        const storedHasDumpsterSelection = Boolean(
+          (data?.dumpsterSize || "").trim() || (data?.dumpsterProductId || "").trim(),
+        );
+        const nextDumpster = hasQueryDumpsterSelection
+          ? resolveSelectedDumpster({
+              dumpsterSize: queryDumpsterSize,
+              dumpsterProductId: queryDumpsterProductId,
+            })
+          : resolveSelectedDumpster({
+              dumpsterSize: data?.dumpsterSize,
+              dumpsterProductId: data?.dumpsterProductId,
+            });
+        const hasDumpsterSelection = hasQueryDumpsterSelection || storedHasDumpsterSelection;
+
+        if (!/^\d{5}$/.test(nextZip)) {
+          router.replace("/book/address");
+          return;
+        }
+
+        if (!hasDumpsterSelection) {
+          router.replace(`/book?zip=${encodeURIComponent(nextZip)}`);
+          return;
+        }
+
+        const upstreamChanged =
+          data.zip !== nextZip ||
+          data.dumpsterSize !== nextDumpster.dumpsterSize ||
+          (data.dumpsterProductId ?? null) !== (nextDumpster.dumpsterProductId ?? null);
+
+        if (hasQueryDumpsterSelection || queryZip) {
+          const params = new URLSearchParams({
+            zip: nextZip,
+            dumpsterSize: nextDumpster.dumpsterSize,
+          });
+
+          if (nextDumpster.dumpsterProductId) {
+            params.set("dumpsterProductId", nextDumpster.dumpsterProductId);
+          }
+
+          const res = await fetch(`/api/zip-check?${params.toString()}`, { cache: "no-store" });
+          const json = await res.json().catch(() => ({}));
+
+          if (cancelled) return;
+
+          if (!res.ok || !json?.serviced) {
+            router.replace(`/book/address?zip=${encodeURIComponent(nextZip)}`);
+            return;
+          }
+
+          const nextDraft: BookingDraft = {
+            ...data,
+            zip: nextZip,
+            county: json.county,
+            town: json.town,
+            dumpsterSize: nextDumpster.dumpsterSize,
+            dumpsterProductId: nextDumpster.dumpsterProductId,
+            priceQuote: json.priceQuote ?? null,
+            bookingOrigin: "pricing",
+            ...(upstreamChanged
+              ? {
+                  deliveryDate: undefined,
+                  holdId: undefined,
+                  holdDeliveryDate: undefined,
+                  holdPickupDate: undefined,
+                  holdExpiresAt: undefined,
+                  pickupMode: "unspecified",
+                  pickupDate: undefined,
+                  maxPickupDate: undefined,
+                  maxDaysAllowed: undefined,
+                  limitedAck: false,
+                }
+              : {}),
+          };
+
+          sessionStorage.setItem(getBookingStorageKey(), JSON.stringify(nextDraft));
+          setDeliveryDate(upstreamChanged ? "" : nextDraft.deliveryDate ?? "");
+          setPickupDate(upstreamChanged ? "" : nextDraft.pickupDate ?? "");
+          setNeedsExtraDays(
+            !upstreamChanged &&
+              Boolean(nextDraft.priceQuote?.allowExtendedRentalAtBooking && (nextDraft.priceQuote?.extraDays ?? 0) > 0),
+          );
+          setDraftQuote(nextDraft.priceQuote ?? null);
+        } else if (upstreamChanged) {
+          sessionStorage.setItem(
+            getBookingStorageKey(),
+            JSON.stringify({
+              ...data,
+              zip: nextZip,
+              dumpsterSize: nextDumpster.dumpsterSize,
+              dumpsterProductId: nextDumpster.dumpsterProductId,
+              deliveryDate: undefined,
+              holdId: undefined,
+              holdDeliveryDate: undefined,
+              holdPickupDate: undefined,
+              holdExpiresAt: undefined,
+              pickupMode: "unspecified",
+              pickupDate: undefined,
+              maxPickupDate: undefined,
+              maxDaysAllowed: undefined,
+              limitedAck: false,
+            }),
+          );
+          setDeliveryDate("");
+          setPickupDate("");
+          setNeedsExtraDays(false);
+          setDraftQuote(data.priceQuote ?? null);
+        } else if (data?.deliveryDate) {
+          setDeliveryDate(data.deliveryDate);
+          setPickupDate(data.pickupDate ?? "");
+          setNeedsExtraDays(Boolean(data.priceQuote?.allowExtendedRentalAtBooking && (data.priceQuote?.extraDays ?? 0) > 0));
+          setDraftQuote(data.priceQuote ?? null);
+        } else {
+          setDraftQuote(data.priceQuote ?? null);
+        }
+
+        if (cancelled) return;
+        setBookingZip(nextZip);
+        setSelectedDumpster(nextDumpster);
+        setReady(true);
+      } catch {
+        if (!cancelled) router.replace("/book/address");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasQueryDumpsterSelection, queryDumpsterProductId, queryDumpsterSize, queryZip, router]);
 
   // Normalize (future-proof if we ever change date input type)
   const normalizedDate = useMemo(() => (deliveryDate || "").trim(), [deliveryDate]);
   const calendarRangeStart = useMemo(() => toYmd(startOfMonth(new Date())), []);
+  const rentalTimingPolicy = useMemo(() => {
+    if (!draftQuote) return null;
+    return {
+      standardRentalDays: draftQuote.standardRentalDays,
+      dailyOveragePrice: draftQuote.dailyOveragePrice,
+      maxRentalDays: draftQuote.maxRentalDays,
+      allowExtendedRentalAtBooking: draftQuote.allowExtendedRentalAtBooking,
+    };
+  }, [draftQuote]);
+  const hasPriceQuote = Boolean(draftQuote);
+  const baseRentalTiming = useMemo(() => {
+    if (!isYmd(normalizedDate) || !rentalTimingPolicy) return null;
+    return getRentalPeriodDetails({
+      ...rentalTimingPolicy,
+      deliveryDate: normalizedDate,
+      pickupMode: "unspecified",
+      pickupDate: null,
+    });
+  }, [normalizedDate, rentalTimingPolicy]);
+  const previewDeliveryDate =
+    !isYmd(normalizedDate) && isYmd(nextAvailableDate || "") ? String(nextAvailableDate) : "";
+  const previewRentalTiming = useMemo(() => {
+    if (!isYmd(previewDeliveryDate) || !rentalTimingPolicy) return null;
+    return getRentalPeriodDetails({
+      ...rentalTimingPolicy,
+      deliveryDate: previewDeliveryDate,
+      pickupMode: "unspecified",
+      pickupDate: null,
+    });
+  }, [previewDeliveryDate, rentalTimingPolicy]);
+  const standardRentalDays = baseRentalTiming?.standardRentalDays ?? draftQuote?.standardRentalDays ?? draftQuote?.includedRentalDays ?? null;
+  const allowExtendedRentalAtBooking = baseRentalTiming?.allowExtendedRentalAtBooking ?? false;
+  const dailyOveragePriceCents = draftQuote?.dailyOveragePriceCents ?? 0;
+  const standardPickupDate = baseRentalTiming?.standardPickupDate ?? "";
+  const previewPickupDate = previewRentalTiming?.standardPickupDate ?? "";
+  const displayRentalWindowDeliveryDate = isYmd(normalizedDate) ? normalizedDate : previewDeliveryDate;
+  const displayRentalWindowPickupDate = isYmd(normalizedDate) ? standardPickupDate : previewPickupDate;
+  const hasSelectedDeliveryDate = isYmd(normalizedDate);
+  const pricingMaxPickupDate = useMemo(() => {
+    if (!isYmd(normalizedDate) || !rentalTimingPolicy) return "";
+    return (
+      getMaximumBookablePickupDate(
+        normalizedDate,
+        rentalTimingPolicy,
+        null,
+      ) || ""
+    );
+  }, [rentalTimingPolicy, normalizedDate]);
+  const operationalMaxPickupDate = useMemo(() => {
+    if (pickupCap.state !== "ready") return "";
+    const max = pickupCap.maxPickupDate || "";
+    return isYmd(max) ? max : "";
+  }, [pickupCap]);
+  const maxPickupDate = useMemo(() => {
+    const candidates = [operationalMaxPickupDate, pricingMaxPickupDate].filter(Boolean).sort();
+    return candidates[0] || "";
+  }, [operationalMaxPickupDate, pricingMaxPickupDate]);
+  const selectedPickupDate = pickupDate || standardPickupDate;
+  const pickupMode = "date" as const;
+  const selectedRentalTiming = useMemo(() => {
+    if (!isYmd(normalizedDate) || !isYmd(selectedPickupDate) || !rentalTimingPolicy) return null;
+    return getRentalPeriodDetails({
+      ...rentalTimingPolicy,
+      deliveryDate: normalizedDate,
+      pickupMode,
+      pickupDate: selectedPickupDate,
+    });
+  }, [normalizedDate, pickupMode, rentalTimingPolicy, selectedPickupDate]);
+  const extraDays = selectedRentalTiming?.overageDays ?? 0;
+  const extraDaysChargeCents = extraDays * dailyOveragePriceCents;
+  const estimatedSubtotalCents = draftQuote
+    ? draftQuote.rentalPriceCents + extraDaysChargeCents
+    : 0;
+  const estimatedSalesTaxCents = draftQuote
+    ? Math.round(estimatedSubtotalCents * draftQuote.salesTaxRate)
+    : 0;
+  const estimatedTotalCents = estimatedSubtotalCents + estimatedSalesTaxCents;
+  const quoteMatchesCurrentSelection =
+    ready &&
+    Boolean(bookingZip) &&
+    isYmd(normalizedDate) &&
+    isYmd(selectedPickupDate) &&
+    priceQuoteMatchesSelection(draftQuote, {
+      zip: bookingZip,
+      deliveryDate: normalizedDate,
+      pickupDate: selectedPickupDate,
+      pickupMode,
+    });
 
   const highlightedEarliestDate = nextAvailableDate;
+  const deliveryCalendarLoading =
+    !calendarError && (!ready || calendarLoading || calendarEntries.length === 0);
+  const pickupCalendarIsLoading =
+    needsExtraDays &&
+    !pickupCalendarError &&
+    pickupCap.state !== "error" &&
+    (pickupCalendarLoading || pickupCap.state === "loading" || pickupCalendarEntries.length === 0);
 
   const loadCalendarRange = useCallback(async (start: string, days = 186) => {
+    if (!ready || !bookingZip) return;
+
     setCalendarLoading(true);
     setCalendarError(null);
 
     try {
+      const params = new URLSearchParams({
+        start,
+        days: String(days),
+        zip: bookingZip,
+        dumpsterSize: selectedDumpster.dumpsterSize,
+      });
+
+      if (selectedDumpster.dumpsterProductId) {
+        params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
+      }
+
       const res = await fetch(
-        `/api/availability/calendar?start=${encodeURIComponent(start)}&days=${days}`,
+        `/api/availability/calendar?${params.toString()}`,
         { cache: "no-store" },
       );
       const json = await res.json().catch(() => ({}));
@@ -161,30 +452,45 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     } finally {
       setCalendarLoading(false);
     }
-  }, [content.availabilityError]);
+  }, [bookingZip, content.availabilityError, ready, selectedDumpster]);
 
   useEffect(() => {
+    if (!ready) return;
     void loadCalendarRange(calendarRangeStart);
-  }, [calendarRangeStart, loadCalendarRange]);
+  }, [calendarRangeStart, loadCalendarRange, ready]);
 
-  const selectedCalendarEntry = useMemo(
-    () => calendarEntries.find((entry) => entry.date === normalizedDate) || null,
-    [calendarEntries, normalizedDate],
-  );
+  const backToDumpsterHref = useMemo(() => {
+    if (!bookingZip) return "/book/address";
 
-  const nextAvailableAfterSelection = useMemo(() => {
-    if (!isYmd(normalizedDate)) return nextAvailableDate;
-    return (
-      calendarEntries.find(
-        (entry) =>
-          entry.date > normalizedDate &&
-          (entry.state === "available" || entry.state === "limited"),
-      )?.date || nextAvailableDate
-    );
-  }, [calendarEntries, nextAvailableDate, normalizedDate]);
+    const params = new URLSearchParams({
+      zip: bookingZip,
+      editing: "dumpster",
+    });
+
+    if (selectedDumpster.dumpsterSize) {
+      params.set("dumpsterSize", selectedDumpster.dumpsterSize);
+    }
+
+    if (selectedDumpster.dumpsterProductId) {
+      params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
+    }
+
+    params.set("origin", "book");
+
+    return `/book?${params.toString()}`;
+  }, [bookingZip, selectedDumpster]);
 
   function updateDeliveryDate(d: string) {
+    if (!ready) return;
+
     setDeliveryDate(d);
+    setPickupDate("");
+    setNeedsExtraDays(false);
+    setPickupCap({ state: "idle" });
+    setPickupCalendarEntries([]);
+    setPickupCalendarError(null);
+    setPickupNextAvailableDate(null);
+    setTimingError(null);
 
     const raw = sessionStorage.getItem(getBookingStorageKey());
     const existing: BookingDraft = raw ? JSON.parse(raw) : {};
@@ -197,6 +503,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
         holdId: undefined,
         holdDeliveryDate: undefined,
+        holdPickupDate: undefined,
         holdExpiresAt: undefined,
 
         maxPickupDate: undefined,
@@ -211,13 +518,37 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     setHold({ state: "idle" });
   }
 
-  function hasActiveHoldForDate(draft: Partial<BookingDraft>, selectedDeliveryYMD: string) {
+  function clearPersistedHold() {
+    const raw = sessionStorage.getItem(getBookingStorageKey());
+    const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+
+    sessionStorage.setItem(
+      getBookingStorageKey(),
+      JSON.stringify({
+        ...existing,
+        holdId: undefined,
+        holdDeliveryDate: undefined,
+        holdPickupDate: undefined,
+        holdExpiresAt: undefined,
+      }),
+    );
+
+    setHold({ state: "idle" });
+  }
+
+  function hasActiveHoldForDate(
+    draft: Partial<BookingDraft>,
+    selectedDeliveryYMD: string,
+    selectedPickupYMD: string,
+  ) {
     const holdId = (draft?.holdId || "").trim();
     const holdDelivery = (draft?.holdDeliveryDate || "").trim(); // should be YYYY-MM-DD
+    const holdPickup = (draft?.holdPickupDate || "").trim();
     const expiresAt = (draft?.holdExpiresAt || "").trim();
 
-    if (!holdId || !holdDelivery || !expiresAt) return false;
+    if (!holdId || !holdDelivery || !holdPickup || !expiresAt) return false;
     if (holdDelivery !== selectedDeliveryYMD) return false;
+    if (holdPickup !== selectedPickupYMD) return false;
 
     const ms = Date.parse(expiresAt);
     if (!Number.isFinite(ms)) return false;
@@ -227,6 +558,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
   // When date changes, check availability
   useEffect(() => {
+    if (!ready || !bookingZip) return;
+
     const d = normalizedDate;
 
     // No date picked yet
@@ -246,12 +579,18 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     (async () => {
       setAvailability({ state: "loading" });
 
-      // ✅ immediately reset cap + ack for the newly selected date
-      setCap(null);
-      setLimitedAck(false);
-
       try {
-        const res = await fetch(`/api/availability?date=${encodeURIComponent(d)}`, {
+        const params = new URLSearchParams({
+          date: d,
+          zip: bookingZip,
+          dumpsterSize: selectedDumpster.dumpsterSize,
+        });
+
+        if (selectedDumpster.dumpsterProductId) {
+          params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
+        }
+
+        const res = await fetch(`/api/availability?${params.toString()}`, {
           cache: "no-store",
         });
         const json = await res.json().catch(() => ({}));
@@ -267,13 +606,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
         }
 
         const remaining = Number(json?.remaining ?? 0);
+        const requestedPickupDate =
+          typeof json?.requestedPickupDate === "string" ? json.requestedPickupDate : null;
 
         if (!Number.isFinite(remaining) || remaining <= 0) {
           setAvailability({ state: "none" });
-
-          // ✅ clear cap so it can’t “stick” from a previous date
-          setCap(null);
-          setLimitedAck(false);
 
           // ✅ clear persisted cap/ack
           const raw = sessionStorage.getItem(getBookingStorageKey());
@@ -289,60 +626,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           );
 
         } else {
-          setAvailability({ state: "ok", remaining });
-
-          const capRes = await fetch(`/api/pickup-cap?deliveryDate=${encodeURIComponent(d)}`, {
-            cache: "no-store",
-          });
-          const capJson = await capRes.json().catch(() => ({}));
-
-          if (capRes.ok && capJson?.ok && capJson?.capped) {
-            setCap({ maxPickupDate: capJson.maxPickupDate, maxDaysAllowed: capJson.maxDaysAllowed });
-            setLimitedAck(false);
-
-            const raw = sessionStorage.getItem(getBookingStorageKey());
-            const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-
-            const maxPickupDate = String(capJson.maxPickupDate || "").trim();
-
-            // If they already had a pickup date saved and it’s too late, clamp it.
-            // If they don’t have one, FORCE it to maxPickupDate so checkout can’t fail later.
-            const existingPickup = (existing.pickupDate || "").trim();
-            const forcedPickup = !existingPickup || existingPickup > maxPickupDate
-              ? maxPickupDate
-              : existingPickup;
-
-            sessionStorage.setItem(
-              getBookingStorageKey(),
-              JSON.stringify({
-                ...existing,
-                maxPickupDate,
-                maxDaysAllowed: capJson.maxDaysAllowed,
-                limitedAck: false,
-
-                // ✅ enforce cap immediately
-                pickupMode: "date",
-                pickupDate: forcedPickup,
-              })
-            );
-          } else {
-            setCap(null);
-            setLimitedAck(false);
-
-            const raw = sessionStorage.getItem(getBookingStorageKey());
-            const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-            sessionStorage.setItem(
-              getBookingStorageKey(),
-              JSON.stringify({
-                ...existing,
-                maxPickupDate: undefined,
-                maxDaysAllowed: undefined,
-                limitedAck: false,
-                pickupMode: "unspecified",
-                pickupDate: undefined,
-              })
-            );
-          }
+          setAvailability({ state: "ok", remaining, requestedPickupDate });
         }
 
       } catch (e: unknown) {
@@ -358,28 +642,378 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     return () => {
       cancelled = true;
     };
-  }, [normalizedDate]);
+  }, [bookingZip, normalizedDate, ready, selectedDumpster]);
+
+  useEffect(() => {
+    if (!ready || !isYmd(normalizedDate) || !hasPriceQuote) {
+      setPickupCap({ state: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setPickupCap({ state: "loading" });
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          deliveryDate: normalizedDate,
+          dumpsterSize: selectedDumpster.dumpsterSize,
+        });
+
+        if (selectedDumpster.dumpsterProductId) {
+          params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
+        }
+
+        const res = await fetch(`/api/pickup-cap?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (!res.ok || !json?.ok) {
+          setPickupCap({
+            state: "error",
+            message: json?.error || "Could not verify pickup availability. Please try another delivery date.",
+          });
+          return;
+        }
+
+        setPickupCap({
+          state: "ready",
+          maxPickupDate: typeof json.maxPickupDate === "string" && isYmd(json.maxPickupDate) ? json.maxPickupDate : null,
+          maxDaysAllowed: typeof json.maxDaysAllowed === "number" ? json.maxDaysAllowed : null,
+        });
+      } catch {
+        if (cancelled) return;
+        setPickupCap({
+          state: "error",
+          message: "Could not verify pickup availability. Please try another delivery date.",
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasPriceQuote, normalizedDate, pickupAvailabilityRetryKey, ready, selectedDumpster]);
+
+  useEffect(() => {
+    if (!ready || !isYmd(normalizedDate) || !standardPickupDate) return;
+
+    if (!allowExtendedRentalAtBooking && needsExtraDays) {
+      setNeedsExtraDays(false);
+    }
+
+    if (!allowExtendedRentalAtBooking || !needsExtraDays) {
+      if (pickupDate !== standardPickupDate) {
+        setPickupDate(standardPickupDate);
+      }
+    } else if (pickupDate && pickupDate <= standardPickupDate) {
+      setPickupDate("");
+    }
+  }, [
+    allowExtendedRentalAtBooking,
+    needsExtraDays,
+    normalizedDate,
+    pickupDate,
+    ready,
+    standardPickupDate,
+  ]);
+
+  useEffect(() => {
+    if (!ready || !bookingZip || !isYmd(normalizedDate) || !standardPickupDate) {
+      setPickupCalendarEntries([]);
+      setPickupCalendarLoading(false);
+      setPickupCalendarError(null);
+      setPickupNextAvailableDate(null);
+      return;
+    }
+
+    let cancelled = false;
+    const firstExtraPickupDate = addDaysYmd(standardPickupDate, 1);
+    const pickupCalendarStart = toYmd(startOfMonth(parseYmd(standardPickupDate)));
+
+    setPickupCalendarLoading(true);
+    setPickupCalendarError(null);
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          start: pickupCalendarStart,
+          days: "186",
+          zip: bookingZip,
+          deliveryDate: normalizedDate,
+          dumpsterSize: selectedDumpster.dumpsterSize,
+        });
+
+        if (selectedDumpster.dumpsterProductId) {
+          params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
+        }
+
+        const res = await fetch(`/api/availability/calendar?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (!res.ok || !json?.ok || !Array.isArray(json?.dates)) {
+          const message = json?.error || "Could not load pickup availability. Please try another delivery date.";
+          setPickupCalendarError(message);
+          setPickupCalendarEntries([]);
+          setPickupNextAvailableDate(null);
+          return;
+        }
+
+        const nextEntries = (json.dates as CalendarAvailabilityEntry[]).map((entry) => {
+          const beforeExtraWindow = entry.date < firstExtraPickupDate;
+          const inIncludedRentalWindow = entry.date >= normalizedDate && entry.date <= standardPickupDate;
+          const afterWindow = Boolean(maxPickupDate && entry.date > maxPickupDate);
+
+          if (!beforeExtraWindow && !afterWindow && pickupCap.state !== "error") {
+            return entry;
+          }
+
+          return {
+            ...entry,
+            remaining: 0,
+            state: entry.state === "past" ? "past" : "unavailable",
+            label: beforeExtraWindow
+              ? inIncludedRentalWindow
+                ? entry.date === standardPickupDate
+                  ? "Pickup"
+                  : "Included"
+                : undefined
+              : "Blocked",
+          } satisfies CalendarAvailabilityEntry;
+        });
+
+        setPickupCalendarEntries(nextEntries);
+        setPickupNextAvailableDate(
+          nextEntries.find((entry) => entry.state === "available" || entry.state === "limited")?.date ?? null,
+        );
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : "Could not load pickup availability. Please try another delivery date.";
+        setPickupCalendarError(message);
+        setPickupCalendarEntries([]);
+        setPickupNextAvailableDate(null);
+      } finally {
+        if (!cancelled) setPickupCalendarLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bookingZip,
+    maxPickupDate,
+    normalizedDate,
+    pickupCap.state,
+    pickupAvailabilityRetryKey,
+    ready,
+    selectedDumpster,
+    standardPickupDate,
+  ]);
+
+  const selectedPickupCalendarEntry = useMemo(
+    () => pickupCalendarEntries.find((entry) => entry.date === pickupDate) || null,
+    [pickupCalendarEntries, pickupDate],
+  );
+
+  const pickupTimingError = useMemo(() => {
+    if (!isYmd(normalizedDate)) return null;
+    if (pickupCap.state === "error") return pickupCap.message;
+    if (pickupCalendarError) return pickupCalendarError;
+    if (!standardPickupDate) return "We couldn’t determine the scheduled pickup date for this rental.";
+    if (pickupCap.state === "ready" && operationalMaxPickupDate && standardPickupDate > operationalMaxPickupDate) {
+      return `This delivery date isn’t available online because the included rental period would run past ${formatDateLong(
+        operationalMaxPickupDate,
+      )}. Please choose a different delivery date.`;
+    }
+    if (needsExtraDays) {
+      if (!pickupDate) return "Choose a pickup date for your extra days.";
+      if (!isYmd(pickupDate)) return "Choose a valid pickup date.";
+      if (pickupDate <= standardPickupDate) {
+        return `Extra-day pickup must be after ${formatDateLong(standardPickupDate)}.`;
+      }
+      if (maxPickupDate && pickupDate > maxPickupDate) {
+        return `Pickup date must be on or before ${formatDateLong(maxPickupDate)}.`;
+      }
+      if (
+        selectedPickupCalendarEntry &&
+        selectedPickupCalendarEntry.state !== "available" &&
+        selectedPickupCalendarEntry.state !== "limited"
+      ) {
+        return "That pickup date is unavailable. Please choose another date.";
+      }
+    }
+    return null;
+  }, [
+    maxPickupDate,
+    needsExtraDays,
+    normalizedDate,
+    operationalMaxPickupDate,
+    pickupCap,
+    pickupCalendarError,
+    pickupDate,
+    selectedPickupCalendarEntry,
+    standardPickupDate,
+  ]);
+
+  useEffect(() => {
+    if (!ready || !bookingZip || !isYmd(normalizedDate) || !isYmd(selectedPickupDate)) return;
+
+    if (
+      priceQuoteMatchesSelection(draftQuote, {
+        zip: bookingZip,
+        deliveryDate: normalizedDate,
+        pickupDate: selectedPickupDate,
+        pickupMode,
+      })
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    setQuoteLoading(true);
+    setTimingError(null);
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          zip: bookingZip,
+          deliveryDate: normalizedDate,
+          pickupMode,
+          pickupDate: selectedPickupDate,
+          dumpsterSize: selectedDumpster.dumpsterSize,
+        });
+
+        if (selectedDumpster.dumpsterProductId) {
+          params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
+        }
+
+        const res = await fetch(`/api/zip-check?${params.toString()}`, {
+          cache: "no-store",
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
+
+        if (!res.ok || !json?.serviced || !json?.priceQuote) {
+          setTimingError(json?.error || "We couldn’t refresh pricing for this rental period. Please try again.");
+          return;
+        }
+
+        const nextQuote = json.priceQuote as BookingPriceQuote;
+        setDraftQuote(nextQuote);
+
+        const raw = sessionStorage.getItem(getBookingStorageKey());
+        const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+        sessionStorage.setItem(
+          getBookingStorageKey(),
+          JSON.stringify({
+            ...existing,
+            deliveryDate: normalizedDate,
+            pickupMode,
+            pickupDate: selectedPickupDate,
+            maxPickupDate: pickupCap.state === "ready" ? pickupCap.maxPickupDate ?? undefined : existing.maxPickupDate,
+            maxDaysAllowed:
+              pickupCap.state === "ready" ? pickupCap.maxDaysAllowed ?? undefined : existing.maxDaysAllowed,
+            limitedAck: false,
+            priceQuote: nextQuote,
+          }),
+        );
+      } catch {
+        if (cancelled) return;
+        setTimingError("We couldn’t refresh pricing for this rental period. Please try again.");
+      } finally {
+        if (!cancelled) setQuoteLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bookingZip,
+    draftQuote,
+    normalizedDate,
+    pickupCap,
+    pickupMode,
+    ready,
+    selectedDumpster,
+    selectedPickupDate,
+  ]);
 
   const canContinue =
+    ready &&
     isYmd(normalizedDate) &&
+    isYmd(selectedPickupDate) &&
     availability.state === "ok" &&
     availability.remaining > 0 &&
+    pickupCap.state === "ready" &&
+    !pickupTimingError &&
+    !timingError &&
+    !quoteLoading &&
+    quoteMatchesCurrentSelection &&
+    (!needsExtraDays || !pickupCalendarLoading) &&
     hold.state !== "creating" &&
     (!cap || limitedAck); // ✅ require ack only when capped;
 
   async function handleContinue() {
+    if (!ready) return;
+
     const d = normalizedDate;
 
     // guard
     if (!isYmd(d)) return;
+    if (!isYmd(selectedPickupDate)) {
+      setHold({
+        state: "error",
+        message: "Please choose a pickup date before continuing.",
+      });
+      return;
+    }
+
+    if (
+      pickupTimingError ||
+      timingError ||
+      quoteLoading ||
+      !quoteMatchesCurrentSelection ||
+      pickupCap.state !== "ready" ||
+      (needsExtraDays && pickupCalendarLoading)
+    ) {
+      setHold({
+        state: "error",
+        message: pickupTimingError || timingError || "Please wait while we verify rental timing.",
+      });
+      return;
+    }
 
     // ✅ if we already have an active hold for this same date, reuse it
     try {
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
 
-      if (hasActiveHoldForDate(existing, d)) {
-        router.push("/confirm");
+      if (hasActiveHoldForDate(existing, d, selectedPickupDate)) {
+        sessionStorage.setItem(
+          getBookingStorageKey(),
+          JSON.stringify({
+            ...existing,
+            deliveryDate: d,
+            pickupMode,
+            pickupDate: selectedPickupDate,
+            holdPickupDate: selectedPickupDate,
+            priceQuote: draftQuote ?? existing.priceQuote ?? null,
+            maxPickupDate: pickupCap.maxPickupDate ?? undefined,
+            maxDaysAllowed: pickupCap.maxDaysAllowed ?? undefined,
+          }),
+        );
+        router.push("/book/placement");
         return;
       }
     } catch {
@@ -400,22 +1034,29 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     setHold({ state: "creating" });
 
     let zip = "";
-    let bodyRentalDays = cap ? cap.maxDaysAllowed : 1;
-    let dumpsterSize = "14 yard";
-    let dumpsterProductId = "default";
+    let bodyRentalDays = 1;
+    let dumpsterSize = "";
+    let dumpsterProductId: string | null = null;
     try {
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-      zip = (existing.zip || "").trim(); // assuming Step 1 saved it as `zip`
-      const standardRentalDays = existing.priceQuote?.standardRentalDays ?? 1;
-      bodyRentalDays = cap ? cap.maxDaysAllowed : standardRentalDays;
-      dumpsterSize = (existing.dumpsterSize || "").trim() || "14 yard";
-      dumpsterProductId = (existing.dumpsterProductId || "").trim() || "default";
+      zip = (existing.zip || existing.customerZip || "").trim();
+      bodyRentalDays = Math.max(1, Math.round((Date.parse(selectedPickupDate) - Date.parse(d)) / 86400000));
+      dumpsterSize = (existing.dumpsterSize || "").trim();
+      dumpsterProductId = (existing.dumpsterProductId || "").trim() || null;
     } catch {
       zip = "";
-      bodyRentalDays = cap ? cap.maxDaysAllowed : 1;
-      dumpsterSize = "14 yard";
-      dumpsterProductId = "default";
+      bodyRentalDays = 1;
+      dumpsterSize = "";
+      dumpsterProductId = null;
+    }
+
+    if (!zip || !dumpsterSize) {
+      setHold({
+        state: "error",
+        message: "Your booking session is missing the service ZIP or dumpster size. Please go back and choose your dumpster again.",
+      });
+      return;
     }
 
     try {
@@ -452,14 +1093,20 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
         JSON.stringify({
           ...existing,
           deliveryDate: d,
+          pickupMode,
+          pickupDate: selectedPickupDate,
           holdId: json.holdId,
           holdDeliveryDate: d,
+          holdPickupDate: selectedPickupDate,
           holdExpiresAt: json.expiresAt,
+          maxPickupDate: pickupCap.maxPickupDate ?? undefined,
+          maxDaysAllowed: pickupCap.maxDaysAllowed ?? undefined,
+          priceQuote: draftQuote ?? existing.priceQuote ?? null,
         })
       );
 
       setHold({ state: "idle" });
-      router.push("/confirm");
+      router.push("/book/placement");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Hold failed. Please try again.";
       setHold({
@@ -478,11 +1125,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 4 of 6
+                  Step 3 of 4
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-[66.667%] rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-3/4 rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>
@@ -494,17 +1141,12 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
           <section className="mt-8">
             <div className="mx-auto w-full max-w-[640px] grid gap-6 [&>*]:w-full">
-              <div className="space-y-2.5">
-                <div className="space-y-1.5">
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
-                    {content.title}
-                  </h2>
-                  <p className="text-sm text-slate-600 sm:text-[15px]">
-                    {content.description}
-                  </p>
-                </div>
-
-                {highlightedEarliestDate && (
+              <div>
+                {isYmd(normalizedDate) ? (
+                  <div className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm">
+                    Selected delivery: {formatDateLong(normalizedDate)}
+                  </div>
+                ) : highlightedEarliestDate ? (
                   <button
                     type="button"
                     onClick={() => updateDeliveryDate(highlightedEarliestDate)}
@@ -512,18 +1154,113 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                   >
                     {content.earliestAvailablePrefix} {formatDateLong(highlightedEarliestDate)}
                   </button>
-                )}
+                ) : null}
 
-                <div>
+                <div className="mt-4 mb-5">
                   <AvailabilityCalendar
                     selectedDate={normalizedDate}
                     onSelectDate={updateDeliveryDate}
                     entries={calendarEntries}
-                    loading={calendarLoading}
+                    loading={deliveryCalendarLoading}
                     loadError={calendarError}
                     nextAvailableDate={nextAvailableDate}
+                    loadingMessage="Checking delivery availability..."
+                    onRetry={() => {
+                      void loadCalendarRange(calendarRangeStart);
+                    }}
+                    getTileVariant={(entry, context) => {
+                      if (!entry) return null;
+                      if (hasSelectedDeliveryDate && standardPickupDate) {
+                        if (context.date <= normalizedDate || context.date > standardPickupDate) return null;
+                        return context.date === standardPickupDate ? "rental-pickup" : "rental-day";
+                      }
+                      if (!previewDeliveryDate || !previewPickupDate) return null;
+                      if (context.date < previewDeliveryDate || context.date > previewPickupDate) return null;
+                      if (context.date === previewDeliveryDate) return "rental-preview-start";
+                      return context.date === previewPickupDate ? "rental-preview-pickup" : "rental-preview-day";
+                    }}
+                    getTileLabel={(entry, context) => {
+                      if (!context.isCurrentMonth) return null;
+                      if (
+                        hasSelectedDeliveryDate &&
+                        standardPickupDate &&
+                        entry &&
+                        context.date > normalizedDate &&
+                        context.date <= standardPickupDate
+                      ) {
+                        return context.date === standardPickupDate ? "Pickup" : "Included";
+                      }
+                      if (
+                        !hasSelectedDeliveryDate &&
+                        previewDeliveryDate &&
+                        previewPickupDate &&
+                        entry &&
+                        context.date >= previewDeliveryDate &&
+                        context.date <= previewPickupDate
+                      ) {
+                        if (context.date === previewDeliveryDate) return "Earliest";
+                        return context.date === previewPickupDate ? "Pickup" : "Included";
+                      }
+                      if (!entry || entry.state === "past") return "Past";
+                      if (entry.state === "unavailable") return "Sold out";
+                      return `${entry.remaining} left`;
+                    }}
+                    getAriaLabel={(entry, date) => {
+                      const baseDate = formatDateLong(date);
+                      if (date === normalizedDate) {
+                        return `${baseDate}. Selected delivery date.`;
+                      }
+                      if (hasSelectedDeliveryDate && standardPickupDate && date > normalizedDate && date <= standardPickupDate) {
+                        return date === standardPickupDate
+                          ? `${baseDate}. Recommended pickup date for this rental.`
+                          : `${baseDate}. Included rental day.`;
+                      }
+                      if (
+                        !hasSelectedDeliveryDate &&
+                        previewDeliveryDate &&
+                        previewPickupDate &&
+                        date >= previewDeliveryDate &&
+                        date <= previewPickupDate
+                      ) {
+                        if (date === previewDeliveryDate) {
+                          return `${baseDate}. Earliest available delivery date. Preview rental window starts.`;
+                        }
+                        return date === previewPickupDate
+                          ? `${baseDate}. Preview recommended pickup date.`
+                          : `${baseDate}. Preview included rental day.`;
+                      }
+                      return `${baseDate}. ${
+                        !entry
+                          ? "Availability not loaded"
+                          : entry.state === "past"
+                            ? "Past"
+                            : entry.state === "available"
+                              ? "Available for delivery"
+                              : entry.state === "limited"
+                                ? `${entry.remaining} delivery slot${entry.remaining === 1 ? "" : "s"} left`
+                                : "Unavailable for delivery"
+                      }.`;
+                    }}
                   />
                 </div>
+
+                {displayRentalWindowDeliveryDate && displayRentalWindowPickupDate && draftQuote ? (
+                  <div className="rounded-2xl border border-[#FDBA74]/60 bg-[#FFF7ED] px-4 py-4 text-sm text-[#9A3412]">
+                    <div className="mb-3 text-sm font-semibold text-slate-950">
+                      {hasSelectedDeliveryDate ? "Selected rental window" : "Next available rental window"}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <span className="font-semibold text-slate-950">Delivery:</span>{" "}
+                        {formatDateShort(displayRentalWindowDeliveryDate)}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-950">Pickup:</span>{" "}
+                        {formatDateShort(displayRentalWindowPickupDate)}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {cap && (
@@ -538,64 +1275,266 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                       type="checkbox"
                       className="mt-1"
                       checked={limitedAck}
-                      onChange={(e) => {
-                        const v = e.target.checked;
-                        setLimitedAck(v);
-                        const raw = sessionStorage.getItem(getBookingStorageKey());
-                        const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-                        sessionStorage.setItem(getBookingStorageKey(), JSON.stringify({ ...existing, limitedAck: v }));
-                      }}
+                      onChange={() => {}}
                     />
                     <span>I understand my rental must end by {cap.maxPickupDate}.</span>
                   </label>
                 </div>
               )}
 
-              {normalizedDate || availability.state === "loading" || availability.state === "error" || availability.state === "none" ? (
-                <div
-                  className={`rounded-2xl border px-4 py-4 text-sm ${
-                    availability.state === "none"
-                        ? "border-red-200 bg-red-50 text-red-950"
-                        : availability.state === "error"
-                          ? "border-red-200 bg-red-50 text-red-900"
-                          : availability.state === "loading"
-                            ? "border-slate-200 bg-slate-50 text-slate-700"
-                            : "border-slate-200 bg-white text-slate-700 shadow-sm"
-                  }`}
-                >
-                  {availability.state === "loading" ? (
-                    "Checking availability…"
-                  ) : availability.state === "error" ? (
-                    availability.message
-                  ) : availability.state === "none" ? (
-                    <>
-                      <span className="font-semibold">
-                        {isYmd(normalizedDate) ? formatDateLong(normalizedDate) : "That date"} selected
+              {isYmd(normalizedDate) && draftQuote ? (
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-semibold text-slate-900">Rental timing</h3>
+                    <p className="text-sm leading-6 text-slate-600">
+                      Your rental includes{" "}
+                      <span className="font-semibold text-slate-900">
+                        {standardRentalDays} day{standardRentalDays === 1 ? "" : "s"}
                       </span>
-                      {` — unavailable for delivery.${nextAvailableAfterSelection ? ` Next available: ${formatDateLong(nextAvailableAfterSelection)}.` : ""}`}
-                    </>
-                  ) : selectedCalendarEntry ? (
-                    <>
-                      <span className="font-semibold">
-                        {formatDateLong(selectedCalendarEntry.date)} selected
+                      .
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                    <div>
+                      Pickup is scheduled for{" "}
+                      <span className="font-semibold text-slate-900">
+                        {standardPickupDate ? formatDateLong(standardPickupDate) : "Checking..."}
                       </span>
-                      {selectedCalendarEntry.state === "limited"
-                        ? ` — only ${selectedCalendarEntry.remaining} dumpster left for delivery.`
-                        : availability.state === "ok"
-                          ? ` — ${availability.remaining} dumpster${availability.remaining === 1 ? "" : "s"} available for delivery.`
-                          : ""}
-                    </>
+                      .
+                    </div>
+                  </div>
+
+                  {pickupCap.state === "loading" ? (
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                      Checking pickup availability...
+                    </div>
                   ) : null}
-                </div>
-              ) : nextAvailableDate ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-                  {content.nextAvailablePrefix} <span className="font-semibold text-slate-950">{formatDateLong(nextAvailableDate)}</span>
+
+                  {allowExtendedRentalAtBooking ? (
+                    <div className="mt-4 space-y-4">
+                      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm transition hover:border-slate-300 hover:bg-slate-50">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={needsExtraDays}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setNeedsExtraDays(checked);
+                            setTimingError(null);
+                            clearPersistedHold();
+                            if (!checked) {
+                              setPickupDate(standardPickupDate);
+                            } else {
+                              setPickupDate("");
+                            }
+                          }}
+                        />
+                        <span>
+                          <span className="block font-semibold text-slate-900">Need more time?</span>
+                          <span className="mt-1 block leading-6 text-slate-600">
+                            Keep the dumpster longer by choosing a later pickup date. Extra days are{" "}
+                            {formatUsdFromCents(dailyOveragePriceCents)} per day.
+                          </span>
+                          <span className="mt-2 block font-semibold text-[#F97316]">
+                            {needsExtraDays ? "Remove extra days" : "Add extra days"}
+                          </span>
+                        </span>
+                      </label>
+
+                      {needsExtraDays ? (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <h4 className="text-base font-semibold text-slate-900">Choose pickup date</h4>
+                            <p className="text-sm leading-6 text-slate-600">
+                              Your included pickup date is {formatDateLong(standardPickupDate)}. Choose a later available pickup date if you need more time.
+                            </p>
+                          </div>
+
+                          {pickupNextAvailableDate ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPickupDate(pickupNextAvailableDate);
+                                setTimingError(null);
+                                clearPersistedHold();
+                              }}
+                              className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15"
+                            >
+                              Earliest extra-day pickup: {formatDateLong(pickupNextAvailableDate)}
+                            </button>
+                          ) : null}
+
+                          <AvailabilityCalendar
+                            selectedDate={needsExtraDays ? pickupDate : ""}
+                            onSelectDate={(value) => {
+                              setPickupDate(value);
+                              setTimingError(null);
+                              clearPersistedHold();
+                            }}
+                            entries={pickupCalendarEntries}
+                            loading={pickupCalendarIsLoading}
+                            loadError={pickupCalendarError || (pickupCap.state === "error" ? pickupCap.message : null)}
+                            nextAvailableDate={pickupNextAvailableDate}
+                            onRetry={() => {
+                              setPickupCalendarError(null);
+                              setTimingError(null);
+                              setPickupAvailabilityRetryKey((key) => key + 1);
+                            }}
+                            getTileVariant={(entry, context) => {
+                              if (!entry || !context.isCurrentMonth || !isYmd(normalizedDate) || !standardPickupDate) {
+                                return null;
+                              }
+
+                              if (context.date >= normalizedDate && context.date <= standardPickupDate) {
+                                return context.date === standardPickupDate ? "rental-pickup" : "rental-day";
+                              }
+
+                              if (
+                                isYmd(pickupDate) &&
+                                pickupDate > standardPickupDate &&
+                                context.date > standardPickupDate &&
+                                context.date < pickupDate
+                              ) {
+                                return "rental-day";
+                              }
+
+                              return null;
+                            }}
+                            getTileLabel={(entry, context) => {
+                              if (!context.isCurrentMonth) return null;
+                              if (isYmd(normalizedDate) && context.date < normalizedDate) return null;
+                              if (isYmd(pickupDate) && context.date === pickupDate) return "Pickup";
+                              if (
+                                isYmd(pickupDate) &&
+                                pickupDate > standardPickupDate &&
+                                context.date > standardPickupDate &&
+                                context.date < pickupDate
+                              ) {
+                                return "Extra";
+                              }
+                              if (!entry || entry.state === "past") return "Past";
+                              if (entry.label) return entry.label;
+                              if (entry.state === "available") return "Open";
+                              if (entry.state === "limited") {
+                                return entry.remaining > 0 ? `${entry.remaining} left` : "Open";
+                              }
+                              return "Blocked";
+                            }}
+                            legendItems={[
+                              { label: "Open", dotClassName: "bg-emerald-500" },
+                              { label: "Unavailable", dotClassName: "bg-slate-400" },
+                              { label: "Rental window", dotClassName: "bg-[#FDBA74]" },
+                              { label: "Selected pickup", dotClassName: "bg-[#F97316]" },
+                            ]}
+                            loadingMessage="Checking pickup availability..."
+                            emptyMonthMessage={(monthLabel, nextAvailable) =>
+                              `No pickup dates are available in ${monthLabel}.${nextAvailable ? ` Earliest pickup: ${formatDateLong(nextAvailable)}.` : ""}`
+                            }
+                            getAriaLabel={(entry, date) =>
+                              `${formatDateLong(date)}. ${
+                                date === pickupDate
+                                  ? "Selected pickup date"
+                                  : isYmd(normalizedDate) && date < normalizedDate
+                                    ? "Unavailable for pickup"
+                                    : isYmd(normalizedDate) && date >= normalizedDate && date < standardPickupDate
+                                      ? "Included rental day"
+                                      : date === standardPickupDate
+                                        ? "Scheduled pickup date"
+                                        : isYmd(pickupDate) &&
+                                            pickupDate > standardPickupDate &&
+                                            date > standardPickupDate &&
+                                            date < pickupDate
+                                          ? "Extra rental day"
+                                          : !entry || entry.state === "past"
+                                            ? "Past"
+                                            : entry.state === "available"
+                                              ? "Open for pickup"
+                                              : entry.state === "limited"
+                                                ? `${entry.remaining} pickup slot${entry.remaining === 1 ? "" : "s"} left`
+                                                : "Unavailable for pickup"
+                              }.`
+                            }
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {needsExtraDays && isYmd(selectedPickupDate) ? (
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-sm">
+                      <div>
+                        Selected pickup date:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {formatDateLong(selectedPickupDate)}
+                        </span>
+                      </div>
+                      {extraDays > 0 ? (
+                        <>
+                          <div className="mt-2">
+                            You added{" "}
+                            <span className="font-semibold text-slate-900">
+                              {extraDays} extra day{extraDays === 1 ? "" : "s"}
+                            </span>{" "}
+                            at {formatUsdFromCents(dailyOveragePriceCents)} per day.
+                          </div>
+                          <div className="mt-2">
+                            Extra days total:{" "}
+                            <span className="font-semibold text-slate-900">
+                              {formatUsdFromCents(extraDaysChargeCents)}
+                            </span>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {draftQuote ? (
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                      <div className="flex items-center justify-between gap-4">
+                        <span>Base price</span>
+                        <span className="font-semibold text-slate-900">
+                          {formatUsdFromCents(draftQuote.rentalPriceCents)}
+                        </span>
+                      </div>
+                      {extraDays > 0 ? (
+                        <div className="mt-2 flex items-center justify-between gap-4">
+                          <span>
+                            Extra days ({extraDays} x {formatUsdFromCents(dailyOveragePriceCents)})
+                          </span>
+                          <span className="font-semibold text-slate-900">
+                            {formatUsdFromCents(extraDaysChargeCents)}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="mt-2 flex items-center justify-between gap-4">
+                        <span>Estimated tax</span>
+                        <span className="font-semibold text-slate-900">
+                          {quoteLoading ? "Calculating..." : formatUsdFromCents(estimatedSalesTaxCents)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-4 border-t border-slate-200 pt-3">
+                        <span className="font-semibold text-slate-900">Estimated total</span>
+                        <span className="font-semibold text-slate-900">
+                          {quoteLoading ? "Calculating..." : formatUsdFromCents(estimatedTotalCents)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {pickupTimingError || timingError ? (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                      {pickupTimingError || timingError}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
               {/* Note */}
               <div className="w-full rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm text-slate-600">
-                {content.holdNoteTemplate.replace("{minutes}", String(holdMinutes))}
+                {"We'll hold your selected dates for "}
+                {holdMinutes}
+                {" minutes while you finish booking."}
               </div>
 
               <p className="text-xs text-slate-500">
@@ -611,7 +1550,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                   className="group w-full h-14 rounded-2xl bg-[#F97316] text-white font-semibold text-base shadow-md transition-all duration-200 ease-out hover:bg-[#EA6A10] hover:shadow-lg active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <span className="flex items-center justify-center gap-2">
-                    {hold.state === "creating" ? "Holding..." : "Continue"}
+                    {hold.state === "creating"
+                      ? "Holding..."
+                      : isYmd(normalizedDate)
+                        ? "Continue to your details"
+                        : "Select a delivery date to continue"}
                     <span className="transition-transform group-hover:translate-x-1 text-white/90">
                       →
                     </span>
@@ -628,7 +1571,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
               <div className="w-full">
                 <a
-                  href="/book/placement"
+                  href={backToDumpsterHref}
                   className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
                 >
                   ← Back

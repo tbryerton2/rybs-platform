@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { getPooledDumpsterAvailabilityBySize } from "@/lib/admin/dumpster-availability";
+import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
-import { supabase } from "@/lib/supabase";
+import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { addDaysYmd, getMaximumBookablePickupDate } from "@/lib/booking-pricing";
 
 function isYMD(s: string) {
@@ -21,47 +20,51 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid deliveryDate" }, { status: 400 });
   }
 
-  const pricingSettings = await getPricingSettingsSnapshot();
-  const defaultEnd = addDaysYmd(deliveryDate, pricingSettings.standardRentalDays);
-  let nextTight: string | null = null;
+  const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
+  const defaultEnd = addDaysYmd(deliveryDate, rentalPolicy.standardRentalDays);
+  const pricingMaxPickupDate =
+    getMaximumBookablePickupDate(deliveryDate, rentalPolicy, null) ?? defaultEnd;
+  let lastAvailablePickupDate: string | null = null;
 
   try {
-    for (let candidateDate = deliveryDate; candidateDate <= defaultEnd; candidateDate = addDaysYmd(candidateDate, 1)) {
-      const pooled = await getPooledDumpsterAvailabilityBySize({
+    for (
+      let candidateDate = defaultEnd;
+      candidateDate <= pricingMaxPickupDate;
+      candidateDate = addDaysYmd(candidateDate, 1)
+    ) {
+      const availability = await getDeliveryAvailabilitySnapshot({
+        deliveryDate,
+        rpcDays: rentalPolicy.standardRentalDays,
         dumpsterSize: selectedDumpster.dumpsterSize,
         dumpsterProductId: selectedDumpster.dumpsterProductId,
-        deliveryDate: candidateDate,
-        pickupDate: null,
+        pickupDate: candidateDate,
+        logContext: "api/pickup-cap",
       });
 
-      if (pooled.available <= 0) {
-        nextTight = candidateDate;
+      if (availability.remaining <= 0) {
         break;
       }
+
+      lastAvailablePickupDate = candidateDate;
     }
-  } catch (pooledError) {
-    // Legacy RPC fallback remains here so pickup-date capping still works if the
-    // pooled inventory helper fails for any candidate date in the window.
-    console.error("Pickup-cap pooled availability failed, falling back to legacy RPC.", pooledError);
-
-    const { data, error } = await supabase.rpc("next_tight_date", { start_date: deliveryDate });
-
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    }
-
-    nextTight = (data as string | null) || null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Pickup-cap availability check failed.";
+    console.error("[api/pickup-cap] Pickup-cap availability request failed.", error);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 
-  // Not tight within default window -> not capped
-  if (!nextTight || nextTight > defaultEnd) {
+  if (!lastAvailablePickupDate) {
+    return NextResponse.json({ ok: true, capped: true, maxPickupDate: "", maxDaysAllowed: 0 });
+  }
+
+  if (lastAvailablePickupDate >= pricingMaxPickupDate) {
     return NextResponse.json({ ok: true, capped: false });
   }
 
-  const maxPickupDate = nextTight; // same-day flip allowed
+  const maxPickupDate = lastAvailablePickupDate;
   const maxDaysAllowed =
     Math.max(0, Math.round((Date.parse(maxPickupDate) - Date.parse(deliveryDate)) / 86400000));
-  const maxBookablePickupDate = getMaximumBookablePickupDate(deliveryDate, pricingSettings, maxPickupDate);
+  const maxBookablePickupDate = getMaximumBookablePickupDate(deliveryDate, rentalPolicy, maxPickupDate);
 
   return NextResponse.json({
     ok: true,

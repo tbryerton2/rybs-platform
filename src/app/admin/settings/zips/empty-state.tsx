@@ -19,7 +19,7 @@ export function EmptyState() {
         }}
         className="mt-6 inline-flex items-center rounded-2xl bg-[#F97316] px-4 py-2 text-sm font-medium text-white transition hover:opacity-95"
       >
-        Add ZIP code
+        Add ZIP
       </button>
     </div>
   );

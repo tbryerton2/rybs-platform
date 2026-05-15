@@ -7,6 +7,7 @@ import {
   ArrowUturnLeftIcon,
   CalendarDaysIcon,
   ClipboardDocumentCheckIcon,
+  ExclamationTriangleIcon,
   MapPinIcon,
   TruckIcon,
   XMarkIcon,
@@ -63,22 +64,42 @@ type DayData = {
 };
 
 type StopVariant = "delivery" | "pickup";
+type ScheduleBoardFilter =
+  | "stops"
+  | "deliveries"
+  | "pickups"
+  | "overdueDeliveries"
+  | "overduePickups";
+
+function OctagonAlert(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.172 2.75h5.656a2 2 0 0 1 1.414.586l5.172 5.172a2 2 0 0 1 .586 1.414v4.156a2 2 0 0 1-.586 1.414l-5.172 5.172a2 2 0 0 1-1.414.586H9.172a2 2 0 0 1-1.414-.586l-5.172-5.172A2 2 0 0 1 2 14.078V9.922a2 2 0 0 1 .586-1.414L7.758 3.336a2 2 0 0 1 1.414-.586Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.75v5.5" />
+      <circle cx="12" cy="16.25" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 const sectionTheme = {
   delivery: {
-    section: "border-[#F97316]/12 bg-[#F97316]/[0.08]",
-    empty: "border-[#F97316]/12 bg-[#F97316]/10 text-[#9A3412]",
-    icon: "bg-[#F97316]/12 text-[#C2410C] ring-[#F97316]/15",
-    card: "border-[#F97316]/25 bg-[#F97316]/10",
-    hover: "hover:border-[#EA580C]/35 hover:bg-[#F97316]/[0.14]",
-    focus: "focus-visible:ring-[#F97316]/20",
-    count: "text-[#C2410C]",
-    title: "text-[#9A3412]",
+    section: "border-emerald-200/80 bg-slate-50/70",
+    empty: "border-emerald-200 bg-emerald-100/70 text-emerald-900",
+    icon: "bg-white text-emerald-700 ring-emerald-200/90",
+    card: "border-emerald-300/80 bg-emerald-50/80",
+    hover: "hover:border-emerald-400/90 hover:bg-emerald-100/90",
+    focus: "focus-visible:ring-emerald-200",
+    count: "text-emerald-700",
+    title: "text-emerald-900",
   },
   pickup: {
     section: "border-blue-100 bg-blue-50/70",
     empty: "border-blue-100 bg-blue-100/70 text-blue-800",
-    icon: "bg-blue-100 text-blue-700 ring-blue-200",
+    icon: "bg-white text-blue-700 ring-blue-200",
     card: "border-blue-200 bg-blue-100/70",
     hover: "hover:border-blue-300 hover:bg-blue-100/90",
     focus: "focus-visible:ring-blue-200",
@@ -90,6 +111,15 @@ const sectionTheme = {
 function dateFromISO(iso: string) {
   const [year, month, day] = iso.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function todayISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 function formatShortDate(iso?: string | null) {
@@ -146,10 +176,16 @@ function stopDescriptor(job: BookingRow) {
   return bookingReference(job);
 }
 
-function assignedDumpsterLabel(job: BookingRow) {
-  const displayName = job.assigned_dumpster?.display_name?.trim();
-  const equipmentId = job.assigned_dumpster?.equipment_id?.trim();
-  return [displayName, equipmentId].filter(Boolean).join(" • ") || "Unplanned";
+function isOverdueDelivery(job: BookingRow) {
+  return Boolean(
+    job.delivery_date &&
+      job.delivery_date < todayISO() &&
+      (job.status === "confirmed" || job.status === "scheduled"),
+  );
+}
+
+function isOverduePickup(job: BookingRow) {
+  return Boolean(job.pickup_date && job.pickup_date < todayISO() && job.status === "delivered");
 }
 
 function operationalNotes(job: BookingRow, variant: StopVariant) {
@@ -270,12 +306,6 @@ function QuickViewDialog({
             <div className="mt-1 text-sm font-semibold text-slate-900">{formatShortDate(serviceDate)}</div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Planned dumpster
-            </div>
-            <div className="mt-1 text-sm font-semibold text-slate-900">{assignedDumpsterLabel(job)}</div>
-          </div>
         </div>
 
         <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -349,10 +379,12 @@ function SectionHeader({
   title,
   count,
   variant,
+  showIcon = true,
 }: {
   title: string;
   count: number;
   variant: StopVariant;
+  showIcon?: boolean;
 }) {
   const theme = sectionTheme[variant];
   const Icon = variant === "delivery" ? TruckIcon : ArrowUturnLeftIcon;
@@ -360,12 +392,14 @@ function SectionHeader({
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2">
-        <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ring-1 ${theme.icon}`}>
-          <Icon className="h-4 w-4" />
-        </span>
+        {showIcon ? (
+          <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ring-1 ${theme.icon}`}>
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : null}
         <div className={`text-sm font-semibold ${theme.title}`}>{title}</div>
       </div>
-      <div className={`text-xs font-semibold ${theme.count}`}>{count}</div>
+      <div className={`pr-1 text-xs font-semibold ${theme.count}`}>{count}</div>
     </div>
   );
 }
@@ -374,33 +408,45 @@ function CompactEmptyState({
   label,
   icon: Icon,
   variant,
+  multiline = false,
 }: {
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   variant: StopVariant;
+  multiline?: boolean;
 }) {
   const theme = sectionTheme[variant];
 
   return (
-    <div className={`rounded-2xl border px-4 py-5 text-center ${theme.empty}`}>
+    <div className={`rounded-2xl border px-3.5 py-4 text-center ${theme.empty}`}>
       <div
         className={`mx-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl ring-1 ${theme.icon}`}
       >
         <Icon className="h-5 w-5" />
       </div>
-      <div className="mt-3 text-sm font-semibold">{label}</div>
+      <div className={`mt-2.5 text-sm font-semibold ${multiline ? "leading-5" : ""}`}>
+        {multiline ? (
+          <>
+            <span className="block">No deliveries</span>
+            <span className="block">scheduled</span>
+          </>
+        ) : (
+          label
+        )}
+      </div>
     </div>
   );
 }
 
-function CombinedEmptyState() {
+function CompactEmptyDayState() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-100/80 px-4 py-8 text-center text-slate-700">
-      <div className="mx-auto inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-600 ring-1 ring-slate-200">
+    <div className="mx-auto w-full max-w-[110px] rounded-2xl border border-slate-200 bg-slate-100/80 px-2 py-2.5 text-center text-slate-700">
+      <div className="mx-auto inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white text-slate-600 ring-1 ring-slate-200">
         <ClipboardDocumentCheckIcon className="h-5 w-5" />
       </div>
-      <div className="mt-3 text-sm font-semibold text-slate-900">
-        No deliveries or pickups scheduled
+      <div className="mt-1 text-sm font-semibold leading-4.5 text-slate-900">
+        <span className="block">Nothing</span>
+        <span className="block">scheduled</span>
       </div>
     </div>
   );
@@ -416,6 +462,13 @@ function StopCard({
   onOpen: (job: BookingRow, variant: StopVariant) => void;
 }) {
   const theme = sectionTheme[variant];
+  const overdue = variant === "delivery" ? isOverdueDelivery(job) : isOverduePickup(job);
+  const Icon = overdue ? (variant === "delivery" ? OctagonAlert : ExclamationTriangleIcon) : variant === "delivery" ? TruckIcon : ArrowUturnLeftIcon;
+  const iconClasses = overdue
+    ? "bg-white text-rose-700 ring-rose-200"
+    : variant === "delivery"
+      ? "bg-white text-emerald-700 ring-emerald-200/90"
+      : theme.icon;
 
   return (
     <button
@@ -424,16 +477,20 @@ function StopCard({
       className={`group w-full rounded-2xl border p-3 text-left shadow-sm shadow-slate-950/5 transition duration-150 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-4 ${theme.card} ${theme.hover} ${theme.focus}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{job.customer_name || "Unnamed customer"}</div>
-          <div className="mt-1 text-xs font-medium text-slate-700">{stopDescriptor(job)}</div>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ring-1 ${iconClasses}`}>
+            <Icon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-900">{job.customer_name || "Unnamed customer"}</div>
+            <div className="mt-1 text-xs font-medium text-slate-700">{stopDescriptor(job)}</div>
+          </div>
         </div>
       </div>
 
       <div className="mt-2 text-sm text-slate-600">{formatAddress(job)}</div>
-      <div className="mt-1 text-xs text-slate-500">Planned dumpster: {assignedDumpsterLabel(job)}</div>
 
-      <div className="mt-3 flex items-center justify-end gap-3 text-xs text-slate-500">
+      <div className="mt-3 flex items-center justify-end gap-3 pr-1 text-xs text-slate-500">
         <span className="font-semibold text-slate-400 transition group-hover:text-slate-600">Quick view</span>
       </div>
     </button>
@@ -448,11 +505,21 @@ function DayColumn({
   onOpen: (job: BookingRow, variant: StopVariant) => void;
 }) {
   const bothEmpty = day.deliveries.length === 0 && day.pickups.length === 0;
+  const deliveriesEmpty = day.deliveries.length === 0;
+  const pickupsEmpty = day.pickups.length === 0;
+  const lightColumn = !bothEmpty && ((deliveriesEmpty && !pickupsEmpty) || (!deliveriesEmpty && pickupsEmpty));
+  const sharedSectionWidth = lightColumn ? "mx-auto w-full max-w-[206px]" : "w-full";
   const [weekday = day.dateLabel, dayNumber = ""] = day.dateLabel.split(" ");
 
   return (
     <section
-      className={`flex h-full min-w-[250px] flex-col rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/5 ${
+      className={`flex-none rounded-[26px] border border-slate-200 bg-white shadow-sm shadow-slate-950/5 ${
+        bothEmpty
+          ? "w-[154px] px-3 pt-4 pb-3.5"
+          : lightColumn
+            ? "w-[236px] px-3.5 pt-4 pb-3.5"
+            : "w-[260px] px-4 pt-4 pb-4"
+      } ${
         day.isToday ? "ring-2 ring-[#F97316]/15" : ""
       }`}
     >
@@ -475,86 +542,169 @@ function DayColumn({
           </div>
         </div>
 
-        <div className="mt-1.5 text-sm text-slate-500">
-          {day.totalStops} {day.totalStops === 1 ? "scheduled stop" : "scheduled stops"}
+        <div className="mt-1.5 text-sm leading-5 text-slate-500">
+          {day.totalStops} {day.totalStops === 1 ? "stop" : "stops"}
         </div>
       </header>
 
-      <div className="mt-3 flex flex-1 flex-col gap-4">
+      <div className={bothEmpty ? "mt-3" : "mt-3 flex flex-col gap-4"}>
         {bothEmpty ? (
-          <CombinedEmptyState />
+          <CompactEmptyDayState />
         ) : (
-          <>
-            <div className={`rounded-[22px] border p-3 ${sectionTheme.delivery.section}`}>
-              <SectionHeader title="Deliveries" count={day.deliveries.length} variant="delivery" />
-              <div className="mt-3 space-y-3">
-                {day.deliveries.length ? (
-                  day.deliveries.map((job) => (
+          <div className={`${sharedSectionWidth} space-y-4`}>
+            {deliveriesEmpty ? (
+              <CompactEmptyState
+                label="No deliveries scheduled"
+                icon={TruckIcon}
+                variant="delivery"
+                multiline
+              />
+            ) : (
+              <div className={`rounded-[22px] border px-2.5 py-3 ${sectionTheme.delivery.section}`}>
+                <SectionHeader title="Deliveries" count={day.deliveries.length} variant="delivery" showIcon={false} />
+                <div className="mt-3 space-y-3">
+                  {day.deliveries.map((job) => (
                     <StopCard key={job.id} job={job} variant="delivery" onOpen={onOpen} />
-                  ))
-                ) : (
-                  <CompactEmptyState
-                    label="No deliveries scheduled"
-                    icon={TruckIcon}
-                    variant="delivery"
-                  />
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className={`rounded-[22px] border p-3 ${sectionTheme.pickup.section}`}>
-              <SectionHeader title="Pickups" count={day.pickups.length} variant="pickup" />
-              <div className="mt-3 space-y-3">
-                {day.pickups.length ? (
-                  day.pickups.map((job) => (
+            {pickupsEmpty ? (
+              <CompactEmptyState
+                label="No pickups scheduled"
+                icon={ArrowUturnLeftIcon}
+                variant="pickup"
+              />
+            ) : (
+              <div className={`rounded-[22px] border px-2.5 py-3 ${sectionTheme.pickup.section}`}>
+                <SectionHeader title="Pickups" count={day.pickups.length} variant="pickup" showIcon={false} />
+                <div className="mt-3 space-y-3">
+                  {day.pickups.map((job) => (
                     <StopCard key={job.id} job={job} variant="pickup" onOpen={onOpen} />
-                  ))
-                ) : (
-                  <CompactEmptyState
-                    label="No pickups scheduled"
-                    icon={ArrowUturnLeftIcon}
-                    variant="pickup"
-                  />
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
-          </>
+            )}
+          </div>
         )}
       </div>
     </section>
   );
 }
 
-export default function ScheduleBoard({ days }: { days: DayData[] }) {
+function emptyMessageForFilter(filter: ScheduleBoardFilter) {
+  switch (filter) {
+    case "deliveries":
+      return "No deliveries scheduled this week";
+    case "pickups":
+      return "No pickups scheduled this week";
+    case "overdueDeliveries":
+      return "No overdue deliveries this week";
+    case "overduePickups":
+      return "No overdue pickups this week";
+    default:
+      return "No scheduled deliveries or pickups this week";
+  }
+}
+
+export default function ScheduleBoard({
+  days,
+  activeFilter = "stops",
+}: {
+  days: DayData[];
+  activeFilter?: ScheduleBoardFilter;
+}) {
   const [openStop, setOpenStop] = useState<{ job: BookingRow; variant: StopVariant } | null>(null);
+  const [hideEmptyDays, setHideEmptyDays] = useState(false);
+  const filteredDays = days
+    .map((day) => {
+      let deliveries = day.deliveries;
+      let pickups = day.pickups;
+
+      switch (activeFilter) {
+        case "deliveries":
+          pickups = [];
+          break;
+        case "pickups":
+          deliveries = [];
+          break;
+        case "overdueDeliveries":
+          deliveries = day.deliveries.filter(isOverdueDelivery);
+          pickups = [];
+          break;
+        case "overduePickups":
+          deliveries = [];
+          pickups = day.pickups.filter(isOverduePickup);
+          break;
+        default:
+          break;
+      }
+
+      const totalStops = deliveries.length + pickups.length;
+
+      return {
+        ...day,
+        deliveries,
+        pickups,
+        totalStops,
+      };
+    })
+    .filter((day) => {
+      if (activeFilter === "stops") {
+        return hideEmptyDays ? day.totalStops > 0 : true;
+      }
+
+      return day.totalStops > 0;
+    });
 
   return (
     <>
       <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm shadow-slate-950/5">
         <div className="border-b border-slate-200 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
-              <CalendarDaysIcon className="h-5 w-5" />
-            </span>
-            <div>
-              <div className="text-base font-semibold text-slate-900">Weekly dispatch board</div>
-              <div className="mt-1 text-sm text-slate-600">
-                Scan the week day by day, identify open days quickly, and open any stop for more detail.
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+                <CalendarDaysIcon className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="text-base font-semibold text-slate-900">Weekly dispatch board</div>
               </div>
             </div>
+
+            <label className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm shadow-slate-950/5">
+              <input
+                type="checkbox"
+                checked={hideEmptyDays}
+                onChange={(event) => setHideEmptyDays(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]/30"
+              />
+              <span>Hide empty days</span>
+            </label>
           </div>
         </div>
 
         <div className="overflow-x-auto p-4">
-          <div className="grid min-w-[1820px] grid-cols-7 gap-4">
-            {days.map((day) => (
-              <DayColumn
-                key={day.iso}
-                day={day}
-                onOpen={(job, variant) => setOpenStop({ job, variant })}
-              />
-            ))}
-          </div>
+          {filteredDays.length > 0 ? (
+            <div className="flex min-w-max items-start gap-4">
+              {filteredDays.map((day) => (
+                <DayColumn
+                  key={day.iso}
+                  day={day}
+                  onOpen={(job, variant) => setOpenStop({ job, variant })}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-6 py-10 text-center text-slate-600">
+              <div className="mx-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-slate-600 ring-1 ring-slate-200">
+                <CalendarDaysIcon className="h-5 w-5" />
+              </div>
+              <div className="mt-3 text-sm font-semibold text-slate-900">
+                {emptyMessageForFilter(activeFilter)}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

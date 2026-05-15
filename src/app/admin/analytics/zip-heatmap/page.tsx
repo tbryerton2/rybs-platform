@@ -2,9 +2,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import Link from "next/link";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd } from "@/lib/money";
-import { ZipAnalyticsStatCard } from "../zip-analytics-stat-card";
 import { ZipAnalyticsViewTabs } from "../zip-analytics-view-tabs";
 import { ClickableTableRow } from "./clickable-table-row";
 import {
@@ -178,58 +178,6 @@ function getRowHeatClasses(level: number) {
   return "bg-white";
 }
 
-function RevenueCell({
-  value,
-  max,
-}: {
-  value: number;
-  max: number;
-}) {
-  const width =
-    max > 0 && value > 0 ? Math.max(10, Math.round((value / max) * 100)) : 0;
-
-  return (
-    <div className="flex w-[96px] flex-col items-center">
-      <div className="text-[18px] font-semibold leading-none text-slate-900">
-        {formatUsd(value, { maximumFractionDigits: 0 })}
-      </div>
-
-      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full bg-slate-400"
-          style={{ width: `${width}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function BookingCountCell({
-  value,
-  max,
-}: {
-  value: number;
-  max: number;
-}) {
-  const width =
-    max > 0 && value > 0 ? Math.max(10, Math.round((value / max) * 100)) : 0;
-
-  return (
-    <div className="flex w-[96px] flex-col items-center">
-      <div className="text-[18px] font-semibold leading-none text-slate-900">
-        {number(value)}
-      </div>
-
-      <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full bg-slate-500"
-          style={{ width: `${width}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function RangeTabs({ activeRange }: { activeRange: string }) {
   return (
     <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
@@ -258,7 +206,7 @@ function RangeTabs({ activeRange }: { activeRange: string }) {
 function StatusBadge({ active }: { active: boolean | null }) {
   if (active === true) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+      <span className="inline-flex h-8 min-w-[92px] items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700">
         Active
       </span>
     );
@@ -266,71 +214,15 @@ function StatusBadge({ active }: { active: boolean | null }) {
 
   if (active === false) {
     return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-slate-600">
+      <span className="inline-flex h-8 min-w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-slate-600">
         Disabled
       </span>
     );
   }
 
   return (
-    <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-slate-500">
-        Unknown
-      </span>
-  );
-}
-
-function IntensityBadge({ level }: { level: number }) {
-  if (level >= 0.85) {
-    return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-300 bg-slate-100 px-3 text-[11px] font-semibold text-slate-700">
-        Very high
-      </span>
-    );
-  }
-
-  if (level >= 0.6) {
-    return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-300 bg-slate-100 px-3 text-[11px] font-semibold text-slate-700">
-        High
-      </span>
-    );
-  }
-
-  if (level >= 0.35) {
-    return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[11px] font-semibold text-slate-600">
-        Moderate
-      </span>
-    );
-  }
-
-  if (level > 0) {
-    return (
-      <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-600">
-        Low
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex h-8 w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3 text-[11px] font-semibold text-slate-600">
-      No activity
-    </span>
-  );
-}
-
-function PricingBadge({ mode }: { mode: "default" | "custom" }) {
-  if (mode === "custom") {
-    return (
-      <span className="inline-flex min-w-[96px] items-center justify-center rounded-full border border-slate-300 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700">
-        Custom pricing
-      </span>
-    );
-  }
-
-  return (
-    <span className="inline-flex min-w-[96px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-600">
-        Default
+    <span className="inline-flex h-8 min-w-[92px] items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-slate-500">
+      Disabled
     </span>
   );
 }
@@ -375,9 +267,9 @@ function SortableHeader({
 export default async function ZipHeatMapPage({
   searchParams,
 }: {
-  searchParams: SearchParams | Promise<SearchParams>;
+  searchParams?: Promise<SearchParams>;
 }) {
-  const sp = await Promise.resolve(searchParams);
+  const sp = (await searchParams) ?? {};
   const now = new Date();
   const selectedRange = getRangeMeta(sp?.range);
   const selectedSort = getSortKey(sp?.sort);
@@ -494,141 +386,126 @@ export default async function ZipHeatMapPage({
 
   return (
     <AdminPage width="wide" className="space-y-6">
-      <AdminPageHeader
-        title="Heatmap"
-        description="Compare ZIP performance across bookings, revenue, and service coverage."
-        className="mb-0"
-        actions={
-          <div className="pt-2 lg:pt-0">
+      <AdminPageHeader title="Heatmap" className="mb-0" />
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
             <ZipAnalyticsViewTabs active="heat" />
           </div>
-        }
-      />
-
-      <section className="-mt-3">
-        <div className="flex flex-col gap-2 lg:items-end">
-          <RangeTabs activeRange={selectedRange.key} />
-        </div>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold uppercase tracking-[0.16em] text-slate-700">
-              Snapshot
-            </h2>
+          <div className="lg:ml-auto">
+            <RangeTabs activeRange={selectedRange.key} />
           </div>
         </div>
 
-        <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <ZipAnalyticsStatCard
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <AdminSummaryCard
             label="Total bookings"
             value={number(totalBookings)}
-            hint="bookings in selected period"
+            detail="bookings in selected period"
             icon={CubeIcon}
-            accent="orange"
+            tone="amber"
+            layout="pricing"
+            stretch
           />
 
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Total revenue"
             value={formatUsd(totalRevenue, { maximumFractionDigits: 0 })}
-            hint="booking totals"
+            detail="booking totals"
             icon={CurrencyDollarIcon}
-            accent="emerald"
+            tone="green"
+            layout="pricing"
+            stretch
           />
 
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Active ZIPs with bookings"
             value={number(activeZipsWithBookings)}
-            hint="Supported ZIPs producing work"
+            detail="Supported ZIPs producing work"
             icon={MapPinIcon}
-            accent="slate"
+            tone="violet"
+            layout="pricing"
+            stretch
           />
 
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Top ZIP by bookings"
             value={topZipByBookings ? topZipByBookings.zip : "—"}
-            hint={
+            detail={
               topZipByBookings
                 ? `${number(topZipByBookings.bookingCount)} bookings`
                 : "No bookings in range"
             }
             icon={FireIcon}
-            accent="orange"
+            tone="amber"
+            layout="pricing"
+            stretch
           />
 
-          <ZipAnalyticsStatCard
+          <AdminSummaryCard
             label="Top ZIP by revenue"
             value={topZipByRevenue ? topZipByRevenue.zip : "—"}
-            hint={
+            detail={
               topZipByRevenue
                 ? formatUsd(topZipByRevenue.revenue, { maximumFractionDigits: 0 })
                 : "No revenue in range"
             }
             icon={TrophyIcon}
-            accent="emerald"
+            tone="green"
+            layout="pricing"
+            stretch
           />
         </div>
       </section>
 
       <div className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-sm">
-                <div className="border-b border-slate-200 px-6 py-5">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-900">ZIP performance</h2>
-                        <p className="mt-1 text-sm text-slate-500">
-                        Ranked by booking count. Stronger ZIPs are shaded more heavily.
-                        </p>
-                        <p className="mt-2 text-sm text-slate-500">
-                        Click any row to view or edit ZIP details.
-                        </p>
-                    </div>
-                    <div className="text-sm text-slate-500">
-                        {number(rows.length)} ZIPs shown
-                    </div>
-                    </div>
-                </div>
+        <div className="border-b border-slate-200 px-6 py-5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">ZIP performance</h2>
+            <div className="text-sm text-slate-500">{number(rows.length)} ZIPs shown</div>
+          </div>
+        </div>
 
-                <div className="max-h-[900px] overflow-auto">
-                    <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur">
-                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <th className="px-6 py-4">ZIP</th>
-                        <th className="px-6 py-4">Location</th>
-                        <th className="px-6 py-4 text-center">Status</th>
-                        <th className="px-6 py-4 text-center">
-                          <SortableHeader
-                            label="Bookings"
-                            sortKey="bookings"
-                            currentSort={selectedSort}
-                            currentDir={selectedDir}
-                            range={selectedRange.key}
-                          />
-                        </th>
-                        <th className="px-6 py-4 text-center">
-                          <SortableHeader
-                            label="Revenue"
-                            sortKey="revenue"
-                            currentSort={selectedSort}
-                            currentDir={selectedDir}
-                            range={selectedRange.key}
-                          />
-                        </th>
-                        <th className="px-6 py-4 text-center">
-                          <SortableHeader
-                            label="Avg booking"
-                            sortKey="avg"
-                            currentSort={selectedSort}
-                            currentDir={selectedDir}
-                            range={selectedRange.key}
-                          />
-                        </th>
-                        <th className="px-6 py-4 text-center">Pricing</th>
-                        <th className="px-6 py-4 text-right">
-                          <span className="sr-only">Open details</span>
-                        </th>
-                        </tr>
-                    </thead>
+        <div className="max-h-[900px] overflow-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur">
+              <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-6 py-4">ZIP</th>
+                <th className="px-6 py-4">Location</th>
+                <th className="px-6 py-4 text-center">Status</th>
+                <th className="px-6 py-4 text-center">
+                  <SortableHeader
+                    label="Bookings"
+                    sortKey="bookings"
+                    currentSort={selectedSort}
+                    currentDir={selectedDir}
+                    range={selectedRange.key}
+                  />
+                </th>
+                <th className="px-6 py-4 text-center">
+                  <SortableHeader
+                    label="Revenue"
+                    sortKey="revenue"
+                    currentSort={selectedSort}
+                    currentDir={selectedDir}
+                    range={selectedRange.key}
+                  />
+                </th>
+                <th className="px-6 py-4 text-center">
+                  <SortableHeader
+                    label="Avg booking"
+                    sortKey="avg"
+                    currentSort={selectedSort}
+                    currentDir={selectedDir}
+                    range={selectedRange.key}
+                  />
+                </th>
+                <th className="px-6 py-4 text-right">
+                  <span className="sr-only">Open details</span>
+                </th>
+              </tr>
+            </thead>
 
                     <tbody className="divide-y divide-slate-200 bg-white">
                         {rows.map((row) => {
@@ -675,37 +552,26 @@ export default async function ZipHeatMapPage({
                             </td>
 
                             <td className="px-6 py-3 align-top text-center">
-                              <div className="inline-flex flex-col items-center gap-2">
-                                <StatusBadge active={row.active} />
-                                <IntensityBadge level={heatLevel} />
+                              <StatusBadge active={row.active} />
+                            </td>
+
+                            <td className="px-6 py-3 align-middle text-center">
+                              <div className="flex min-h-[74px] items-center justify-center text-[18px] font-semibold leading-none text-slate-900">
+                                {number(row.bookingCount)}
                               </div>
                             </td>
 
                             <td className="px-6 py-3 align-middle text-center">
-                              <div className="flex min-h-[74px] items-center justify-center">
-                                <BookingCountCell value={row.bookingCount} max={maxBookings} />
+                              <div className="flex min-h-[74px] items-center justify-center text-[18px] font-semibold leading-none text-slate-900">
+                                {formatUsd(row.revenue, { maximumFractionDigits: 0 })}
                               </div>
                             </td>
 
                             <td className="px-6 py-3 align-middle text-center">
-                              <div className="flex min-h-[74px] items-center justify-center">
-                                <RevenueCell value={row.revenue} max={maxRevenue} />
-                              </div>
-                            </td>
-
-                            <td className="px-6 py-3 align-middle text-center">
-                              <div className="flex min-h-[74px] items-center justify-center">
-                                <span className="inline-flex min-w-[64px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-900">
-                                  {row.bookingCount > 0 ? formatUsd(row.avgBookingValue, { maximumFractionDigits: 0 }) : "—"}
-                                </span>
-                              </div>
-                            </td>
-
-                            <td className="px-6 py-3 align-middle text-center">
-                              <div className="flex min-h-[74px] items-center justify-center">
-                                <div className="inline-flex justify-center">
-                                  <PricingBadge mode={row.pricingMode} />
-                                </div>
+                              <div className="flex min-h-[74px] items-center justify-center text-sm font-semibold text-slate-900">
+                                {row.bookingCount > 0
+                                  ? formatUsd(row.avgBookingValue, { maximumFractionDigits: 0 })
+                                  : "—"}
                               </div>
                             </td>
                             <td className="px-6 py-3 align-middle text-right">
@@ -728,7 +594,7 @@ export default async function ZipHeatMapPage({
 
                         {rows.length === 0 ? (
                         <tr>
-                            <td colSpan={8} className="px-6 py-14 text-center text-sm text-slate-500">
+                            <td colSpan={7} className="px-6 py-14 text-center text-sm text-slate-500">
                             No ZIP analytics available for this period.
                             </td>
                         </tr>

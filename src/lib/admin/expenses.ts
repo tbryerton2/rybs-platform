@@ -17,6 +17,7 @@ export type ExpensePaymentMethod =
   | "Cash"
   | "Payroll run"
   | "Other";
+export type ExpenseRecurrenceFrequency = "daily" | "weekly" | "monthly" | "annually";
 
 export type ExpenseRecord = {
   id: string;
@@ -28,6 +29,8 @@ export type ExpenseRecord = {
   amountCents: number;
   paymentStatus: ExpensePaymentStatus;
   paymentMethod: ExpensePaymentMethod;
+  isRecurring: boolean;
+  recurrenceFrequency: ExpenseRecurrenceFrequency | "";
   relatedAsset: string;
   taxDeductible: boolean;
   receiptReference: string;
@@ -47,6 +50,8 @@ export type ExpenseMutationInput = {
   amountCents: number;
   paymentStatus: ExpensePaymentStatus;
   paymentMethod: ExpensePaymentMethod;
+  isRecurring: boolean;
+  recurrenceFrequency: ExpenseRecurrenceFrequency | "";
   relatedAsset: string;
   taxDeductible: boolean;
   receiptReference: string;
@@ -69,6 +74,7 @@ export const expenseCategories: ExpenseCategory[] = [
 
 export const paymentStatuses: ExpensePaymentStatus[] = ["Paid", "Scheduled", "Outstanding"];
 export const paymentMethods: ExpensePaymentMethod[] = ["Card", "ACH", "Check", "Cash", "Payroll run", "Other"];
+export const recurrenceFrequencies: ExpenseRecurrenceFrequency[] = ["daily", "weekly", "monthly", "annually"];
 
 function cleanText(value: string | null | undefined) {
   return value?.trim() ?? "";
@@ -85,6 +91,8 @@ export function createEmptyExpense(): ExpenseRecord {
     amountCents: 0,
     paymentStatus: "Paid",
     paymentMethod: "Card",
+    isRecurring: false,
+    recurrenceFrequency: "",
     relatedAsset: "",
     taxDeductible: true,
     receiptReference: "",
@@ -106,6 +114,8 @@ export function toExpenseMutationInput(expense: ExpenseRecord): ExpenseMutationI
     amountCents: expense.amountCents,
     paymentStatus: expense.paymentStatus,
     paymentMethod: expense.paymentMethod,
+    isRecurring: expense.isRecurring,
+    recurrenceFrequency: expense.recurrenceFrequency,
     relatedAsset: expense.relatedAsset,
     taxDeductible: expense.taxDeductible,
     receiptReference: expense.receiptReference,
@@ -122,6 +132,8 @@ export function normalizeExpenseMutationInput(input: ExpenseMutationInput): Expe
     amountCents: Number.isFinite(input.amountCents) ? Math.round(input.amountCents) : 0,
     paymentStatus: input.paymentStatus,
     paymentMethod: input.paymentMethod,
+    isRecurring: Boolean(input.isRecurring),
+    recurrenceFrequency: input.isRecurring ? input.recurrenceFrequency : "",
     relatedAsset: cleanText(input.relatedAsset),
     taxDeductible: Boolean(input.taxDeductible),
     receiptReference: cleanText(input.receiptReference),
@@ -137,6 +149,12 @@ export function validateExpense(input: ExpenseMutationInput): ExpenseFormErrors 
   if (!normalized.vendor) errors.vendor = "Vendor or payee is required.";
   if (!normalized.description) errors.description = "Description is required.";
   if (normalized.amountCents <= 0) errors.amountCents = "Amount must be greater than zero.";
+  if (
+    normalized.isRecurring &&
+    !recurrenceFrequencies.includes(normalized.recurrenceFrequency as ExpenseRecurrenceFrequency)
+  ) {
+    errors.recurrenceFrequency = "Choose a recurring schedule.";
+  }
 
   return errors;
 }

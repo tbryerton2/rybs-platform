@@ -1,26 +1,27 @@
 import Link from "next/link";
-import type { ComponentType, SVGProps } from "react";
+import type { SVGProps } from "react";
 import {
-  ArrowPathIcon,
-  CalendarDaysIcon,
+  ArrowUturnLeftIcon,
   ChevronRightIcon,
-  ClockIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
-  LifebuoyIcon,
   MapPinIcon,
-  ShieldCheckIcon,
-  QueueListIcon,
   TruckIcon,
-  UserPlusIcon,
-  UsersIcon,
-  WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "./_components/admin/admin-page";
+import { NeedsAttentionList, type NeedsAttentionRow } from "./_components/NeedsAttentionList";
 import { SnapshotCard } from "./_components/SnapshotCard";
+import { getDumpsters } from "./equipment/dumpsters/data";
+import {
+  getFleetEquipmentInspectionStatusMap,
+  getFleetEquipmentMaintenanceAttentionIds,
+} from "./trucks-trailers/data";
+import { listFleetEquipment } from "@/lib/admin/fleet-equipment";
+import { shouldCountFleetEquipmentForMaintenanceAttention } from "@/lib/admin/fleet-equipment-attention";
+import { listEmployeesForCurrentBusiness } from "@/lib/admin/employees.server";
+import { listExpensesForCurrentBusiness } from "@/lib/admin/expenses.server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import {
   ANALYTICS_DATA_MODE,
   buildConversionAnalytics,
@@ -53,17 +54,6 @@ type RentalActionRequestRow = {
   submitted_at: string;
 };
 
-type CustomerRow = {
-  id: string;
-  created_at: string | null;
-  portal_status: "invited" | "active" | "deactivated" | null;
-};
-
-type ServiceAreaRow = {
-  active: boolean | null;
-  price_14_yard_override: number | null;
-};
-
 const ACTIVE_BOOKING_STATUSES = new Set<BookingStatus>(["confirmed", "scheduled", "delivered"]);
 const OPEN_REQUEST_STATUSES = new Set<RentalActionRequestRow["status"]>(["submitted", "under_review", "approved"]);
 const BOOKING_SELECT =
@@ -75,6 +65,20 @@ function number(value: number) {
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
+}
+
+function OctagonAlert(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.172 2.75h5.656a2 2 0 0 1 1.414.586l5.172 5.172a2 2 0 0 1 .586 1.414v4.156a2 2 0 0 1-.586 1.414l-5.172 5.172a2 2 0 0 1-1.414.586H9.172a2 2 0 0 1-1.414-.586l-5.172-5.172A2 2 0 0 1 2 14.078V9.922a2 2 0 0 1 .586-1.414L7.758 3.336a2 2 0 0 1 1.414-.586Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.75v5.5" />
+      <circle cx="12" cy="16.25" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
 
 function todayISOET() {
@@ -116,13 +120,6 @@ function startOfWeekMonday(value: string) {
   return toDateOnlyISO(addDays(parsed, diff).toISOString());
 }
 
-function daysBetween(startIso: string, endIso: string) {
-  const start = parseISODate(startIso);
-  const end = parseISODate(endIso);
-  if (!start || !end) return 0;
-  return Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 function formatDateLabel(value: string) {
   const parsed = parseISODate(value);
   if (!parsed) return value;
@@ -133,12 +130,13 @@ function formatDateLabel(value: string) {
   }).format(parsed);
 }
 
-function formatDateHeadline(value: string) {
+function formatDashboardDate(value: string) {
   const parsed = parseISODate(value);
   if (!parsed) return value;
   return new Intl.DateTimeFormat("en-US", {
-    month: "short",
+    month: "long",
     day: "numeric",
+    year: "numeric",
     timeZone: "America/New_York",
   }).format(parsed);
 }
@@ -173,6 +171,28 @@ function formatRelativeTime(value: string | null) {
 
   const diffDays = Math.round(diffHours / 24);
   return rtf.format(diffDays, "day");
+}
+
+function timestampToDateOnlyISOET(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = parseTimestamp(value);
+  if (!parsed) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(parsed);
+}
+
+function isDateWithinNextDays(value: string, days: number) {
+  const parsed = parseISODate(value);
+  if (!parsed) return false;
+
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const diffDays = (parsed.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= days;
 }
 
 function startOfDayIso(daysAgo = 0) {
@@ -284,44 +304,6 @@ function SectionCard({
   );
 }
 
-function QueueItem({
-  label,
-  count,
-  icon: Icon,
-  href,
-  severity = "normal",
-}: {
-  label: string;
-  count: number;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  href: string;
-  severity?: "normal" | "warning" | "danger";
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center justify-between gap-4 rounded-2xl px-2 py-3 transition-colors duration-150 first:pt-0 last:pb-0 hover:bg-orange-50/55 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-[#F97316]">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="text-sm font-semibold text-slate-900">{label}</div>
-      </div>
-      <div
-        className={joinClasses(
-          "shrink-0 text-lg font-semibold tracking-tight text-[#F97316]",
-          count === 0 && "text-slate-400",
-          severity === "danger" && count > 0 && "text-[#F97316]",
-          severity === "warning" && count > 0 && "text-[#F97316]",
-        )}
-      >
-        {number(count)}
-      </div>
-    </Link>
-  );
-}
-
 function MiniRevenueChart({
   values,
 }: {
@@ -426,63 +408,9 @@ function FunnelBarRow({
   );
 }
 
-function DashboardListRow({
-  label,
-  value,
-  icon: Icon,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  tone?: "neutral" | "good" | "warning" | "danger" | "info";
-}) {
-  const iconTone =
-    tone === "good"
-      ? "bg-emerald-50 text-emerald-800"
-      : tone === "warning"
-        ? "bg-amber-50 text-amber-800"
-        : tone === "danger"
-          ? "bg-rose-50 text-rose-800"
-          : tone === "info"
-            ? "bg-sky-50 text-sky-800"
-            : "bg-slate-100 text-slate-700";
-
-  const valueTone =
-    tone === "good"
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-      : tone === "warning"
-        ? "bg-amber-50 text-amber-700 ring-amber-200"
-        : tone === "danger"
-          ? "bg-rose-50 text-rose-700 ring-rose-200"
-          : tone === "info"
-            ? "bg-sky-50 text-sky-700 ring-sky-200"
-            : "bg-slate-100 text-slate-700 ring-slate-200";
-
-  return (
-    <div className="flex min-h-14 items-center justify-between gap-4 rounded-2xl px-2 py-3 first:pt-0 last:pb-0 transition-colors duration-150 hover:bg-slate-50/60">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className={joinClasses("flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl", iconTone)}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="text-sm font-medium text-slate-700">{label}</div>
-      </div>
-      <span
-        className={joinClasses(
-          "inline-flex shrink-0 items-center justify-center rounded-full px-2.5 py-0.5 text-sm font-semibold ring-1 ring-inset",
-          valueTone,
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
 export default async function AdminDashboardPage() {
   const supabase = supabaseServer();
   const todayStr = todayISOET();
-  const yesterdayStr = toDateOnlyISO(addDays(parseISODate(todayStr) ?? new Date(), -1).toISOString());
   const nextFiveDays = Array.from({ length: 5 }, (_, index) =>
     toDateOnlyISO(addDays(parseISODate(todayStr) ?? new Date(), index).toISOString()),
   );
@@ -495,10 +423,12 @@ export default async function AdminDashboardPage() {
     last30BookingsResult,
     collectedLast30Result,
     portalRequestsResult,
-    customersResult,
-    bookingCustomerIdsResult,
-    serviceAreaResult,
-    pricingSettings,
+    employeesResult,
+    expensesResult,
+    dumpstersResult,
+    fleetEquipmentResult,
+    fleetEquipmentMaintenanceAttentionIdsResult,
+    fleetEquipmentInspectionStatusByIdResult,
   ] = await Promise.all([
     supabase
       .from("bookings")
@@ -527,18 +457,12 @@ export default async function AdminDashboardPage() {
       .from("rental_action_requests")
       .select("id, action_type, status, priority, submitted_at")
       .order("submitted_at", { ascending: false }),
-    supabase
-      .from("customers")
-      .select("id, created_at, portal_status"),
-    supabase
-      .from("bookings")
-      .select("customer_id")
-      .neq("status", "cancelled")
-      .not("customer_id", "is", null),
-    supabase
-      .from("service_area_zips")
-      .select("active, price_14_yard_override"),
-    getPricingSettingsSnapshot(),
+    listEmployeesForCurrentBusiness({ includeInactive: true }),
+    listExpensesForCurrentBusiness(),
+    getDumpsters(),
+    listFleetEquipment(),
+    getFleetEquipmentMaintenanceAttentionIds(),
+    getFleetEquipmentInspectionStatusMap(),
   ]);
 
   if (activeBookingsResult.error) throw new Error(activeBookingsResult.error.message);
@@ -546,57 +470,58 @@ export default async function AdminDashboardPage() {
   if (last30BookingsResult.error) throw new Error(last30BookingsResult.error.message);
   if (collectedLast30Result.error) throw new Error(collectedLast30Result.error.message);
   if (portalRequestsResult.error) throw new Error(portalRequestsResult.error.message);
-  if (customersResult.error) throw new Error(customersResult.error.message);
-  if (bookingCustomerIdsResult.error) throw new Error(bookingCustomerIdsResult.error.message);
-  if (serviceAreaResult.error) throw new Error(serviceAreaResult.error.message);
 
   const activeBookings = (activeBookingsResult.data ?? []) as DashboardBookingRow[];
   const recentBookings = (recentBookingsResult.data ?? []) as DashboardBookingRow[];
   const last30Bookings = (last30BookingsResult.data ?? []) as DashboardBookingRow[];
   const collectedLast30Rows = (collectedLast30Result.data ?? []) as Array<{ total_price_cents: number | null }>;
   const portalRequests = (portalRequestsResult.data ?? []) as RentalActionRequestRow[];
-  const customers = (customersResult.data ?? []) as CustomerRow[];
-  const bookingCustomerIds = (bookingCustomerIdsResult.data ?? []) as Array<{ customer_id: string | null }>;
-  const serviceAreaRows = (serviceAreaResult.data ?? []) as ServiceAreaRow[];
+  const employees = employeesResult;
+  const expenses = expensesResult;
+  const dumpsters = dumpstersResult;
+  const fleetEquipment = fleetEquipmentResult;
+  const fleetEquipmentMaintenanceAttentionIdSet = new Set(fleetEquipmentMaintenanceAttentionIdsResult);
+  const fleetEquipmentInspectionStatusById = fleetEquipmentInspectionStatusByIdResult;
 
   const deliveriesToday = activeBookings.filter(
     (booking) =>
       (booking.status === "confirmed" || booking.status === "scheduled") && booking.delivery_date === todayStr,
   );
-  const deliveriesYesterday = activeBookings.filter(
-    (booking) =>
-      (booking.status === "confirmed" || booking.status === "scheduled") && booking.delivery_date === yesterdayStr,
-  );
   const pickupsToday = activeBookings.filter(
     (booking) => booking.status === "delivered" && booking.pickup_date === todayStr,
   );
-  const pickupsYesterday = activeBookings.filter(
-    (booking) => booking.status === "delivered" && booking.pickup_date === yesterdayStr,
+  const overdueDeliveries = activeBookings.filter(
+    (booking) =>
+      (booking.status === "confirmed" || booking.status === "scheduled") &&
+      Boolean(booking.delivery_date) &&
+      (booking.delivery_date as string) < todayStr,
   );
   const overduePickups = activeBookings.filter(
     (booking) => booking.status === "delivered" && Boolean(booking.pickup_date) && (booking.pickup_date as string) < todayStr,
   );
-  const openJobs = activeBookings.length;
   const stopsScheduled = deliveriesToday.length + pickupsToday.length;
-  const stopsYesterday = deliveriesYesterday.length + pickupsYesterday.length;
   const pickupRequestsAwaitingReview = portalRequests.filter(
     (request) => request.status === "submitted" || request.status === "under_review",
   );
   const requestsSitting24h = portalRequests.filter(
     (request) => OPEN_REQUEST_STATUSES.has(request.status) && now.getTime() - new Date(request.submitted_at).getTime() >= 24 * 60 * 60 * 1000,
   );
-  const pickupsNotYetScheduled = activeBookings.filter(
-    (booking) => booking.status === "delivered" && booking.pickup_mode === "request" && !booking.pickup_date,
-  );
-  const bookingsMissingRequiredInfo = activeBookings.filter(
-    (booking) => !booking.customer_name?.trim() || !booking.customer_zip?.trim() || !booking.delivery_date,
-  );
-  const longOnSiteRentals = activeBookings.filter(
-    (booking) =>
-      booking.status === "delivered" &&
-      Boolean(booking.delivery_date) &&
-      daysBetween(booking.delivery_date as string, todayStr) >= 8,
-  );
+  const portalRequestIdsNeedingAttention = new Set([
+    ...pickupRequestsAwaitingReview.map((request) => request.id),
+    ...requestsSitting24h.map((request) => request.id),
+  ]);
+  const portalRequestsNeedingAttentionCount = portalRequestIdsNeedingAttention.size;
+  const employeesWithLicensesExpiringCount = employees.filter(
+    (employee) => employee.licenseExpiration && isDateWithinNextDays(employee.licenseExpiration, 90),
+  ).length;
+  const outstandingExpensesCount = expenses.filter((expense) => expense.paymentStatus === "Outstanding").length;
+  const dumpstersNeedingMaintenanceCount = dumpsters.filter((dumpster) => Boolean(dumpster.serviceWarning)).length;
+  const fleetEquipmentNeedingMaintenanceCount = fleetEquipment.filter((item) =>
+    shouldCountFleetEquipmentForMaintenanceAttention(item, {
+      serviceDateAttentionIds: fleetEquipmentMaintenanceAttentionIdSet,
+      inspectionStatusById: fleetEquipmentInspectionStatusById,
+    }),
+  ).length;
 
   const scheduleRows = nextFiveDays.map((dayIso) => {
     const deliveries = activeBookings.filter(
@@ -687,50 +612,38 @@ export default async function AdminDashboardPage() {
     .slice(0, 5);
   const topAreaMaxShare = Math.max(...topAreas.map((area) => area.share), 0);
 
-  const bookingCountsByCustomer = new Map<string, number>();
-  for (const row of bookingCustomerIds) {
-    const customerId = row.customer_id?.trim();
-    if (!customerId) continue;
-    bookingCountsByCustomer.set(customerId, (bookingCountsByCustomer.get(customerId) ?? 0) + 1);
-  }
-
-  const newCustomers = customers.filter((customer) => {
-    if (!customer.created_at) return false;
-    return new Date(customer.created_at).getTime() >= new Date(last30StartIso).getTime();
-  }).length;
-  const recentCustomerIds = new Set(last30Bookings.map((booking) => booking.customer_id).filter(Boolean) as string[]);
-  const returningCustomers = Array.from(recentCustomerIds).filter(
-    (customerId) => (bookingCountsByCustomer.get(customerId) ?? 0) > 1,
-  ).length;
-  const repeatRate = recentCustomerIds.size > 0 ? (returningCustomers / recentCustomerIds.size) * 100 : 0;
-
-  const activeServiceZips = serviceAreaRows.filter((row) => row.active).length;
-
   const snapshotCards = [
+    {
+      label: "Stops Scheduled",
+      value: stopsScheduled,
+      tooltip: "Stops Scheduled is the combined total of today’s delivery stops and pickup stops.",
+      icon: MapPinIcon,
+      toneKey: "amber" as const,
+      href: "/admin/schedule",
+    },
     {
       label: "Deliveries Today",
       value: deliveriesToday.length,
       tooltip: "Deliveries Today counts confirmed or scheduled drop-offs with a delivery date of today.",
       icon: TruckIcon,
-      toneKey: "blue" as const,
+      toneKey: "green" as const,
       href: `/admin/bookings?datePreset=today&dateField=delivery_date`,
     },
     {
       label: "Pickups Today",
       value: pickupsToday.length,
-      tooltip:
-        "Pickups Today counts delivered rentals with a pickup date of today. Awaiting pickup means the dumpster is still on site and not yet marked picked up.",
-      icon: CalendarDaysIcon,
-      toneKey: "amber" as const,
+      tooltip: "Pickups Today counts delivered rentals with a pickup date of today.",
+      icon: ArrowUturnLeftIcon,
+      toneKey: "blue" as const,
       href: `/admin/bookings?datePreset=today&dateField=pickup_date`,
     },
     {
-      label: "Open Jobs",
-      value: openJobs,
-      tooltip: "Open Jobs includes confirmed deliveries, scheduled jobs, and delivered rentals that are still active.",
-      icon: ClockIcon,
-      toneKey: "slate" as const,
-      href: "/admin/bookings?bucket=active",
+      label: "Overdue Deliveries",
+      value: overdueDeliveries.length,
+      tooltip: "A delivery becomes overdue when a confirmed or scheduled drop-off date has already passed.",
+      icon: OctagonAlert,
+      toneKey: "violet" as const,
+      href: "/admin/bookings?quickView=overdue_confirmed",
     },
     {
       label: "Overdue Pickups",
@@ -740,44 +653,96 @@ export default async function AdminDashboardPage() {
       href: "/admin/bookings?quickView=overdue_pickups",
       tone: "alert" as const,
     },
-    {
-      label: "Stops Scheduled",
-      value: stopsScheduled,
-      tooltip: "Stops Scheduled is the combined total of today’s delivery stops and pickup stops.",
-      icon: MapPinIcon,
-      toneKey: "green" as const,
-      href: "/admin/schedule",
-    },
   ];
+
+  const latestBookingActivity = recentBookings.slice(0, 5);
+  const sevenDaysAgoStr = toDateOnlyISO(addDays(parseISODate(todayStr) ?? new Date(), -7).toISOString());
+  const latestBookingGroups = {
+    today: latestBookingActivity.filter((booking) => timestampToDateOnlyISOET(booking.created_at) === todayStr),
+    thisWeek: latestBookingActivity.filter((booking) => {
+      const createdDate = timestampToDateOnlyISOET(booking.created_at);
+      return Boolean(createdDate && createdDate !== todayStr && createdDate >= sevenDaysAgoStr);
+    }),
+    earlier: latestBookingActivity.filter((booking) => {
+      const createdDate = timestampToDateOnlyISOET(booking.created_at);
+      return Boolean(createdDate && createdDate < sevenDaysAgoStr);
+    }),
+  };
+  const hasNewBookingsLast7Days = latestBookingGroups.today.length > 0 || latestBookingGroups.thisWeek.length > 0;
+
+  const needsAttentionRows: NeedsAttentionRow[] = [
+    {
+      label: "Portal Requests",
+      count: portalRequestsNeedingAttentionCount,
+      href: "/admin/portal-requests?filter=attention",
+      icon: "portal-requests",
+      tone: "portal",
+    },
+    {
+      label: "Overdue Pickups",
+      count: overduePickups.length,
+      href: "/admin/bookings?status=pickup_overdue&filtersPanel=closed",
+      icon: "overdue-pickups",
+      tone: "danger",
+    },
+    {
+      label: "Overdue Deliveries",
+      count: overdueDeliveries.length,
+      href: "/admin/bookings?status=delivery_overdue&filtersPanel=closed",
+      icon: "overdue-deliveries",
+      tone: "violet",
+    },
+    {
+      label: "Employees with Licenses Expiring",
+      count: employeesWithLicensesExpiringCount,
+      href: "/admin/employees",
+      icon: "licenses",
+      tone: "amber",
+    },
+    {
+      label: "Outstanding Expenses",
+      count: outstandingExpensesCount,
+      href: "/admin/expenses?status=Outstanding",
+      icon: "expenses",
+      tone: "amber",
+    },
+    {
+      label: "Dumpsters Needing Maintenance",
+      count: dumpstersNeedingMaintenanceCount,
+      href: "/admin/equipment/dumpsters?filter=maintenance",
+      icon: "dumpsters",
+      tone: "amber",
+    },
+    {
+      label: "Trucks / Trailers Needing Maintenance",
+      count: fleetEquipmentNeedingMaintenanceCount,
+      href: "/admin/trucks-trailers?filter=maintenance",
+      icon: "fleet",
+      tone: "amber",
+    },
+  ].filter((row) => row.count > 0);
 
   return (
     <AdminPage width="wide" className="space-y-8">
       <AdminPageHeader
-        title="Dashboard"
-        description={`${formatDateHeadline(todayStr)} · Here’s your current operations overview`}
-        actions={
-          <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <Link
-              href="/admin/schedule"
-              className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 sm:min-w-[9.75rem]"
-            >
-              Open Schedule
-            </Link>
-            <Link
-              href="/admin/bookings"
-              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:min-w-[9.75rem]"
-            >
-              View Bookings
-            </Link>
-          </div>
+        title={
+          <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span>Dashboard</span>
+            <span aria-hidden="true" className="h-6 w-px self-center bg-slate-200" />
+            <span className="text-lg font-medium text-slate-500 sm:text-xl">{formatDashboardDate(todayStr)}</span>
+          </span>
         }
       />
 
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold uppercase tracking-[0.16em] text-slate-700">Today&apos;s Snapshot</h2>
-          </div>
+          <h2 className="text-lg font-semibold uppercase tracking-[0.16em] text-slate-700">Today&apos;s Snapshot</h2>
+          <Link
+            href="/admin/schedule"
+            className="inline-flex shrink-0 items-center text-sm font-semibold text-[#F97316] transition hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
+          >
+            View full schedule →
+          </Link>
         </div>
 
         <div className="grid auto-rows-fr gap-4 overflow-visible sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
@@ -792,36 +757,7 @@ export default async function AdminDashboardPage() {
           title="Needs Attention"
           tooltip="This list highlights the active issues the office or dispatcher can act on right now."
         >
-          <div className="divide-y divide-slate-200/80">
-            <QueueItem
-              label="Portal Requests Awaiting Review"
-              count={pickupRequestsAwaitingReview.length}
-              icon={QueueListIcon}
-              href="/admin/portal-requests"
-              severity={pickupRequestsAwaitingReview.length > 0 ? "warning" : "normal"}
-            />
-            <QueueItem
-              label="Overdue Pickups"
-              count={overduePickups.length}
-              icon={ExclamationTriangleIcon}
-              href="/admin/bookings?quickView=overdue_pickups"
-              severity={overduePickups.length > 0 ? "danger" : "normal"}
-            />
-            <QueueItem
-              label="Pickups Not Yet Scheduled"
-              count={pickupsNotYetScheduled.length}
-              icon={CalendarDaysIcon}
-              href="/admin/bookings?quickView=active"
-              severity={pickupsNotYetScheduled.length > 0 ? "warning" : "normal"}
-            />
-            <QueueItem
-              label="Requests Sitting 24h+"
-              count={requestsSitting24h.length}
-              icon={ClockIcon}
-              href="/admin/portal-requests?filter=under_review"
-              severity={requestsSitting24h.length > 0 ? "danger" : "normal"}
-            />
-          </div>
+          <NeedsAttentionList rows={needsAttentionRows} />
         </SectionCard>
 
         <SectionCard
@@ -830,11 +766,10 @@ export default async function AdminDashboardPage() {
           actionLabel="Open Schedule"
         >
           <div className="overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1fr)_72px_72px_64px] gap-2 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:grid-cols-[minmax(0,1.1fr)_80px_80px_68px] sm:gap-3 xl:grid-cols-[minmax(0,1.2fr)_88px_88px_72px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_88px_88px] gap-3 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:grid-cols-[minmax(0,1.1fr)_96px_96px] xl:grid-cols-[minmax(0,1.2fr)_104px_104px]">
               <div>Day</div>
               <div className="text-right">Deliveries</div>
               <div className="text-right">Pickups</div>
-              <div className="text-right">Active</div>
             </div>
 
             <div className="divide-y divide-slate-200/80">
@@ -843,7 +778,7 @@ export default async function AdminDashboardPage() {
                   key={row.dayIso}
                   href={row.href}
                   className={joinClasses(
-                    "grid grid-cols-[minmax(0,1fr)_72px_72px_64px] items-center gap-2 px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1.1fr)_80px_80px_68px] sm:gap-3 xl:grid-cols-[minmax(0,1.2fr)_88px_88px_72px]",
+                    "grid grid-cols-[minmax(0,1fr)_88px_88px] items-center gap-3 px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2 sm:grid-cols-[minmax(0,1.1fr)_96px_96px] xl:grid-cols-[minmax(0,1.2fr)_104px_104px]",
                     row.dayIso === todayStr && "bg-orange-50/35",
                   )}
                 >
@@ -857,7 +792,6 @@ export default async function AdminDashboardPage() {
                   </div>
                   <div className="text-right text-sm font-semibold text-sky-700">{number(row.deliveries)}</div>
                   <div className="text-right text-sm font-semibold text-amber-700">{number(row.pickups)}</div>
-                  <div className="text-right text-sm font-semibold text-indigo-700">{number(row.active)}</div>
                 </Link>
               ))}
             </div>
@@ -867,54 +801,82 @@ export default async function AdminDashboardPage() {
 
       <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
-          title="Recent Bookings"
-          tooltip="Recent Bookings shows the latest booking activity so the office can quickly scan new work without opening the full bookings page."
+          title="Latest Booking Activity"
+          tooltip="Latest Booking Activity shows the newest booking creation activity so the office can quickly gauge how recent incoming work has been."
           actionHref="/admin/bookings"
           actionLabel="View All Bookings"
         >
-          <div className="divide-y divide-slate-200/80">
-            {recentBookings.length === 0 ? (
+          <div>
+            {latestBookingActivity.length === 0 ? (
               <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
-                No bookings have been created yet.
+                <div className="font-medium text-slate-700">No bookings yet</div>
+                <div className="mt-1">New customer bookings will appear here.</div>
               </div>
             ) : (
-              recentBookings.slice(0, 5).map((booking) => (
-                <Link
-                  key={booking.id}
-                  href={`/admin/bookings/${booking.id}`}
-                  className="flex items-start justify-between gap-4 px-2 py-2.5 transition-colors duration-150 first:pt-0 last:pb-0 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-6">
-                      <div className="min-w-0 flex-1">
-                        <div className="min-w-0 text-base font-semibold tracking-tight text-slate-900">
-                          {booking.customer_name ?? "Unnamed customer"}
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
-                          <span
-                            className={joinClasses(
-                              "rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset",
-                              statusTone(booking.status),
-                            )}
-                          >
-                            {statusLabel(booking.status)}
-                          </span>
-                          {booking.delivery_date ? `Delivery ${formatDateLabel(booking.delivery_date)}` : "Delivery date not set"}
-                        </div>
-                        <div className="mt-1.5 truncate text-xs text-slate-500">
-                          {booking.booking_ref ?? `Booking ${booking.id.slice(0, 8)}`}
-                        </div>
+              <div className="space-y-5">
+                {!hasNewBookingsLast7Days ? (
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
+                    No new bookings in the last 7 days
+                  </div>
+                ) : null}
+
+                {[
+                  { label: "Today", bookings: latestBookingGroups.today },
+                  { label: "This week", bookings: latestBookingGroups.thisWeek },
+                  { label: "Earlier", bookings: latestBookingGroups.earlier },
+                ].map((group) =>
+                  group.bookings.length > 0 ? (
+                    <div key={group.label}>
+                      <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        {group.label}
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-lg font-semibold tracking-tight text-slate-900">
-                          {formatUsdFromCents(booking.total_price_cents, { maximumFractionDigits: 0 })}
-                        </div>
-                        <div className="mt-1.5 text-xs text-slate-500">{formatRelativeTime(booking.created_at)}</div>
+                      <div className="divide-y divide-slate-200/80">
+                        {group.bookings.map((booking) => (
+                          <Link
+                            key={booking.id}
+                            href={`/admin/bookings/${booking.id}`}
+                            className="flex items-start justify-between gap-4 px-2 py-3 transition-colors duration-150 first:pt-0 last:pb-0 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-6">
+                                <div className="min-w-0 flex-1">
+                                  <div className="min-w-0 text-base font-semibold tracking-tight text-slate-900">
+                                    <span>{booking.customer_name ?? "Unnamed customer"}</span>
+                                    <span className="ml-1.5 text-xs font-normal text-slate-500">
+                                      &middot; {booking.booking_ref ?? `Booking ${booking.id.slice(0, 8)}`}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
+                                    <span
+                                      className={joinClasses(
+                                        "rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                                        statusTone(booking.status),
+                                      )}
+                                    >
+                                      {statusLabel(booking.status)}
+                                    </span>
+                                    <span>
+                                      {booking.delivery_date ? `Delivery ${formatDateLabel(booking.delivery_date)}` : "Delivery date not set"}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 text-xs text-slate-500">
+                                    Created {formatRelativeTime(booking.created_at)}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="text-lg font-semibold tracking-tight text-slate-900">
+                                    {formatUsdFromCents(booking.total_price_cents, { maximumFractionDigits: 0 })}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                </Link>
-              ))
+                  ) : null,
+                )}
+              </div>
             )}
           </div>
         </SectionCard>
@@ -1100,89 +1062,6 @@ export default async function AdminDashboardPage() {
         </SectionCard>
       </section>
 
-      <section className="grid gap-6 md:grid-cols-2 2xl:grid-cols-3">
-        <SectionCard
-          title="Customer Activity"
-          tooltip="Customer Activity shows the mix of new and returning customers in the last 30 days. New Customers are newly created customer records, Returning are recent customers with more than one booking, and Repeat Rate is the returning share of recent booking customers."
-          className="h-full"
-        >
-          <div className="divide-y divide-slate-200/80">
-            {[
-              { label: "New Customers", value: number(newCustomers), icon: UserPlusIcon, tone: "info" as const },
-              { label: "Returning", value: number(returningCustomers), icon: UsersIcon, tone: "neutral" as const },
-              { label: "Repeat Rate", value: `${repeatRate.toFixed(0)}%`, icon: ArrowPathIcon, tone: "info" as const },
-            ].map((metric) => (
-              <DashboardListRow key={metric.label} label={metric.label} value={metric.value} icon={metric.icon} tone={metric.tone} />
-            ))}
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="Exceptions & Risks"
-          tooltip="Exceptions & Risks shows broader business issues that may need follow-up. Past-Due Rentals are overdue pickups, Long On-Site Rentals are rentals still on site for 8 or more days, Open Requests 24h+ are customer requests aging more than a day, and Missing Job Info are active bookings missing core job details."
-          className="h-full"
-        >
-          <div className="divide-y divide-slate-200/80">
-            <DashboardListRow
-              label="Past-Due Rentals"
-              value={number(overduePickups.length)}
-              icon={ExclamationTriangleIcon}
-              tone={overduePickups.length > 0 ? "danger" : "neutral"}
-            />
-            <DashboardListRow
-              label="Long On-Site Rentals"
-              value={number(longOnSiteRentals.length)}
-              icon={ClockIcon}
-              tone={longOnSiteRentals.length > 0 ? "warning" : "neutral"}
-            />
-            <DashboardListRow
-              label="Open Requests 24h+"
-              value={number(requestsSitting24h.length)}
-              icon={LifebuoyIcon}
-              tone={requestsSitting24h.length > 0 ? "warning" : "neutral"}
-            />
-            <DashboardListRow
-              label="Missing Job Info"
-              value={number(bookingsMissingRequiredInfo.length)}
-              icon={QueueListIcon}
-              tone={bookingsMissingRequiredInfo.length > 0 ? "warning" : "neutral"}
-            />
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="System Health"
-          tooltip="System Health monitors the status of key admin systems. Payment Flow shows whether checkout is simulated or live, Analytics Tracking shows the dashboard analytics mode, Service Area shows how many active ZIPs are configured, and Pricing Defaults shows the current default rental and overage pricing."
-          className="h-full"
-        >
-          <div className="divide-y divide-slate-200/80">
-            <DashboardListRow
-              label="Payment Flow"
-              value="Simulated"
-              icon={WrenchScrewdriverIcon}
-              tone="warning"
-            />
-            <DashboardListRow
-              label="Analytics Tracking"
-              value={ANALYTICS_DATA_MODE === "demo" ? "Preview Mode" : "Live"}
-              icon={QueueListIcon}
-              tone={ANALYTICS_DATA_MODE === "demo" ? "warning" : "good"}
-            />
-            <DashboardListRow
-              label="Service Area"
-              value={`${number(activeServiceZips)} Active ZIPs`}
-              icon={MapPinIcon}
-              tone="good"
-            />
-            <DashboardListRow
-              label="Pricing Defaults"
-              value={formatUsd(pricingSettings.standardRentalPrice, { maximumFractionDigits: 0 })}
-              icon={ShieldCheckIcon}
-              tone="good"
-            />
-          </div>
-        </SectionCard>
-      </section>
     </AdminPage>
   );
 }

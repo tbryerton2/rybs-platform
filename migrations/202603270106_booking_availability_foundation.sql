@@ -23,6 +23,8 @@ create index if not exists booking_holds_status_idx
 create index if not exists booking_holds_expires_at_idx
   on public.booking_holds (expires_at);
 
+drop function if exists public.expire_active_holds_for_client(text);
+
 create or replace function public.expire_active_holds_for_client(p_client_id text)
 returns integer
 language plpgsql
@@ -41,6 +43,8 @@ begin
   return expired_count;
 end;
 $$;
+
+drop function if exists public.get_delivery_availability(date, integer);
 
 create or replace function public.get_delivery_availability(
   p_delivery_date date,
@@ -120,6 +124,8 @@ as $$
   from settings
   left join daily_usage on true;
 $$;
+
+drop function if exists public.next_tight_date(date);
 
 create or replace function public.next_tight_date(start_date date)
 returns date

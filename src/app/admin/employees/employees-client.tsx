@@ -279,8 +279,8 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
             </div>
           </div>
         ) : (
-          <div className="px-6 py-5 sm:px-8">
-            <table className="w-full table-fixed border-separate border-spacing-y-3">
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
               <colgroup>
                 <col style={{ width: "260px" }} />
                 <col style={{ width: "150px" }} />
@@ -290,30 +290,30 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
                 <col style={{ width: "50px" }} />
               </colgroup>
 
-              <thead>
-                <tr>
-                  <th className="rounded-l-[22px] border-y border-l border-slate-200/90 bg-slate-100 px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+              <thead className="bg-slate-50/80">
+                <tr className="text-left">
+                  <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 sm:px-8">
                     Employee
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Status
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Title
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Contact
                   </th>
-                  <th className="border-y border-slate-200/90 bg-slate-100 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     License
                   </th>
-                  <th className="rounded-r-[22px] border-y border-r border-slate-200/90 bg-slate-100 px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                  <th className="px-6 py-3.5 text-center sm:px-8">
                     <span className="sr-only">Open</span>
                   </th>
                 </tr>
               </thead>
 
-              <tbody>
+              <tbody className="divide-y divide-slate-200/70">
                 {filteredEmployees.map((employee) => {
                   const licenseStatus = getLicenseStatus(employee);
 
@@ -322,9 +322,9 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
                       key={employee.id}
                       href={`/admin/employees/${employee.id}`}
                       ariaLabel={`Open employee ${employee.firstName} ${employee.lastName}`}
-                      className="group cursor-pointer outline-none transition hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-300"
+                      className="group cursor-pointer bg-white outline-none transition hover:bg-slate-50/70 focus-visible:bg-slate-50/70 focus-visible:outline-none"
                     >
-                      <td className="rounded-l-[24px] border-y border-l border-slate-200 bg-white px-5 py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <td className="px-6 py-4 align-top sm:px-8">
                         <div className="min-w-0">
                           <div className="font-semibold text-slate-900 transition group-hover:text-slate-950 group-focus-visible:text-slate-950">
                             {employee.firstName} {employee.lastName}
@@ -336,7 +336,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
                         </div>
                       </td>
 
-                      <td className="border-y border-slate-200 bg-white px-4 py-[18px] text-center align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <td className="px-4 py-4 text-center align-top">
                         <span
                           className={[
                             "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
@@ -349,21 +349,21 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
                         </span>
                       </td>
 
-                      <td className="border-y border-slate-200 bg-white px-4 py-[18px] align-top text-sm text-slate-700 transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <td className="px-4 py-4 align-top text-sm text-slate-700">
                         <div className="font-medium text-slate-900">{employee.jobTitle}</div>
                         <div className="mt-1 text-slate-500">
                           {[employee.city, employee.state].filter(Boolean).join(", ") || "Location not set"}
                         </div>
                       </td>
 
-                      <td className="border-y border-slate-200 bg-white px-4 py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <td className="px-4 py-4 align-top">
                         <div className="min-w-0 text-sm text-slate-700">
                           <div className="font-medium text-slate-900">{formatPhone(employee.phone)}</div>
                           <div className="mt-1 truncate text-slate-500">{employee.email || "No email"}</div>
                         </div>
                       </td>
 
-                      <td className="border-y border-slate-200 bg-white px-4 py-[18px] align-top transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <td className="px-4 py-4 align-top">
                         <div className="text-sm text-slate-700">
                           <div className="font-medium text-slate-900">{formatDate(employee.licenseExpiration)}</div>
                           <div className="mt-2">
@@ -383,7 +383,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
                         </div>
                       </td>
 
-                      <td className="rounded-r-[24px] border-y border-r border-slate-200 bg-white px-3 py-[18px] align-middle transition group-hover:border-slate-300 group-hover:bg-slate-50/70">
+                      <td className="px-6 py-4 align-middle sm:px-8">
                         <div className="flex items-center justify-center">
                           <span
                             aria-hidden="true"

@@ -1,13 +1,12 @@
 // src/app/api/availability/route.ts
 import { NextResponse } from "next/server";
-import { getPooledDumpsterAvailabilityBySize } from "@/lib/admin/dumpster-availability";
+import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
+import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
 } from "@/lib/tenant/retail-site-settings";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
-import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -22,7 +21,7 @@ export async function GET(req: Request) {
   }
 
   const retailSiteSettings = await getRetailSiteSettings();
-  const pricingSettings = await getPricingSettingsSnapshot();
+  const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
   const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
   if (closure.blocked) {
     return NextResponse.json({
@@ -36,45 +35,27 @@ export async function GET(req: Request) {
   }
 
   try {
-    const pooled = await getPooledDumpsterAvailabilityBySize({
+    const availability = await getDeliveryAvailabilitySnapshot({
+      deliveryDate: date,
+      rpcDays: rentalPolicy.standardRentalDays,
       dumpsterSize: selectedDumpster.dumpsterSize,
       dumpsterProductId: selectedDumpster.dumpsterProductId,
-      deliveryDate: date,
       pickupDate: null,
+      logContext: "api/availability",
     });
 
     return NextResponse.json({
       ok: true,
-      capacity: pooled.totalBookable,
-      used: pooled.reservedOrInUse,
-      remaining: pooled.available,
+      capacity: availability.capacity,
+      used: availability.used,
+      remaining: availability.remaining,
+      requestedPickupDate: availability.requestedPickupDate,
+      blockingRule: availability.blockingRule,
+      source: availability.source,
     });
-  } catch (pooledError) {
-    // Legacy RPC fallback stays in place so availability checks keep working
-    // if the new pooled inventory path hits bad data or a transient query issue.
-    console.error("Pooled availability helper failed, falling back to legacy RPC.", pooledError);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Availability check failed.";
+    console.error("[api/availability] Delivery availability request failed.", error);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
-
-  const { data, error } = await supabase.rpc("get_delivery_availability", {
-    p_delivery_date: date,
-    p_days: pricingSettings.standardRentalDays,
-  });
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-
-  const row = data?.[0];
-  if (!row) {
-    return NextResponse.json(
-      { ok: false, error: "Availability function returned no rows." },
-      { status: 500 }
-    );
-  }
-
-  const capacity = Number(row.capacity ?? 0);
-  const used = Number(row.used ?? 0);
-  const remaining = Math.max(0, Number(row.remaining ?? capacity - used));
-
-  return NextResponse.json({ ok: true, capacity, used, remaining });
 }

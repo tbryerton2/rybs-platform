@@ -9,6 +9,7 @@ import {
   normalizeExpenseMutationInput,
   paymentMethods,
   paymentStatuses,
+  recurrenceFrequencies,
   toExpenseMutationInput,
   validateExpense,
   type ExpenseFormErrors,
@@ -248,6 +249,41 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Recurring schedule" error={errors.recurrenceFrequency}>
+            <div className="space-y-3">
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={draft.isRecurring}
+                  disabled={isPending}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    updateDraft("isRecurring", checked);
+                    updateDraft("recurrenceFrequency", checked ? "monthly" : "");
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]"
+                />
+                Recurring expense
+              </label>
+
+              {draft.isRecurring ? (
+                <select
+                  value={draft.recurrenceFrequency}
+                  disabled={isPending}
+                  onChange={(event) =>
+                    updateDraft("recurrenceFrequency", event.target.value as ExpenseRecord["recurrenceFrequency"])
+                  }
+                  className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+                >
+                  {recurrenceFrequencies.map((frequency) => (
+                    <option key={frequency} value={frequency}>
+                      {frequency.charAt(0).toUpperCase() + frequency.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
           </Field>
           <Field label="Related vehicle / equipment">
             <input

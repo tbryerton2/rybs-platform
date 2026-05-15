@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { getPooledDumpsterAvailabilityBySize } from "@/lib/admin/dumpster-availability";
+import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
+import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
 } from "@/lib/tenant/retail-site-settings";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
-import { supabase } from "@/lib/supabase";
 
 function isYmd(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -34,8 +33,16 @@ type CalendarAvailabilityResult = {
   remaining: number;
   capacity: number;
   used: number;
+  requestedPickupDate: string | null;
   state: "available" | "limited" | "unavailable" | "past";
   label?: string;
+  debug?: {
+    requestedSelection?: unknown;
+    compatibleInventory?: unknown;
+    blockingBookings?: unknown;
+    blockingHolds?: unknown;
+    availableDumpsterIds?: string[];
+  };
 };
 
 async function getAvailabilityEntry(
@@ -45,6 +52,7 @@ async function getAvailabilityEntry(
   standardRentalDays: number,
   dumpsterSize: string,
   dumpsterProductId: string | null,
+  fixedDeliveryDate: string | null = null,
 ): Promise<CalendarAvailabilityResult> {
   if (blockedLabel) {
     return {
@@ -52,48 +60,36 @@ async function getAvailabilityEntry(
       capacity: 0,
       used: 0,
       remaining: 0,
+      requestedPickupDate: null,
       state: date < today ? "past" : "unavailable",
       label: blockedLabel,
     };
   }
 
-  let capacity = 0;
-  let used = 0;
-  let remaining = 0;
-
-  try {
-    const pooled = await getPooledDumpsterAvailabilityBySize({
-      dumpsterSize,
-      dumpsterProductId,
-      deliveryDate: date,
-      pickupDate: null,
-    });
-
-    capacity = Number(pooled.totalBookable ?? 0);
-    used = Number(pooled.reservedOrInUse ?? 0);
-    remaining = Math.max(0, Number(pooled.available ?? capacity - used));
-  } catch (pooledError) {
-    // Keep a per-date legacy fallback here so one pooled-inventory failure does not
-    // blank out the full customer calendar response.
-    console.error(
-      "Calendar pooled availability helper failed, falling back to legacy RPC.",
-      pooledError,
-    );
-
-    const { data, error } = await supabase.rpc("get_delivery_availability", {
-      p_delivery_date: date,
-      p_days: standardRentalDays,
-    });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    const row = data?.[0];
-    capacity = Number(row?.capacity ?? 0);
-    used = Number(row?.used ?? 0);
-    remaining = Math.max(0, Number(row?.remaining ?? capacity - used));
+  if (fixedDeliveryDate && date < fixedDeliveryDate) {
+    return {
+      date,
+      capacity: 0,
+      used: 0,
+      remaining: 0,
+      requestedPickupDate: date,
+      state: date < today ? "past" : "unavailable",
+      label: "Blocked",
+    };
   }
+
+  const availability = await getDeliveryAvailabilitySnapshot({
+    deliveryDate: fixedDeliveryDate ?? date,
+    rpcDays: standardRentalDays,
+    dumpsterSize,
+    dumpsterProductId,
+    pickupDate: fixedDeliveryDate ? date : null,
+    logContext: "api/availability/calendar",
+  });
+
+  const capacity = availability.capacity;
+  const used = availability.used;
+  const remaining = availability.remaining;
 
   let state: "available" | "limited" | "unavailable" | "past" = "unavailable";
   if (date < today) {
@@ -111,7 +107,22 @@ async function getAvailabilityEntry(
     capacity,
     used,
     remaining,
+    requestedPickupDate: availability.requestedPickupDate,
     state,
+    debug:
+      availability.source === "unit-window"
+        ? {
+            requestedSelection:
+              (availability.debugSummary as { requestedSelection?: unknown } | undefined)
+                ?.requestedSelection,
+            compatibleInventory:
+              (availability.debugSummary as { compatibleInventory?: unknown } | undefined)
+                ?.compatibleInventory,
+            blockingBookings: availability.overlappingBookings,
+            blockingHolds: availability.overlappingHolds,
+            availableDumpsterIds: availability.availableDumpsterIds,
+          }
+        : undefined,
   };
 }
 
@@ -122,6 +133,7 @@ export async function GET(req: Request) {
     dumpsterSize: url.searchParams.get("dumpsterSize"),
     dumpsterProductId: url.searchParams.get("dumpsterProductId"),
   });
+  const fixedDeliveryDate = (url.searchParams.get("deliveryDate") || "").trim();
   const rawDays = Number(url.searchParams.get("days") || 0);
   const days = Math.min(186, Math.max(28, Math.floor(rawDays || 112)));
 
@@ -129,11 +141,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid start date" }, { status: 400 });
   }
 
+  if (fixedDeliveryDate && !isYmd(fixedDeliveryDate)) {
+    return NextResponse.json({ ok: false, error: "Invalid deliveryDate" }, { status: 400 });
+  }
+
   const today = todayYmdUtc();
 
   try {
     const retailSiteSettings = await getRetailSiteSettings();
-    const pricingSettings = await getPricingSettingsSnapshot();
+    const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
     const dates = Array.from({ length: days }, (_, index) => addDaysYmd(start, index));
     const results: CalendarAvailabilityResult[] = [];
 
@@ -146,9 +162,10 @@ export async function GET(req: Request) {
             date,
             today,
             closure.blocked ? closure.label : null,
-            pricingSettings.standardRentalDays,
+            rentalPolicy.standardRentalDays,
             selectedDumpster.dumpsterSize,
             selectedDumpster.dumpsterProductId,
+            fixedDeliveryDate || null,
           );
         }),
       );
@@ -157,6 +174,19 @@ export async function GET(req: Request) {
 
     const nextAvailableDate =
       results.find((entry) => entry.state === "available" || entry.state === "limited")?.date ?? null;
+
+    console.info("[api/availability/calendar] window availability", {
+      requestedDumpsterSize: selectedDumpster.dumpsterSize,
+      requestedDumpsterProductId: selectedDumpster.dumpsterProductId,
+      fixedDeliveryDate: fixedDeliveryDate || null,
+      dates: results.map((entry) => ({
+        date: entry.date,
+        requestedPickupDate: entry.requestedPickupDate,
+        remaining: entry.remaining,
+        state: entry.state,
+        debug: entry.debug,
+      })),
+    });
 
     return NextResponse.json({
       ok: true,
@@ -167,6 +197,7 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Calendar availability check failed.";
+    console.error("[api/availability/calendar] Delivery calendar request failed.", error);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
