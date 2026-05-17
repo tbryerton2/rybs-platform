@@ -322,19 +322,41 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     }));
   }
 
+  type HomeCardGridSection = Extract<HomeFlexibleSection, { type: "card_grid" }>;
+  type HomeStepsSection = Extract<HomeFlexibleSection, { type: "steps" }>;
+  type HomeCardGridItem = HomeCardGridSection["items"][number];
+  type HomeStepsItem = HomeStepsSection["items"][number];
+
+  function isHomeCardGridItem(
+    section: HomeFlexibleSection,
+    _item: HomeFlexibleSection["items"][number],
+  ): _item is HomeCardGridItem {
+    return section.type === "card_grid";
+  }
+
   function getMarketingItemTitle(
     section: HomeFlexibleSection,
     item: HomeFlexibleSection["items"][number],
   ) {
-    return section.type === "card_grid" ? String(item.headline ?? "") : String(item.title ?? "");
+    return isHomeCardGridItem(section, item) ? String(item.headline ?? "") : String(item.title ?? "");
   }
 
+  function setMarketingItemTitle(
+    section: HomeCardGridSection,
+    item: HomeCardGridItem,
+    value: string,
+  ): HomeCardGridItem;
+  function setMarketingItemTitle(
+    section: HomeStepsSection,
+    item: HomeStepsItem,
+    value: string,
+  ): HomeStepsItem;
   function setMarketingItemTitle(
     section: HomeFlexibleSection,
     item: HomeFlexibleSection["items"][number],
     value: string,
   ) {
-    return section.type === "card_grid" ? { ...item, headline: value } : { ...item, title: value };
+    return isHomeCardGridItem(section, item) ? { ...item, headline: value } : { ...item, title: value };
   }
 
   async function persistPage(action: "save_draft" | "publish") {
@@ -536,35 +558,59 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                           value={section.intro}
                           onChange={(value) => updateActiveHomeSection({ ...section, intro: value })}
                         />
-                        <RepeatableItems
-                          label="Items"
-                          items={section.items}
-                          createItem={() =>
-                            section.type === "card_grid"
-                              ? { label: "", headline: "", body: "" }
-                              : { label: "", title: "", body: "" }
-                          }
-                          onChange={(items) => updateActiveHomeSection({ ...section, items })}
-                          renderItem={(item, onItemChange) => (
-                            <div className="grid gap-3">
-                              <Field
-                                label="Label"
-                                value={String(item.label ?? "")}
-                                onChange={(value) => onItemChange({ ...item, label: value })}
-                              />
-                              <Field
-                                label="Title"
-                                value={getMarketingItemTitle(section, item)}
-                                onChange={(value) => onItemChange(setMarketingItemTitle(section, item, value))}
-                              />
-                              <TextAreaField
-                                label="Body"
-                                value={String(item.body ?? "")}
-                                onChange={(value) => onItemChange({ ...item, body: value })}
-                              />
-                            </div>
-                          )}
-                        />
+                        {section.type === "card_grid" ? (
+                          <RepeatableItems<HomeCardGridItem>
+                            label="Items"
+                            items={section.items}
+                            createItem={() => ({ label: "", headline: "", body: "" })}
+                            onChange={(items) => updateActiveHomeSection({ ...section, items })}
+                            renderItem={(item, onItemChange) => (
+                              <div className="grid gap-3">
+                                <Field
+                                  label="Label"
+                                  value={String(item.label ?? "")}
+                                  onChange={(value) => onItemChange({ ...item, label: value })}
+                                />
+                                <Field
+                                  label="Title"
+                                  value={getMarketingItemTitle(section, item)}
+                                  onChange={(value) => onItemChange(setMarketingItemTitle(section, item, value))}
+                                />
+                                <TextAreaField
+                                  label="Body"
+                                  value={String(item.body ?? "")}
+                                  onChange={(value) => onItemChange({ ...item, body: value })}
+                                />
+                              </div>
+                            )}
+                          />
+                        ) : (
+                          <RepeatableItems<HomeStepsItem>
+                            label="Items"
+                            items={section.items}
+                            createItem={() => ({ label: "", title: "", body: "" })}
+                            onChange={(items) => updateActiveHomeSection({ ...section, items })}
+                            renderItem={(item, onItemChange) => (
+                              <div className="grid gap-3">
+                                <Field
+                                  label="Label"
+                                  value={String(item.label ?? "")}
+                                  onChange={(value) => onItemChange({ ...item, label: value })}
+                                />
+                                <Field
+                                  label="Title"
+                                  value={getMarketingItemTitle(section, item)}
+                                  onChange={(value) => onItemChange(setMarketingItemTitle(section, item, value))}
+                                />
+                                <TextAreaField
+                                  label="Body"
+                                  value={String(item.body ?? "")}
+                                  onChange={(value) => onItemChange({ ...item, body: value })}
+                                />
+                              </div>
+                            )}
+                          />
+                        )}
                       </div>
                     </div>
                   ) : null}
@@ -972,7 +1018,7 @@ function ArrayField({
   );
 }
 
-function RepeatableItems({
+function RepeatableItems<TItem extends object>({
   label,
   items,
   createItem,
@@ -982,14 +1028,14 @@ function RepeatableItems({
   renderItem,
 }: {
   label: string;
-  items: Array<Record<string, unknown>>;
-  createItem: () => Record<string, unknown>;
-  onChange: (items: Array<Record<string, unknown>>) => void;
+  items: TItem[];
+  createItem: () => TItem;
+  onChange: (items: TItem[]) => void;
   itemsClassName?: string;
   itemClassName?: string;
   renderItem: (
-    item: Record<string, unknown>,
-    onItemChange: (nextItem: Record<string, unknown>) => void,
+    item: TItem,
+    onItemChange: (nextItem: TItem) => void,
   ) => React.ReactNode;
 }) {
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
