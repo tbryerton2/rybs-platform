@@ -20,11 +20,21 @@ import {
   paymentStatuses,
   type ExpenseRecord,
 } from "@/lib/admin/expenses";
+import type { ComponentType, SVGProps } from "react";
 
 type ExpensesClientProps = {
   initialExpenses: ExpenseRecord[];
   initialStatusFilter: ExpenseRecord["paymentStatus"] | "All";
   loadError: string | null;
+};
+
+type ExpenseSummaryCard = {
+  label: string;
+  value: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  cardClassName: string;
+  iconClassName: string;
+  statusFilter?: ExpenseRecord["paymentStatus"];
 };
 
 function formatUsdFromCents(cents: number) {
@@ -132,7 +142,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
       cardClassName: adminSummaryCardShell("green", "h-full p-5"),
       iconClassName: "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90",
     },
-  ] as const;
+  ] satisfies ExpenseSummaryCard[];
 
   const hasSearch = search.trim().length > 0;
   const hasNoExpenses = savedExpenses.length === 0;

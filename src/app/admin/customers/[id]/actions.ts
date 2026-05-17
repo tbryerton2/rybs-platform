@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { recordEntityHistory } from "@/lib/entity-history";
+import { recordEntityHistory, type EntityHistoryEntry } from "@/lib/entity-history";
 import { isValidEmail } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -34,7 +34,7 @@ export async function updateCustomerIdentityAction(formData: FormData) {
     phone: phone || null,
   };
 
-  const historyEntries = [
+  const nullableHistoryEntries: Array<EntityHistoryEntry | null> = [
     current.data.email !== updates.email
       ? {
           entityType: "customer" as const,
@@ -68,7 +68,10 @@ export async function updateCustomerIdentityAction(formData: FormData) {
           changeReason: "Updated customer account details",
         }
       : null,
-  ].filter(Boolean);
+  ];
+  const historyEntries = nullableHistoryEntries.filter(
+    (entry): entry is EntityHistoryEntry => entry !== null,
+  );
 
   const { error } = await supabaseAdmin.from("customers").update(updates).eq("id", id);
   if (error) throw new Error(error.message);

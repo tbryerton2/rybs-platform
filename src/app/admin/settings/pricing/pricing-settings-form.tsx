@@ -31,13 +31,9 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 
 function toFormValues(pricing: PricingSettingsFormProps["pricing"]): PricingSettingsFormValues {
   return {
-    basePrice: "",
-    standardRentalDays: "",
-    dailyOveragePrice: "",
     maxRentalDays: pricing.maxRentalDays == null ? "" : String(pricing.maxRentalDays),
     allowExtendedRentalAtBooking: pricing.allowExtendedRentalAtBooking,
     includedServicesBlurb: pricing.includedServicesBlurb ?? "",
-    includedTons: "",
     tonOveragePrice: String(pricing.tonOveragePrice),
   };
 }

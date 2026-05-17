@@ -670,7 +670,7 @@ export default async function AdminDashboardPage() {
   };
   const hasNewBookingsLast7Days = latestBookingGroups.today.length > 0 || latestBookingGroups.thisWeek.length > 0;
 
-  const needsAttentionRows: NeedsAttentionRow[] = [
+  const needsAttentionRows = ([
     {
       label: "Portal Requests",
       count: portalRequestsNeedingAttentionCount,
@@ -720,7 +720,7 @@ export default async function AdminDashboardPage() {
       icon: "fleet",
       tone: "amber",
     },
-  ].filter((row) => row.count > 0);
+  ] satisfies NeedsAttentionRow[]).filter((row) => row.count > 0);
 
   return (
     <AdminPage width="wide" className="space-y-8">
