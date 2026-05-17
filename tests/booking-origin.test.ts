@@ -7,7 +7,7 @@ import {
   normalizeBookingOrigin,
 } from "../src/lib/booking-origin.ts";
 
-test("pricing origin returns to pricing with zip and selected product context", () => {
+test("pricing origin returns to pricing with only the zip context", () => {
   const href = buildBookingOriginBackHref({
     origin: "pricing",
     zip: "13032",
@@ -15,10 +15,10 @@ test("pricing origin returns to pricing with zip and selected product context", 
     dumpsterProductId: "20-yard",
   });
 
-  assert.equal(href, "/pricing?zip=13032&dumpsterSize=20+yard&dumpsterProductId=20-yard");
+  assert.equal(href, "/pricing?zip=13032");
 });
 
-test("direct book origin keeps generic back behavior", () => {
+test("direct book origin returns to editable dumpster selection", () => {
   const href = buildBookingOriginBackHref({
     origin: "book",
     zip: "13032",
@@ -26,19 +26,17 @@ test("direct book origin keeps generic back behavior", () => {
     dumpsterProductId: "20-yard",
   });
 
-  assert.equal(href, "/book");
+  assert.equal(href, "/book?zip=13032&editing=dumpster&dumpsterSize=20+yard&dumpsterProductId=20-yard&origin=book");
 });
 
 test("unknown origin falls back to book flow", () => {
   assert.equal(normalizeBookingOrigin("something-else"), "book");
 });
 
-test("pricing back href survives refresh-style reconstruction from saved context", () => {
+test("pricing back href only keeps the zip when rebuilding the public pricing page", () => {
   const href = buildPricingBackHref({
     zip: "13032",
-    dumpsterSize: "20 yard",
-    dumpsterProductId: "20-yard",
   });
 
-  assert.equal(href, "/pricing?zip=13032&dumpsterSize=20+yard&dumpsterProductId=20-yard");
+  assert.equal(href, "/pricing?zip=13032");
 });

@@ -1,6 +1,6 @@
 import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
-import { DEFAULT_PRICING_SETTINGS } from "@/lib/pricing-settings";
+import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { getPricingIntroContent } from "@/lib/tenant/content";
 import BookOnlineButton from "@/components/BookOnlineButton";
 import { parseCustomerBulletPoints } from "@/lib/product-card-content";
@@ -32,10 +32,12 @@ export default async function PricingPage({
   const zipValid = zip.length === 5;
   const preview = sp?.preview === "1";
 
-  const [pricingIntro, inventoryProducts] = await Promise.all([
+  const [pricingIntro, inventoryProducts, pricingSettings] = await Promise.all([
     getPricingIntroContent({ preview }),
     getPublicDumpsterProducts(zip),
+    getPricingSettingsSnapshot(),
   ]);
+  const includedServicesBlurb = pricingSettings.includedServicesBlurb?.trim() || "";
   const pricingProducts = inventoryProducts.length
     ? inventoryProducts
     : [
@@ -94,6 +96,12 @@ export default async function PricingPage({
               <>{pricingIntro.defaultBody}</>
             )}
           </p>
+
+          {includedServicesBlurb ? (
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              {includedServicesBlurb}
+            </p>
+          ) : null}
         </section>
 
         {/* Pricing Card */}
@@ -108,7 +116,7 @@ export default async function PricingPage({
                   {product.displayName}
                 </div>
 
-                <div className="mt-2 text-sm font-medium text-slate-600">
+                <div className="mt-2 whitespace-pre-line text-sm font-medium text-slate-600">
                   {formatDimensions(product.dimensions)}
                 </div>
                 <div className="mt-5 text-3xl font-semibold tracking-tight text-slate-950">
@@ -137,7 +145,9 @@ export default async function PricingPage({
                   return (
                     <>
                       {shortDescription ? (
-                        <p className="mt-6 text-sm leading-6 text-slate-600">{shortDescription}</p>
+                        <p className="mt-6 whitespace-pre-line text-sm leading-6 text-slate-600">
+                          {shortDescription}
+                        </p>
                       ) : null}
                       {bulletItems.length ? (
                         <ul className="mt-4 space-y-3 text-sm text-slate-600">

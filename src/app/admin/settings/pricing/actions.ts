@@ -1,12 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { isMissingPricingSettingsRentalPeriodColumnsError } from "@/lib/pricing-settings";
+import {
+  isMissingPricingSettingsIncludedServicesBlurbColumnError,
+  isMissingPricingSettingsRentalPeriodColumnsError,
+} from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type PricingSettingsFormValues = {
   maxRentalDays: string;
   allowExtendedRentalAtBooking: boolean;
+  includedServicesBlurb: string;
   tonOveragePrice: string;
 };
 
@@ -17,6 +21,7 @@ export type PricingSettingsFieldErrors = Partial<
     | "dailyOveragePrice"
     | "maxRentalDays"
     | "allowExtendedRentalAtBooking"
+    | "includedServicesBlurb"
     | "includedTons"
     | "tonOveragePrice",
     string
@@ -88,6 +93,7 @@ function buildValues(formData: FormData): PricingSettingsFormValues {
   return {
     maxRentalDays: asString(formData.get("maxRentalDays")).trim(),
     allowExtendedRentalAtBooking: asBoolean(formData.get("allowExtendedRentalAtBooking")),
+    includedServicesBlurb: asString(formData.get("includedServicesBlurb")).trim(),
     tonOveragePrice: normalizeCurrency(asString(formData.get("tonOveragePrice"))),
   };
 }
@@ -289,6 +295,10 @@ export async function updatePricingSettingsAction(
     fieldErrors.maxRentalDays = "Max rental length must be at least 1 day.";
   }
 
+  if (values.includedServicesBlurb.length > 300) {
+    fieldErrors.includedServicesBlurb = "What’s included must be 300 characters or fewer.";
+  }
+
   if (Object.keys(fieldErrors).length > 0) {
     return invalidState(values, fieldErrors);
   }
@@ -298,6 +308,7 @@ export async function updatePricingSettingsAction(
     .update({
       max_rental_days: maxRentalDays,
       allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
+      included_services_blurb: values.includedServicesBlurb || null,
       ton_overage_price: tonOveragePrice,
     })
     .eq("id", id);
@@ -308,6 +319,18 @@ export async function updatePricingSettingsAction(
       message: "",
       error:
         "Your database needs the latest pricing settings update before these changes can be saved. Apply migration 202604150101_pricing_settings_rental_period_model and try again.",
+      fieldErrors: {},
+      values,
+      messageKey: Date.now(),
+    };
+  }
+
+  if (error && isMissingPricingSettingsIncludedServicesBlurbColumnError(error)) {
+    return {
+      success: false,
+      message: "",
+      error:
+        "Your database needs the latest pricing settings update before this field can be saved. Apply migration 202605150101_pricing_settings_included_services_blurb and try again.",
       fieldErrors: {},
       values,
       messageKey: Date.now(),

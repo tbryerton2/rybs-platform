@@ -12,7 +12,10 @@ import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard"
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { DumpsterProductSettingsForm } from "@/app/admin/settings/pricing/dumpster-product-settings-form";
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
-import { isMissingPricingSettingsRentalPeriodColumnsError } from "@/lib/pricing-settings";
+import {
+  isMissingPricingSettingsIncludedServicesBlurbColumnError,
+  isMissingPricingSettingsRentalPeriodColumnsError,
+} from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { PricingSettingsForm } from "./pricing-settings-form";
 
@@ -23,6 +26,7 @@ type PricingSettingsRow = {
   daily_overage_price: number;
   max_rental_days: number | null;
   allow_extended_rental_at_booking: boolean;
+  included_services_blurb: string | null;
   included_tons: number;
   ton_overage_price: number;
   updated_at: string | null;
@@ -95,6 +99,7 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
     daily_overage_price,
     max_rental_days,
     allow_extended_rental_at_booking,
+    included_services_blurb,
     included_tons,
     ton_overage_price,
     updated_at
@@ -105,16 +110,23 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
     .select(selectClause)
     .maybeSingle();
 
-  if (error && !isMissingPricingSettingsRentalPeriodColumnsError(error)) {
+  if (
+    error &&
+    !isMissingPricingSettingsRentalPeriodColumnsError(error) &&
+    !isMissingPricingSettingsIncludedServicesBlurbColumnError(error)
+  ) {
     throw new Error(error.message);
   }
 
-  if (error && isMissingPricingSettingsRentalPeriodColumnsError(error)) {
+  if (error) {
+    const hasRentalPeriodColumns = !isMissingPricingSettingsRentalPeriodColumnsError(error);
     const legacySelectClause = `
       id,
       standard_rental_price,
       included_rental_days,
       daily_overage_price,
+      ${hasRentalPeriodColumns ? "max_rental_days," : ""}
+      ${hasRentalPeriodColumns ? "allow_extended_rental_at_booking," : ""}
       included_tons,
       ton_overage_price,
       updated_at
@@ -127,6 +139,8 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
         standard_rental_price: number;
         included_rental_days: number;
         daily_overage_price: number;
+        max_rental_days?: number | null;
+        allow_extended_rental_at_booking?: boolean;
         included_tons: number;
         ton_overage_price: number;
         updated_at: string | null;
@@ -137,8 +151,10 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
     if (legacyResult.data) {
       return {
         ...legacyResult.data,
-        max_rental_days: null,
-        allow_extended_rental_at_booking: false,
+        max_rental_days: legacyResult.data.max_rental_days ?? null,
+        allow_extended_rental_at_booking:
+          legacyResult.data.allow_extended_rental_at_booking ?? false,
+        included_services_blurb: null,
       };
     }
   }
@@ -154,17 +170,23 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
       daily_overage_price: 30,
       max_rental_days: null,
       allow_extended_rental_at_booking: false,
+      included_services_blurb: null,
       included_tons: 1,
       ton_overage_price: 100,
     })
     .select(selectClause)
     .single();
 
-  if (insertError && !isMissingPricingSettingsRentalPeriodColumnsError(insertError)) {
+  if (
+    insertError &&
+    !isMissingPricingSettingsRentalPeriodColumnsError(insertError) &&
+    !isMissingPricingSettingsIncludedServicesBlurbColumnError(insertError)
+  ) {
     throw new Error(insertError.message);
   }
 
-  if (insertError && isMissingPricingSettingsRentalPeriodColumnsError(insertError)) {
+  if (insertError) {
+    const hasRentalPeriodColumns = !isMissingPricingSettingsRentalPeriodColumnsError(insertError);
     const legacyInsertResult = await supabaseAdmin
       .from("pricing_settings")
       .insert({
@@ -174,12 +196,20 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
         daily_overage_price: 30,
         included_tons: 1,
         ton_overage_price: 100,
+        ...(hasRentalPeriodColumns
+          ? {
+              max_rental_days: null,
+              allow_extended_rental_at_booking: false,
+            }
+          : {}),
       })
       .select(`
         id,
         standard_rental_price,
         included_rental_days,
         daily_overage_price,
+        ${hasRentalPeriodColumns ? "max_rental_days," : ""}
+        ${hasRentalPeriodColumns ? "allow_extended_rental_at_booking," : ""}
         included_tons,
         ton_overage_price,
         updated_at
@@ -189,6 +219,8 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
         standard_rental_price: number;
         included_rental_days: number;
         daily_overage_price: number;
+        max_rental_days?: number | null;
+        allow_extended_rental_at_booking?: boolean;
         included_tons: number;
         ton_overage_price: number;
         updated_at: string | null;
@@ -198,8 +230,10 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
 
     return {
       ...legacyInsertResult.data,
-      max_rental_days: null,
-      allow_extended_rental_at_booking: false,
+      max_rental_days: legacyInsertResult.data.max_rental_days ?? null,
+      allow_extended_rental_at_booking:
+        legacyInsertResult.data.allow_extended_rental_at_booking ?? false,
+      included_services_blurb: null,
     };
   }
 
@@ -269,6 +303,7 @@ export default async function AdminPricingSettingsPage() {
           id: pricing.id,
           maxRentalDays: pricing.max_rental_days,
           allowExtendedRentalAtBooking: pricing.allow_extended_rental_at_booking,
+          includedServicesBlurb: pricing.included_services_blurb,
           tonOveragePrice: pricing.ton_overage_price,
         }}
       />

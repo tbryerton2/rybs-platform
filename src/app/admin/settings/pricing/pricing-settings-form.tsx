@@ -18,6 +18,7 @@ type PricingSettingsFormProps = {
     id: string;
     maxRentalDays: number | null;
     allowExtendedRentalAtBooking: boolean;
+    includedServicesBlurb: string | null;
     tonOveragePrice: number;
   };
 };
@@ -35,6 +36,7 @@ function toFormValues(pricing: PricingSettingsFormProps["pricing"]): PricingSett
     dailyOveragePrice: "",
     maxRentalDays: pricing.maxRentalDays == null ? "" : String(pricing.maxRentalDays),
     allowExtendedRentalAtBooking: pricing.allowExtendedRentalAtBooking,
+    includedServicesBlurb: pricing.includedServicesBlurb ?? "",
     includedTons: "",
     tonOveragePrice: String(pricing.tonOveragePrice),
   };
@@ -67,6 +69,10 @@ function validate(values: PricingSettingsFormValues): PricingSettingsFieldErrors
 
   if (tonOveragePrice === null || tonOveragePrice < 0) {
     fieldErrors.tonOveragePrice = "Enter a valid amount of $0 or more.";
+  }
+
+  if (values.includedServicesBlurb.trim().length > 300) {
+    fieldErrors.includedServicesBlurb = "What’s included must be 300 characters or fewer.";
   }
 
   return fieldErrors;
@@ -164,6 +170,56 @@ function Field({
           </span>
         ) : null}
       </div>
+
+      {error ? (
+        <p id={`${name}-error`} className="mt-2 text-sm text-red-700">
+          {error}
+        </p>
+      ) : null}
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  helper,
+  name,
+  value,
+  onChange,
+  error,
+  placeholder,
+}: {
+  label: string;
+  helper?: string;
+  name: "includedServicesBlurb";
+  value: string;
+  onChange: (name: "includedServicesBlurb", value: string) => void;
+  error?: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+        <span className="h-3 w-3 shrink-0 rounded-full bg-orange-400" />
+        <span>{label}</span>
+      </div>
+      {helper ? <p className="mt-1 text-sm text-slate-600">{helper}</p> : null}
+
+      <textarea
+        name={name}
+        value={value}
+        onChange={(event) => onChange(name, event.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        maxLength={300}
+        className={[
+          "mt-3 w-full max-w-2xl resize-y rounded-2xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
+          "focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
+          error ? "border-red-300" : "border-slate-300",
+        ].join(" ")}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${name}-error` : undefined}
+      />
 
       {error ? (
         <p id={`${name}-error`} className="mt-2 text-sm text-red-700">
@@ -417,6 +473,18 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
                   </li>
                 </ul>
               </div>
+            </div>
+
+            <div className="mt-8">
+              <TextareaField
+                label="What’s included"
+                helper="Shown to customers when explaining what is included in the base rental price."
+                name="includedServicesBlurb"
+                value={values.includedServicesBlurb}
+                onChange={updateTextValue}
+                error={mergedErrors.includedServicesBlurb}
+                placeholder="Includes delivery, pickup, and the standard weight allowance."
+              />
             </div>
 
             <div className="w-full mt-10">

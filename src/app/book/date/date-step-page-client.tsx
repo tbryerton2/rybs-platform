@@ -10,6 +10,11 @@ import {
   priceQuoteMatchesSelection,
   type BookingPriceQuote,
 } from "@/lib/booking-pricing";
+import {
+  buildBookingOriginBackHref,
+  normalizeBookingOrigin,
+  type BookingOrigin,
+} from "@/lib/booking-origin";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getHoldMinutes } from "@/lib/config";
 import { formatUsdFromCents } from "@/lib/money";
@@ -149,6 +154,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
   const [nextAvailableDate, setNextAvailableDate] = useState<string | null>(null);
   const [selectedDumpster, setSelectedDumpster] = useState(resolveSelectedDumpster);
   const [bookingZip, setBookingZip] = useState("");
+  const [bookingOrigin, setBookingOrigin] = useState<BookingOrigin>("book");
   const [ready, setReady] = useState(false);
   const [draftQuote, setDraftQuote] = useState<BookingPriceQuote | null>(null);
   const [pickupDate, setPickupDate] = useState("");
@@ -171,6 +177,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     () => (searchParams.get("dumpsterProductId") || "").trim() || null,
     [searchParams],
   );
+  const queryOrigin = useMemo(() => searchParams.get("origin"), [searchParams]);
   const hasQueryDumpsterSelection = Boolean(queryDumpsterSize || queryDumpsterProductId);
 
   // Load saved date (if user navigates back)
@@ -181,6 +188,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
       try {
         const raw = sessionStorage.getItem(getBookingStorageKey());
         const data: BookingDraft = raw ? JSON.parse(raw) : {};
+        const nextOrigin = normalizeBookingOrigin(queryOrigin ?? data.bookingOrigin);
         const storedZip = (data?.zip || data?.customerZip || "").replace(/\D/g, "").slice(0, 5);
         const nextZip = queryZip || storedZip;
         const storedHasDumpsterSelection = Boolean(
@@ -240,7 +248,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
             dumpsterSize: nextDumpster.dumpsterSize,
             dumpsterProductId: nextDumpster.dumpsterProductId,
             priceQuote: json.priceQuote ?? null,
-            bookingOrigin: "pricing",
+            bookingOrigin: nextOrigin,
             ...(upstreamChanged
               ? {
                   deliveryDate: undefined,
@@ -301,6 +309,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
         if (cancelled) return;
         setBookingZip(nextZip);
         setSelectedDumpster(nextDumpster);
+        setBookingOrigin(nextOrigin);
         setReady(true);
       } catch {
         if (!cancelled) router.replace("/book/address");
@@ -310,7 +319,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     return () => {
       cancelled = true;
     };
-  }, [hasQueryDumpsterSelection, queryDumpsterProductId, queryDumpsterSize, queryZip, router]);
+  }, [hasQueryDumpsterSelection, queryDumpsterProductId, queryDumpsterSize, queryOrigin, queryZip, router]);
 
   // Normalize (future-proof if we ever change date input type)
   const normalizedDate = useMemo(() => (deliveryDate || "").trim(), [deliveryDate]);
@@ -462,23 +471,13 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
   const backToDumpsterHref = useMemo(() => {
     if (!bookingZip) return "/book/address";
 
-    const params = new URLSearchParams({
+    return buildBookingOriginBackHref({
+      origin: bookingOrigin,
       zip: bookingZip,
-      editing: "dumpster",
+      dumpsterSize: selectedDumpster.dumpsterSize,
+      dumpsterProductId: selectedDumpster.dumpsterProductId,
     });
-
-    if (selectedDumpster.dumpsterSize) {
-      params.set("dumpsterSize", selectedDumpster.dumpsterSize);
-    }
-
-    if (selectedDumpster.dumpsterProductId) {
-      params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
-    }
-
-    params.set("origin", "book");
-
-    return `/book?${params.toString()}`;
-  }, [bookingZip, selectedDumpster]);
+  }, [bookingOrigin, bookingZip, selectedDumpster]);
 
   function updateDeliveryDate(d: string) {
     if (!ready) return;
@@ -1125,11 +1124,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 3 of 4
+                  Step 2 of 5
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-3/4 rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-2/5 rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>

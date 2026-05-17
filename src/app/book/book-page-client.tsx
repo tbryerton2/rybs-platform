@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BlockedZipPanel } from "@/components/BlockedZipPanel";
-import { normalizeBookingOrigin } from "@/lib/booking-origin";
+import { normalizeBookingOrigin, type BookingOrigin } from "@/lib/booking-origin";
 import type { BookingPriceQuote } from "@/lib/booking-pricing";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
@@ -102,6 +102,9 @@ export default function BookPageClient({
       return fallback;
     }
   });
+  const [bookingOrigin, setBookingOrigin] = useState<BookingOrigin>(() =>
+    normalizeBookingOrigin(initialOrigin),
+  );
 
   const selectedKey = `${selectedDumpster.dumpsterSize}:${selectedDumpster.dumpsterProductId ?? ""}`;
 
@@ -120,10 +123,13 @@ export default function BookPageClient({
     try {
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+      const nextOrigin = normalizeBookingOrigin(existing.bookingOrigin ?? initialOrigin);
       const storedZip = String(existing.zip || "").replace(/\D/g, "").slice(0, 5);
       const hasStoredDumpsterSelection = Boolean(
         (existing.dumpsterSize || "").trim() || (existing.dumpsterProductId || "").trim(),
       );
+
+      setBookingOrigin(nextOrigin);
 
       if (storedZip === zip && hasStoredDumpsterSelection) {
         const params = new URLSearchParams({ zip });
@@ -131,13 +137,13 @@ export default function BookPageClient({
         if (selectedProduct.dumpsterProductId) {
           params.set("dumpsterProductId", selectedProduct.dumpsterProductId);
         }
-        params.set("origin", "book");
+        params.set("origin", nextOrigin);
         router.replace(`/book/date?${params.toString()}`);
       }
     } catch {
       // ignore
     }
-  }, [blocked, isEditingDumpster, router, selectedProduct, zip, zipValid]);
+  }, [blocked, initialOrigin, isEditingDumpster, router, selectedProduct, zip, zipValid]);
 
   function persistSelection(product: PublicDumpsterProduct) {
     const selectionChanged =
@@ -152,6 +158,8 @@ export default function BookPageClient({
     try {
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+      const nextOrigin = normalizeBookingOrigin(existing.bookingOrigin ?? initialOrigin);
+      setBookingOrigin(nextOrigin);
       sessionStorage.setItem(
         getBookingStorageKey(),
         JSON.stringify({
@@ -179,7 +187,7 @@ export default function BookPageClient({
                 priceQuote: null,
               }
             : {}),
-          bookingOrigin: normalizeBookingOrigin(existing.bookingOrigin ?? initialOrigin),
+          bookingOrigin: nextOrigin,
         }),
       );
     } catch {
@@ -187,7 +195,7 @@ export default function BookPageClient({
     }
   }
 
-  function buildDateHref(product: PublicDumpsterProduct) {
+  function buildDateHref(product: PublicDumpsterProduct, origin = bookingOrigin) {
     const params = new URLSearchParams();
 
     if (zipValid && zip) {
@@ -198,7 +206,7 @@ export default function BookPageClient({
     if (product.dumpsterProductId) {
       params.set("dumpsterProductId", product.dumpsterProductId);
     }
-    params.set("origin", "book");
+    params.set("origin", origin);
 
     const query = params.toString();
     return query ? `/book/date?${query}` : "/book/date";
@@ -233,6 +241,8 @@ export default function BookPageClient({
 
       const raw = sessionStorage.getItem(getBookingStorageKey());
       const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+      const nextOrigin = normalizeBookingOrigin(existing.bookingOrigin ?? initialOrigin);
+      setBookingOrigin(nextOrigin);
       sessionStorage.setItem(
         getBookingStorageKey(),
         JSON.stringify({
@@ -249,11 +259,11 @@ export default function BookPageClient({
           extraDayPrice: product.extraDayPrice,
           basePrice: product.basePrice,
           priceQuote: json.priceQuote ?? null,
-          bookingOrigin: normalizeBookingOrigin(existing.bookingOrigin ?? initialOrigin),
+          bookingOrigin: nextOrigin,
         }),
       );
 
-      router.push(buildDateHref(product));
+      router.push(buildDateHref(product, nextOrigin));
     } catch {
       setSelectionError("We couldn’t confirm pricing for that dumpster. Please try again.");
     } finally {
@@ -275,11 +285,11 @@ export default function BookPageClient({
             <div className="mx-auto mb-4 w-full max-w-2xl">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 2 of 4
+                  Step 1 of 5
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-1/2 rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-1/5 rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>
@@ -316,7 +326,7 @@ export default function BookPageClient({
                       <div className="text-2xl font-semibold tracking-tight text-[#F97316]">
                         {product.displayName}
                       </div>
-                      <div className="mt-2 text-sm font-medium text-slate-600">
+                      <div className="mt-2 whitespace-pre-line text-sm font-medium text-slate-600">
                         {formatDimensions(product.dimensions)}
                       </div>
                     </div>
@@ -353,7 +363,9 @@ export default function BookPageClient({
                     return (
                       <>
                         {shortDescription ? (
-                          <p className="mt-4 text-sm leading-6 text-slate-600">{shortDescription}</p>
+                          <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-600">
+                            {shortDescription}
+                          </p>
                         ) : null}
                         {bulletItems.length ? (
                           <ul className="mt-3 space-y-2 text-sm text-slate-600">

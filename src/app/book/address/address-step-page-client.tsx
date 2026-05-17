@@ -367,11 +367,11 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
             <div className="mx-auto mb-4 w-full max-w-2xl">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 1 of 4
+                  Service area
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-1/4 rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-0 rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>

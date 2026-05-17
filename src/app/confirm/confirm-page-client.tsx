@@ -404,10 +404,10 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 4 of 4
+                  Step 4 of 5
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
-                  <div className="h-2 w-full rounded-full bg-[#F97316]" />
+                  <div className="h-2 w-4/5 rounded-full bg-[#F97316]" />
                 </div>
               </div>
             </div>
