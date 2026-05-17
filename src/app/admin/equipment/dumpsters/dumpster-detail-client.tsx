@@ -15,10 +15,8 @@ import { validateDumpsterRecord } from "@/lib/admin/dumpster-inventory-shared";
 import {
   createEmptyDumpster,
   dumpsterServiceDateTypeOptions,
-  trackerStatusOptions,
   type DumpsterRecord,
   type DumpsterServiceDateRecord,
-  type DumpsterServiceDateType,
 } from "@/lib/admin/equipment";
 import { formatDateTimeLabelET } from "@/lib/time";
 

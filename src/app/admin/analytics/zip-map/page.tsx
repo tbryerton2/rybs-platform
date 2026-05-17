@@ -34,7 +34,7 @@ type BookingRow = {
 };
 
 type MapZipRow = {
-  id: string | null;
+  id: string;
   zip: string;
   town: string | null;
   county: string | null;
@@ -199,8 +199,7 @@ export default async function ZipMapPage({
     bookingsByZip.set(zip, current);
   }
 
-  const mapRows: MapZipRow[] = zipRows
-    .map((row) => {
+  const mappedRows: Array<MapZipRow | null> = zipRows.map((row): MapZipRow | null => {
       const zip = normalizeZip(row.zip);
       if (!zip) return null;
 
@@ -218,8 +217,9 @@ export default async function ZipMapPage({
         avgBookingValue:
           agg.bookingCount > 0 ? agg.revenue / agg.bookingCount : 0,
       };
-    })
-    .filter((row): row is MapZipRow => row !== null);
+    });
+
+  const mapRows = mappedRows.filter((row): row is MapZipRow => row !== null);
 
   const totalBookings = mapRows.reduce((sum, row) => sum + row.bookingCount, 0);
   const totalRevenue = mapRows.reduce((sum, row) => sum + row.revenue, 0);

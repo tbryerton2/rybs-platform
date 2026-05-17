@@ -11,7 +11,7 @@ import {
   TruckIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
-import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
+import { AdminSummaryCard, type SummaryCardTone } from "@/app/admin/_components/AdminSummaryCard";
 import { ClickableTableRow } from "@/app/admin/analytics/zip-heatmap/clickable-table-row";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
@@ -29,7 +29,7 @@ import {
 import { buildPickupPlanningModel } from "@/lib/pickup-planning";
 import { getActiveDumpsterFilterOptions } from "@/lib/admin/dumpster-inventory";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import type { SVGProps } from "react";
+import type { ComponentType, SVGProps } from "react";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -100,6 +100,16 @@ type SortOption =
   | "delivery_desc"
   | "pickup_asc"
   | "pickup_desc";
+
+type BookingSummaryCard = {
+  label: string;
+  value: number;
+  href: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  shellTone: SummaryCardTone;
+  active: boolean;
+  detail?: string;
+};
 
 function SearchAlertIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -607,6 +617,14 @@ async function getBookings(limit = 1000) {
   );
 }
 
+function assignBookingRowValue<K extends keyof BookingRow>(
+  row: BookingRow,
+  key: K,
+  value: BookingRow[K],
+) {
+  row[key] = value;
+}
+
 function mergeBookingRows(...groups: BookingRow[][]) {
   const merged = new Map<string, BookingRow>();
   for (const group of groups) {
@@ -620,7 +638,7 @@ function mergeBookingRows(...groups: BookingRow[][]) {
       const nextRow = { ...existing } as BookingRow;
       for (const [key, value] of Object.entries(row) as Array<[keyof BookingRow, BookingRow[keyof BookingRow]]>) {
         if (value !== null && value !== undefined && value !== "") {
-          nextRow[key] = value;
+          assignBookingRowValue(nextRow, key, value);
         }
       }
 
@@ -1026,6 +1044,8 @@ function matchesSelectedStatus(vm: BookingViewModel, selected: string[]) {
 }
 
 function filterByQuickView(vm: BookingViewModel, quickView: string) {
+  const next7Range = getExplicitDateRange("next_7_days", "", "");
+
   switch (quickView) {
     case "needs_attention":
       return vm.needsAttention;
@@ -1039,17 +1059,17 @@ function filterByQuickView(vm: BookingViewModel, quickView: string) {
       return (
         vm.activeBucket === "upcoming" &&
         typeof vm.booking.delivery_date === "string" &&
-        !!getExplicitDateRange("next_7_days", "", "").to &&
+        !!next7Range.to &&
         vm.booking.delivery_date >= todayISOET() &&
-        vm.booking.delivery_date <= getExplicitDateRange("next_7_days", "", "").to
+        vm.booking.delivery_date <= next7Range.to
       );
     case "upcoming_pickups":
       return (
         vm.booking.pickup_mode === "schedule" &&
         typeof vm.booking.pickup_date === "string" &&
-        !!getExplicitDateRange("next_7_days", "", "").to &&
+        !!next7Range.to &&
         vm.booking.pickup_date >= todayISOET() &&
-        vm.booking.pickup_date <= getExplicitDateRange("next_7_days", "", "").to
+        vm.booking.pickup_date <= next7Range.to
       );
     case "recently_created":
       return isRecentlyCreated(vm.booking.created_at);
@@ -1521,6 +1541,63 @@ export default async function AdminBookingsPage({
   ).length;
   const recentlyCreatedCount = allViewModels.filter((vm) => isRecentlyCreated(vm.booking.created_at)).length;
   const activeHoldCount = activeHolds.length;
+  const activeHoldSummaryCards: BookingSummaryCard[] =
+    activeHoldCount > 0
+      ? [
+          {
+            label: "Active holds",
+            value: activeHoldCount,
+            href: getSummaryHref("holds", filters.pageSize, filtersExpanded),
+            icon: ClockIcon,
+            shellTone: "violet",
+            detail: "Temporary inventory reservations in progress",
+            active: isQuickViewPresetActive(filters, "holds"),
+          },
+        ]
+      : [];
+  const summaryCards = [
+    {
+      label: "Active / on-site",
+      value: activeOnSiteCount,
+      href: getSummaryHref("active", filters.pageSize, filtersExpanded),
+      icon: HomeIcon,
+      shellTone: "amber",
+      active: isQuickViewPresetActive(filters, "active"),
+    },
+    {
+      label: "Upcoming deliveries",
+      value: upcomingDeliveriesCount,
+      href: getSummaryHref("upcoming", filters.pageSize, filtersExpanded),
+      icon: TruckIcon,
+      shellTone: "green",
+      active: isQuickViewPresetActive(filters, "upcoming_deliveries"),
+    },
+    {
+      label: "Upcoming pickups",
+      value: upcomingPickupsCount,
+      href: getSummaryHref("upcoming_pickups", filters.pageSize, filtersExpanded),
+      icon: Undo2Icon,
+      shellTone: "blue",
+      active: isQuickViewPresetActive(filters, "upcoming_pickups"),
+    },
+    {
+      label: "Recently created",
+      value: recentlyCreatedCount,
+      href: getSummaryHref("recent", filters.pageSize, filtersExpanded),
+      icon: ClockFadingIcon,
+      shellTone: "indigo",
+      active: isQuickViewPresetActive(filters, "recently_created"),
+    },
+    {
+      label: "Needs attention",
+      value: visibleNeedsAttention,
+      href: getSummaryHref("needs_attention", filters.pageSize, filtersExpanded),
+      icon: SearchAlertIcon,
+      shellTone: "rose",
+      active: isQuickViewPresetActive(filters, "needs_attention"),
+    },
+    ...activeHoldSummaryCards,
+  ] satisfies BookingSummaryCard[];
   const statusSummary = summarizeStatusSelection(filters.status);
   const dumpsterSummary = summarizeDumpsterSelection(filters.dumpster, dumpsterOptions);
   const advancedFiltersContent = (
@@ -1676,61 +1753,7 @@ export default async function AdminBookingsPage({
         />
 
         <section className={`grid gap-4 ${activeHoldCount > 0 ? "md:grid-cols-2 xl:grid-cols-6" : "md:grid-cols-2 xl:grid-cols-5"}`}>
-          {[
-            {
-              label: "Active / on-site",
-              value: activeOnSiteCount,
-              href: getSummaryHref("active", filters.pageSize, filtersExpanded),
-              icon: HomeIcon,
-              shellTone: "amber",
-              active: isQuickViewPresetActive(filters, "active"),
-            },
-            {
-              label: "Upcoming deliveries",
-              value: upcomingDeliveriesCount,
-              href: getSummaryHref("upcoming", filters.pageSize, filtersExpanded),
-              icon: TruckIcon,
-              shellTone: "green",
-              active: isQuickViewPresetActive(filters, "upcoming_deliveries"),
-            },
-            {
-              label: "Upcoming pickups",
-              value: upcomingPickupsCount,
-              href: getSummaryHref("upcoming_pickups", filters.pageSize, filtersExpanded),
-              icon: Undo2Icon,
-              shellTone: "blue",
-              active: isQuickViewPresetActive(filters, "upcoming_pickups"),
-            },
-            {
-              label: "Recently created",
-              value: recentlyCreatedCount,
-              href: getSummaryHref("recent", filters.pageSize, filtersExpanded),
-              icon: ClockFadingIcon,
-              shellTone: "indigo",
-              active: isQuickViewPresetActive(filters, "recently_created"),
-            },
-            {
-              label: "Needs attention",
-              value: visibleNeedsAttention,
-              href: getSummaryHref("needs_attention", filters.pageSize, filtersExpanded),
-              icon: SearchAlertIcon,
-              shellTone: "rose",
-              active: isQuickViewPresetActive(filters, "needs_attention"),
-            },
-            ...(activeHoldCount > 0
-              ? [
-                  {
-                    label: "Active holds",
-                    value: activeHoldCount,
-                    href: getSummaryHref("holds", filters.pageSize, filtersExpanded),
-                    icon: ClockIcon,
-                    shellTone: "violet",
-                    detail: "Temporary inventory reservations in progress",
-                    active: isQuickViewPresetActive(filters, "holds"),
-                  },
-                ]
-              : []),
-          ].map((card) => {
+          {summaryCards.map((card) => {
             return (
               <AdminSummaryCard
                 key={card.label}
@@ -1797,7 +1820,7 @@ export default async function AdminBookingsPage({
 
             <div className="flex flex-wrap items-center gap-3">
               <Link
-                href={buildPageHref(filters, currentPage, filtersExpanded ? "closed" : "open")}
+                href={buildPageHref(filters, currentPage, filtersExpanded ? "closed" : true)}
                 className="inline-flex h-9 items-center gap-1 rounded-full px-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
               >
                 <span>{filtersExpanded ? "Less options" : "More options"}</span>

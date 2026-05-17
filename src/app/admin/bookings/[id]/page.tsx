@@ -26,6 +26,9 @@ import {
   getPlacementPreferenceLabel,
   hasCollectedPlacementDetails,
   sanitizePlacementDetails,
+  type AccessIssue,
+  type DeliveryPresence,
+  type PlacementPreference,
 } from "@/lib/placement";
 import {
   quickCancelBookingAction,
@@ -271,6 +274,18 @@ function tryParseHistoryValue(raw: string) {
   return raw;
 }
 
+function isAccessIssue(value: string): value is AccessIssue {
+  return (ACCESS_ISSUES as readonly string[]).includes(value);
+}
+
+function isDeliveryPresence(value: string): value is DeliveryPresence {
+  return (DELIVERY_PRESENCE_OPTIONS as readonly string[]).includes(value);
+}
+
+function isPlacementPreference(value: string): value is PlacementPreference {
+  return (PLACEMENT_PREFERENCES as readonly string[]).includes(value);
+}
+
 function formatHistoryPrimitive(fieldName: string, value: unknown): string {
   if (value == null || value === "") return "—";
 
@@ -282,11 +297,11 @@ function formatHistoryPrimitive(fieldName: string, value: unknown): string {
 
   switch (fieldName) {
     case "access_issues":
-      return getAccessIssueLabel(stringValue);
+      return isAccessIssue(stringValue) ? getAccessIssueLabel(stringValue) : stringValue;
     case "delivery_presence":
-      return getDeliveryPresenceLabel(stringValue);
+      return isDeliveryPresence(stringValue) ? getDeliveryPresenceLabel(stringValue) : stringValue;
     case "placement_preference":
-      return getPlacementPreferenceLabel(stringValue);
+      return isPlacementPreference(stringValue) ? getPlacementPreferenceLabel(stringValue) : stringValue;
     case "portal_status":
       return stringValue.replaceAll("_", " ");
     case "status":
@@ -582,18 +597,22 @@ export default async function AdminBookingDetailPage({
         .eq("id", id)
         .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS | "customer_id" | "reordered_from_booking_id" | "booking_ref">>();
 
-          booking = legacyFallback.data
-        ? ({
-            customer_id: null,
-            reordered_from_booking_id: null,
-            booking_ref: null,
-            dumpster_id: null,
-            dumpster_size: null,
-            dumpster_product_id: null,
-            ...legacyFallback.data,
-            ...EMPTY_BOOKING_PLACEMENT_FIELDS,
-          } as Booking)
-        : null;
+      if (legacyFallback.data) {
+        const { dumpster_id, dumpster_size, dumpster_product_id, ...legacyBookingData } = legacyFallback.data;
+
+        booking = {
+          customer_id: null,
+          reordered_from_booking_id: null,
+          booking_ref: null,
+          ...legacyBookingData,
+          dumpster_id: dumpster_id ?? null,
+          dumpster_size: dumpster_size ?? null,
+          dumpster_product_id: dumpster_product_id ?? null,
+          ...EMPTY_BOOKING_PLACEMENT_FIELDS,
+        } as Booking;
+      } else {
+        booking = null;
+      }
       error = legacyFallback.error;
     } else {
       booking = fallback.data

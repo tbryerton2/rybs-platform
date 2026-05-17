@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { Resend } from "resend";
 
+type ResendSendResult = Awaited<ReturnType<Resend["emails"]["send"]>> & {
+  id?: string | null;
+};
+
 export async function POST() {
   try {
     const resendKey = process.env.RESEND_API_KEY;
@@ -64,15 +68,15 @@ export async function POST() {
       }
 
       try {
-        const result = await resend.emails.send({
+        const result = (await resend.emails.send({
           from: "Tin Can Man <no-reply@yourdomain.com>",
           to: toEmail,
           subject,
           text: body,
-        });
+        })) as ResendSendResult;
 
         const providerMessageId =
-          (result as any)?.data?.id ?? (result as any)?.id ?? null;
+          result.data?.id ?? result.id ?? null;
 
         await supabaseAdmin
           .from("booking_messages")
@@ -86,21 +90,21 @@ export async function POST() {
           .eq("id", msg.id);
 
         processed += 1;
-      } catch (sendErr: any) {
+      } catch (sendErr: unknown) {
         await supabaseAdmin
           .from("booking_messages")
           .update({
             status: "failed",
-            error: sendErr?.message ?? "Resend send failed",
+            error: sendErr instanceof Error ? sendErr.message : "Resend send failed",
           })
           .eq("id", msg.id);
       }
     }
 
     return NextResponse.json({ ok: true, processed });
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
+      { ok: false, error: e instanceof Error ? e.message : "Unknown error" },
       { status: 500 }
     );
   }

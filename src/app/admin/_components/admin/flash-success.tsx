@@ -15,12 +15,19 @@ export function FlashSuccess({ show, message, children }: FlashSuccessProps) {
 
   useEffect(() => {
     if (!show) {
-      setVisible(false);
-      setMounted(false);
-      return;
+      const resetTimer = window.setTimeout(() => {
+        setVisible(false);
+        setMounted(false);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(resetTimer);
+      };
     }
 
-    setMounted(true);
+    const mountTimer = window.setTimeout(() => {
+      setMounted(true);
+    }, 0);
 
     const enterTimer = window.setTimeout(() => {
       setVisible(true);
@@ -35,6 +42,7 @@ export function FlashSuccess({ show, message, children }: FlashSuccessProps) {
     }, 3200);
 
     return () => {
+      window.clearTimeout(mountTimer);
       window.clearTimeout(enterTimer);
       window.clearTimeout(fadeTimer);
       window.clearTimeout(removeTimer);

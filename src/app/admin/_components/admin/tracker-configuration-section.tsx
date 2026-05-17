@@ -78,8 +78,6 @@ export function TrackerConfigurationSection({
   saveDisabled?: boolean;
   showCancel?: boolean;
 }) {
-  const canEdit = mode === "edit" && onChange;
-
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">

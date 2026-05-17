@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 
-type SummaryCardTone = "green" | "blue" | "violet" | "indigo" | "amber" | "teal" | "rose";
+export type SummaryCardTone = "green" | "blue" | "violet" | "indigo" | "amber" | "teal" | "rose";
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");

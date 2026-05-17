@@ -306,7 +306,7 @@ export default function ZipMapClient({
                     weight: 1.4,
                   });
                   const element = pathLayer.getElement();
-                  if (element) {
+                  if (element instanceof HTMLElement || element instanceof SVGElement) {
                     element.style.filter = "drop-shadow(0 1px 5px rgba(15, 23, 42, 0.22))";
                   }
                   if ("bringToFront" in pathLayer) {
@@ -317,7 +317,7 @@ export default function ZipMapClient({
                   const base = styleForRow(row, maxMetricValue, metric);
                   pathLayer.setStyle(base);
                   const element = pathLayer.getElement();
-                  if (element) {
+                  if (element instanceof HTMLElement || element instanceof SVGElement) {
                     element.style.filter = "";
                   }
                 },

@@ -18,6 +18,23 @@ type BookingStatus =
   | "picked_up"
   | "cancelled";
 
+type OperationalFieldName =
+  | "status"
+  | "delivery_date"
+  | "pickup_mode"
+  | "pickup_date"
+  | "placement_preference"
+  | "placement_details"
+  | "access_issues"
+  | "gate_instructions"
+  | "delivery_presence"
+  | "alternate_contact_name"
+  | "alternate_contact_phone"
+  | "placement_photo_url"
+  | "special_delivery_instructions";
+
+type OperationalBookingData = Record<string, unknown> & Partial<Record<OperationalFieldName, unknown>>;
+
 function asString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value : "";
 }
@@ -25,6 +42,10 @@ function asString(value: FormDataEntryValue | null) {
 function emptyToNull(value: string) {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function redirectWithPlacementError(id: string, error: string) {
@@ -35,11 +56,11 @@ function redirectWithOperationalControlsError(id: string, error: string) {
   redirect(`/admin/bookings/${id}?placementError=${encodeURIComponent(error)}#booking-operational-controls`);
 }
 
-function redirectWithAssignmentError(id: string, error: string) {
+function redirectWithAssignmentError(id: string, error: string): never {
   redirect(`/admin/bookings/${id}?assignmentError=${encodeURIComponent(error)}#assigned-dumpster`);
 }
 
-function normalizeOperationalFieldValue(fieldName: string, value: unknown) {
+function normalizeOperationalFieldValue(fieldName: OperationalFieldName, value: unknown) {
   if (fieldName === "access_issues") {
     if (!Array.isArray(value)) return [];
     return value
@@ -59,7 +80,7 @@ function normalizeOperationalFieldValue(fieldName: string, value: unknown) {
   return value;
 }
 
-function operationalFieldChanged(fieldName: string, currentValue: unknown, nextValue: unknown) {
+function operationalFieldChanged(fieldName: OperationalFieldName, currentValue: unknown, nextValue: unknown) {
   return (
     JSON.stringify(normalizeOperationalFieldValue(fieldName, currentValue)) !==
     JSON.stringify(normalizeOperationalFieldValue(fieldName, nextValue))
@@ -316,9 +337,12 @@ export async function updateOperationalControlsAction(formData: FormData) {
     .single();
 
   if (current.error) throw new Error(current.error.message);
+  if (!isRecord(current.data)) throw new Error("Booking not found");
+
+  const currentData: OperationalBookingData = current.data;
 
   const pickup_mode = pickup_date ? "schedule" : "request";
-  const updates: Record<string, unknown> = {
+  const updates: Partial<Record<OperationalFieldName, unknown>> = {
     status,
     delivery_date,
     pickup_mode,
@@ -337,7 +361,7 @@ export async function updateOperationalControlsAction(formData: FormData) {
     updates.special_delivery_instructions = placement.specialDeliveryInstructions;
   }
 
-  const fieldsToCheck = placement
+  const fieldsToCheck: OperationalFieldName[] = placement
     ? [
         "status",
         "delivery_date",
@@ -356,9 +380,9 @@ export async function updateOperationalControlsAction(formData: FormData) {
     : ["status", "delivery_date", "pickup_mode", "pickup_date"];
 
   const changedUpdates = Object.fromEntries(
-    Object.entries(updates).filter(([fieldName, nextValue]) =>
-      operationalFieldChanged(fieldName, current.data[fieldName], nextValue),
-    ),
+    fieldsToCheck
+      .filter((fieldName) => operationalFieldChanged(fieldName, currentData[fieldName], updates[fieldName]))
+      .map((fieldName) => [fieldName, updates[fieldName]]),
   );
 
   if (Object.keys(changedUpdates).length === 0) {
@@ -387,7 +411,7 @@ export async function updateOperationalControlsAction(formData: FormData) {
     diffEntityFields(
       "booking",
       id,
-      current.data,
+      currentData,
       changedUpdates,
       fieldsToCheck.filter((fieldName) => fieldName in changedUpdates),
       { changedByType: "admin", changeReason: "Updated operational controls" },
@@ -416,6 +440,10 @@ export async function updateAssignedDumpsterAction(formData: FormData) {
 
   if (current.error) {
     redirectWithAssignmentError(id, current.error.message);
+  }
+
+  if (!current.data) {
+    redirectWithAssignmentError(id, "Booking not found");
   }
 
   const currentAssignment = current.data.dumpster_id ?? null;

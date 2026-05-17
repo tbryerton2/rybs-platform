@@ -68,8 +68,8 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
 
       // ✅ NEW: clear note after save
       setNote("");
-    } catch (e: any) {
-      setError(e?.message || "Update failed");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Update failed");
       setSaving(null);
     }
   }

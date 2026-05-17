@@ -12,7 +12,6 @@ import { TrackerConfigurationSection } from "@/app/admin/_components/admin/track
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 import { fleetEquipmentServiceDateTypeOptions } from "@/lib/admin/equipment";
 import {
-  getFleetEquipmentDueSoonIndicator,
   getFleetEquipmentServiceDateStatus,
   type FleetEquipmentServiceDateStatus,
 } from "@/lib/admin/fleet-equipment-service-dates";
@@ -69,7 +68,6 @@ export function FleetEquipmentView({
   const [serviceDateEditor, setServiceDateEditor] = useState<ServiceDateEditorState | null>(null);
   const [serviceDateError, setServiceDateError] = useState<string | null>(null);
   const [isSavingServiceDate, setIsSavingServiceDate] = useState(false);
-  const dueSoonIndicator = getFleetEquipmentDueSoonIndicator(serviceDates);
 
   function getServiceDateStatus(record: ServiceDateRowRecord): FleetEquipmentServiceDateStatus {
     return getFleetEquipmentServiceDateStatus(record.serviceDate);
