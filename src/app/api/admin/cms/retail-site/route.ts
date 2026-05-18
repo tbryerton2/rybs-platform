@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import { RETAIL_SITE_CMS_CONTENT_KEYS } from "@/lib/admin/cms";
 
-const VALID_KEYS = new Set(RETAIL_SITE_CMS_CONTENT_KEYS);
+const VALID_KEYS: ReadonlySet<string> = new Set(RETAIL_SITE_CMS_CONTENT_KEYS);
 
 type ContentEntryInput = {
   key: string;
@@ -14,16 +14,16 @@ function parseEntries(body: Record<string, unknown>) {
   const rawEntries = Array.isArray(body.entries) ? body.entries : null;
 
   if (rawEntries) {
-    return rawEntries
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") return null;
-        const record = entry as Record<string, unknown>;
-        return {
-          key: String(record.key ?? "").trim(),
-          value: record.value ?? {},
-        };
-      })
-      .filter((entry): entry is ContentEntryInput => Boolean(entry?.key));
+    const nullableEntries: Array<ContentEntryInput | null> = rawEntries.map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const record = entry as Record<string, unknown>;
+      return {
+        key: String(record.key ?? "").trim(),
+        value: record.value ?? {},
+      };
+    });
+
+    return nullableEntries.filter((entry): entry is ContentEntryInput => Boolean(entry?.key));
   }
 
   const key = String(body.key ?? "").trim();

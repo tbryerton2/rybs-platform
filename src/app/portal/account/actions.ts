@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { recordEntityHistory } from "@/lib/entity-history";
+import { recordEntityHistory, type EntityHistoryEntry } from "@/lib/entity-history";
 import { isValidEmail } from "@/lib/identity";
 import { clearPortalSessionCookies, deactivatePortalAccess, requirePortalCustomer } from "@/lib/portal/auth";
 import { isPortalSchemaError } from "@/lib/portal/schema";
@@ -82,7 +82,7 @@ export async function updatePortalAccountAction(formData: FormData) {
     updates.preferred_contact_method = preferredContactMethod;
   }
 
-  const historyEntries = [
+  const nullableHistoryEntries: Array<EntityHistoryEntry | null> = [
     currentRow.name !== updates.name
       ? {
           entityType: "customer" as const,
@@ -182,7 +182,10 @@ export async function updatePortalAccountAction(formData: FormData) {
           changeReason: "Updated portal account preferences",
         }
       : null,
-  ].filter(Boolean);
+  ];
+  const historyEntries = nullableHistoryEntries.filter(
+    (entry): entry is EntityHistoryEntry => entry !== null,
+  );
 
   let updateResult = await supabaseAdmin.from("customers").update(updates).eq("id", customer.id);
   if (updateResult.error && isPortalSchemaError(updateResult.error) && supportsExtendedFields) {

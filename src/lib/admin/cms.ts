@@ -198,7 +198,7 @@ function normalizeFlexibleSections(rawValue: unknown): HomeFlexibleSection[] {
 
   return source
     .map(asObject)
-    .flatMap((item, index) => {
+    .flatMap<HomeFlexibleSection>((item, index) => {
       const type = asString(item.type);
 
       if (type === "card_grid") {

@@ -136,6 +136,7 @@ export function mapDumpsterRowToRecord(row: DumpsterRow): DumpsterRecord {
     assetTag: asString(row.asset_tag),
     updatedAt: row.updated_at,
     derivedOperationalStatus: "Available",
+    serviceWarning: null,
     tracker: {
       enabled: Boolean(row.tracker_enabled),
       provider: asString(row.tracker_provider),

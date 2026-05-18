@@ -60,7 +60,7 @@ export type BookingPriceQuote = RentalPeriodDetails & {
   extraDays: number;
 };
 
-export function isYmd(value: string | null | undefined) {
+export function isYmd(value: string | null | undefined): value is string {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "").trim());
 }
 
