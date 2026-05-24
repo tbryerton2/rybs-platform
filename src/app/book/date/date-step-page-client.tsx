@@ -53,6 +53,8 @@ type BookingDraft = {
   holdDeliveryDate?: string;
   holdPickupDate?: string;
   holdExpiresAt?: string;
+  holdDumpsterSize?: string;
+  holdDumpsterProductId?: string | null;
   priceQuote?: BookingPriceQuote | null;
 
   // pickup fields (used later on confirm/checkout)
@@ -256,6 +258,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                   holdDeliveryDate: undefined,
                   holdPickupDate: undefined,
                   holdExpiresAt: undefined,
+                  holdDumpsterSize: undefined,
+                  holdDumpsterProductId: undefined,
                   pickupMode: "unspecified",
                   pickupDate: undefined,
                   maxPickupDate: undefined,
@@ -286,6 +290,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
               holdDeliveryDate: undefined,
               holdPickupDate: undefined,
               holdExpiresAt: undefined,
+              holdDumpsterSize: undefined,
+              holdDumpsterProductId: undefined,
               pickupMode: "unspecified",
               pickupDate: undefined,
               maxPickupDate: undefined,
@@ -343,24 +349,12 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
       pickupDate: null,
     });
   }, [normalizedDate, rentalTimingPolicy]);
-  const previewDeliveryDate =
-    !isYmd(normalizedDate) && isYmd(nextAvailableDate || "") ? String(nextAvailableDate) : "";
-  const previewRentalTiming = useMemo(() => {
-    if (!isYmd(previewDeliveryDate) || !rentalTimingPolicy) return null;
-    return getRentalPeriodDetails({
-      ...rentalTimingPolicy,
-      deliveryDate: previewDeliveryDate,
-      pickupMode: "unspecified",
-      pickupDate: null,
-    });
-  }, [previewDeliveryDate, rentalTimingPolicy]);
   const standardRentalDays = baseRentalTiming?.standardRentalDays ?? draftQuote?.standardRentalDays ?? draftQuote?.includedRentalDays ?? null;
   const allowExtendedRentalAtBooking = baseRentalTiming?.allowExtendedRentalAtBooking ?? false;
   const dailyOveragePriceCents = draftQuote?.dailyOveragePriceCents ?? 0;
   const standardPickupDate = baseRentalTiming?.standardPickupDate ?? "";
-  const previewPickupDate = previewRentalTiming?.standardPickupDate ?? "";
-  const displayRentalWindowDeliveryDate = isYmd(normalizedDate) ? normalizedDate : previewDeliveryDate;
-  const displayRentalWindowPickupDate = isYmd(normalizedDate) ? standardPickupDate : previewPickupDate;
+  const displayRentalWindowDeliveryDate = isYmd(normalizedDate) ? normalizedDate : "";
+  const displayRentalWindowPickupDate = isYmd(normalizedDate) ? standardPickupDate : "";
   const hasSelectedDeliveryDate = isYmd(normalizedDate);
   const pricingMaxPickupDate = useMemo(() => {
     if (!isYmd(normalizedDate) || !rentalTimingPolicy) return "";
@@ -408,6 +402,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     isYmd(selectedPickupDate) &&
     priceQuoteMatchesSelection(draftQuote, {
       zip: bookingZip,
+      dumpsterSize: selectedDumpster.dumpsterSize,
+      dumpsterProductId: selectedDumpster.dumpsterProductId,
       deliveryDate: normalizedDate,
       pickupDate: selectedPickupDate,
       pickupMode,
@@ -421,6 +417,60 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     !pickupCalendarError &&
     pickupCap.state !== "error" &&
     (pickupCalendarLoading || pickupCap.state === "loading" || pickupCalendarEntries.length === 0);
+
+  const getActiveHoldContext = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(getBookingStorageKey());
+      const existing: BookingDraft = raw ? JSON.parse(raw) : {};
+      const holdId = (existing.holdId || "").trim();
+      const holdDeliveryDate = (existing.holdDeliveryDate || "").trim();
+      const holdPickupDate = (existing.holdPickupDate || "").trim();
+      const holdExpiresAt = (existing.holdExpiresAt || "").trim();
+
+      if (!holdId || !isYmd(holdDeliveryDate) || !isYmd(holdPickupDate) || !holdExpiresAt) return null;
+
+      const expiresAtMs = Date.parse(holdExpiresAt);
+      if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) return null;
+
+      const holdDumpsterSize = (existing.holdDumpsterSize || "").trim();
+      const holdDumpsterProductId = (existing.holdDumpsterProductId || "").trim();
+      const hasStoredHoldProduct = Boolean(holdDumpsterSize || holdDumpsterProductId);
+
+      if (hasStoredHoldProduct) {
+        if (holdDumpsterSize && holdDumpsterSize !== selectedDumpster.dumpsterSize) return null;
+        if (holdDumpsterProductId && holdDumpsterProductId !== (selectedDumpster.dumpsterProductId || "")) {
+          return null;
+        }
+      }
+
+      return { holdId, holdDeliveryDate, holdPickupDate };
+    } catch {
+      return null;
+    }
+  }, [selectedDumpster.dumpsterProductId, selectedDumpster.dumpsterSize]);
+
+  const getActiveHoldIdForWindow = useCallback(
+    (deliveryYmd: string, pickupYmd: string) => {
+      const holdContext = getActiveHoldContext();
+      if (!holdContext) return null;
+      if (holdContext.holdDeliveryDate !== deliveryYmd) return null;
+      if (holdContext.holdPickupDate !== pickupYmd) return null;
+      return holdContext.holdId;
+    },
+    [getActiveHoldContext],
+  );
+
+  const addActiveHoldContextParams = useCallback(
+    (params: URLSearchParams) => {
+      const holdContext = getActiveHoldContext();
+      if (!holdContext) return;
+
+      params.set("holdId", holdContext.holdId);
+      params.set("holdDeliveryDate", holdContext.holdDeliveryDate);
+      params.set("holdPickupDate", holdContext.holdPickupDate);
+    },
+    [getActiveHoldContext],
+  );
 
   const loadCalendarRange = useCallback(async (start: string, days = 186) => {
     if (!ready || !bookingZip) return;
@@ -439,6 +489,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
       if (selectedDumpster.dumpsterProductId) {
         params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
       }
+
+      addActiveHoldContextParams(params);
 
       const res = await fetch(
         `/api/availability/calendar?${params.toString()}`,
@@ -461,7 +513,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     } finally {
       setCalendarLoading(false);
     }
-  }, [bookingZip, content.availabilityError, ready, selectedDumpster]);
+  }, [addActiveHoldContextParams, bookingZip, content.availabilityError, ready, selectedDumpster]);
 
   useEffect(() => {
     if (!ready) return;
@@ -504,6 +556,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
         holdDeliveryDate: undefined,
         holdPickupDate: undefined,
         holdExpiresAt: undefined,
+        holdDumpsterSize: undefined,
+        holdDumpsterProductId: undefined,
 
         maxPickupDate: undefined,
         maxDaysAllowed: undefined,
@@ -529,6 +583,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
         holdDeliveryDate: undefined,
         holdPickupDate: undefined,
         holdExpiresAt: undefined,
+        holdDumpsterSize: undefined,
+        holdDumpsterProductId: undefined,
       }),
     );
 
@@ -589,6 +645,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
         }
 
+        const activeHoldId = getActiveHoldIdForWindow(d, selectedPickupDate);
+        if (activeHoldId) {
+          params.set("holdId", activeHoldId);
+        }
+
         const res = await fetch(`/api/availability?${params.toString()}`, {
           cache: "no-store",
         });
@@ -641,7 +702,14 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     return () => {
       cancelled = true;
     };
-  }, [bookingZip, normalizedDate, ready, selectedDumpster]);
+  }, [
+    bookingZip,
+    getActiveHoldIdForWindow,
+    normalizedDate,
+    ready,
+    selectedDumpster,
+    selectedPickupDate,
+  ]);
 
   useEffect(() => {
     if (!ready || !isYmd(normalizedDate) || !hasPriceQuote) {
@@ -750,6 +818,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
         }
 
+        addActiveHoldContextParams(params);
+
         const res = await fetch(`/api/availability/calendar?${params.toString()}`, {
           cache: "no-store",
         });
@@ -784,7 +854,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                   ? "Pickup"
                   : "Included"
                 : undefined
-              : "Blocked",
+              : "Unavailable",
           } satisfies CalendarAvailabilityEntry;
         });
 
@@ -814,6 +884,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     pickupCap.state,
     pickupAvailabilityRetryKey,
     ready,
+    addActiveHoldContextParams,
     selectedDumpster,
     standardPickupDate,
   ]);
@@ -864,16 +935,22 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
   ]);
 
   useEffect(() => {
-    if (!ready || !bookingZip || !isYmd(normalizedDate) || !isYmd(selectedPickupDate)) return;
+    if (!ready || !bookingZip || !isYmd(normalizedDate) || !isYmd(selectedPickupDate)) {
+      setQuoteLoading(false);
+      return;
+    }
 
     if (
       priceQuoteMatchesSelection(draftQuote, {
         zip: bookingZip,
+        dumpsterSize: selectedDumpster.dumpsterSize,
+        dumpsterProductId: selectedDumpster.dumpsterProductId,
         deliveryDate: normalizedDate,
         pickupDate: selectedPickupDate,
         pickupMode,
       })
     ) {
+      setQuoteLoading(false);
       return;
     }
 
@@ -1098,6 +1175,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           holdDeliveryDate: d,
           holdPickupDate: selectedPickupDate,
           holdExpiresAt: json.expiresAt,
+          holdDumpsterSize: selectedDumpster.dumpsterSize,
+          holdDumpsterProductId: selectedDumpster.dumpsterProductId,
           maxPickupDate: pickupCap.maxPickupDate ?? undefined,
           maxDaysAllowed: pickupCap.maxDaysAllowed ?? undefined,
           priceQuote: draftQuote ?? existing.priceQuote ?? null,
@@ -1117,8 +1196,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
-      <div className="mx-auto max-w-2xl px-6 pt-10 pb-16">
-        <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 sm:px-12 sm:pb-12 sm:pt-8 shadow-xl ring-1 ring-slate-200/70">
+      <div className="mx-auto max-w-2xl px-3 pt-10 pb-16 sm:px-6">
+        <div className="min-w-0 rounded-[32px] bg-white px-4 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
           {/* Header stack (match Step 1 style) */}
           <div className="space-y-3">
             <div className="mx-auto w-full max-w-2xl mb-4">
@@ -1139,23 +1218,35 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           </div>
 
           <section className="mt-8">
-            <div className="mx-auto w-full max-w-[640px] grid gap-6 [&>*]:w-full">
-              <div>
+            <div className="mx-auto grid w-full max-w-[640px] min-w-0 gap-6 [&>*]:w-full">
+              <div className="min-w-0">
                 {isYmd(normalizedDate) ? (
-                  <div className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm">
+                  <div className="inline-flex min-h-9 max-w-full items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3 py-1.5 text-center text-sm font-semibold leading-5 text-[#C2410C] shadow-sm sm:h-9 sm:px-3.5 sm:py-0">
                     Selected delivery: {formatDateLong(normalizedDate)}
                   </div>
                 ) : highlightedEarliestDate ? (
                   <button
                     type="button"
                     onClick={() => updateDeliveryDate(highlightedEarliestDate)}
-                    className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15"
+                    className="inline-flex min-h-9 max-w-full items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-center text-sm font-semibold leading-5 text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-white focus:outline-none focus:ring-4 focus:ring-emerald-100 sm:h-9 sm:px-3.5 sm:py-0"
                   >
-                    {content.earliestAvailablePrefix} {formatDateLong(highlightedEarliestDate)}
+                    <span className="sm:hidden">Earliest delivery: {formatDateShort(highlightedEarliestDate)}</span>
+                    <span className="hidden sm:inline">
+                      {content.earliestAvailablePrefix} {formatDateLong(highlightedEarliestDate)}
+                    </span>
                   </button>
                 ) : null}
 
-                <div className="mt-4 mb-5">
+                <p className="mt-5 text-sm leading-6 text-slate-600">
+                  Available dates show when a full rental window can be scheduled.
+                </p>
+                {standardRentalDays ? (
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    This dumpster includes a {standardRentalDays}-day rental. Available delivery dates must also have an open pickup date.
+                  </p>
+                ) : null}
+
+                <div className="mt-4 mb-5 min-w-0">
                   <AvailabilityCalendar
                     selectedDate={normalizedDate}
                     onSelectDate={updateDeliveryDate}
@@ -1164,6 +1255,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                     loadError={calendarError}
                     nextAvailableDate={nextAvailableDate}
                     loadingMessage="Checking delivery availability..."
+                    availabilityNote={content.footerNote}
                     onRetry={() => {
                       void loadCalendarRange(calendarRangeStart);
                     }}
@@ -1173,13 +1265,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                         if (context.date <= normalizedDate || context.date > standardPickupDate) return null;
                         return context.date === standardPickupDate ? "rental-pickup" : "rental-day";
                       }
-                      if (!previewDeliveryDate || !previewPickupDate) return null;
-                      if (context.date < previewDeliveryDate || context.date > previewPickupDate) return null;
-                      if (context.date === previewDeliveryDate) return "rental-preview-start";
-                      return context.date === previewPickupDate ? "rental-preview-pickup" : "rental-preview-day";
+                      return null;
                     }}
                     getTileLabel={(entry, context) => {
                       if (!context.isCurrentMonth) return null;
+                      if (hasSelectedDeliveryDate && context.date === normalizedDate) return "Selected";
                       if (
                         hasSelectedDeliveryDate &&
                         standardPickupDate &&
@@ -1189,19 +1279,8 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                       ) {
                         return context.date === standardPickupDate ? "Pickup" : "Included";
                       }
-                      if (
-                        !hasSelectedDeliveryDate &&
-                        previewDeliveryDate &&
-                        previewPickupDate &&
-                        entry &&
-                        context.date >= previewDeliveryDate &&
-                        context.date <= previewPickupDate
-                      ) {
-                        if (context.date === previewDeliveryDate) return "Earliest";
-                        return context.date === previewPickupDate ? "Pickup" : "Included";
-                      }
                       if (!entry || entry.state === "past") return "Past";
-                      if (entry.state === "unavailable") return "Sold out";
+                      if (entry.state === "unavailable") return "Unavailable";
                       return `${entry.remaining} left`;
                     }}
                     getAriaLabel={(entry, date) => {
@@ -1213,20 +1292,6 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                         return date === standardPickupDate
                           ? `${baseDate}. Recommended pickup date for this rental.`
                           : `${baseDate}. Included rental day.`;
-                      }
-                      if (
-                        !hasSelectedDeliveryDate &&
-                        previewDeliveryDate &&
-                        previewPickupDate &&
-                        date >= previewDeliveryDate &&
-                        date <= previewPickupDate
-                      ) {
-                        if (date === previewDeliveryDate) {
-                          return `${baseDate}. Earliest available delivery date. Preview rental window starts.`;
-                        }
-                        return date === previewPickupDate
-                          ? `${baseDate}. Preview recommended pickup date.`
-                          : `${baseDate}. Preview included rental day.`;
                       }
                       return `${baseDate}. ${
                         !entry
@@ -1244,9 +1309,9 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                 </div>
 
                 {displayRentalWindowDeliveryDate && displayRentalWindowPickupDate && draftQuote ? (
-                  <div className="rounded-2xl border border-[#FDBA74]/60 bg-[#FFF7ED] px-4 py-4 text-sm text-[#9A3412]">
+                  <div className="max-w-full rounded-2xl border border-[#FDBA74]/60 bg-[#FFF7ED] px-4 py-4 text-sm text-[#9A3412]">
                     <div className="mb-3 text-sm font-semibold text-slate-950">
-                      {hasSelectedDeliveryDate ? "Selected rental window" : "Next available rental window"}
+                      Selected rental window
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
@@ -1311,7 +1376,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                   ) : null}
 
                   {allowExtendedRentalAtBooking ? (
-                    <div className="mt-4 space-y-4">
+                    <div className="mt-4 min-w-0 space-y-4">
                       <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm transition hover:border-slate-300 hover:bg-slate-50">
                         <input
                           type="checkbox"
@@ -1342,9 +1407,9 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                       </label>
 
                       {needsExtraDays ? (
-                        <div className="space-y-3">
+                        <div className="min-w-0 space-y-3">
                           <div className="space-y-1">
-                            <h4 className="text-base font-semibold text-slate-900">Choose pickup date</h4>
+                            <h4 className="text-base font-semibold text-slate-900">Choose a pickup date</h4>
                             <p className="text-sm leading-6 text-slate-600">
                               Your included pickup date is {formatDateLong(standardPickupDate)}. Choose a later available pickup date if you need more time.
                             </p>
@@ -1358,9 +1423,12 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                                 setTimingError(null);
                                 clearPersistedHold();
                               }}
-                              className="inline-flex h-9 items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3.5 text-sm font-semibold text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15"
+                              className="inline-flex min-h-9 max-w-full items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3 py-1.5 text-center text-sm font-semibold leading-5 text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15 sm:h-9 sm:px-3.5 sm:py-0"
                             >
-                              Earliest extra-day pickup: {formatDateLong(pickupNextAvailableDate)}
+                              <span className="sm:hidden">Earliest extra pickup: {formatDateShort(pickupNextAvailableDate)}</span>
+                              <span className="hidden sm:inline">
+                                Earliest extra-day pickup: {formatDateLong(pickupNextAvailableDate)}
+                              </span>
                             </button>
                           ) : null}
 
@@ -1418,13 +1486,12 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                               if (entry.state === "limited") {
                                 return entry.remaining > 0 ? `${entry.remaining} left` : "Open";
                               }
-                              return "Blocked";
+                              return "Unavailable";
                             }}
                             legendItems={[
-                              { label: "Open", dotClassName: "bg-emerald-500" },
-                              { label: "Unavailable", dotClassName: "bg-slate-400" },
-                              { label: "Rental window", dotClassName: "bg-[#FDBA74]" },
-                              { label: "Selected pickup", dotClassName: "bg-[#F97316]" },
+                              { label: "Available pickup date", shortLabel: "Available", dotClassName: "bg-emerald-500" },
+                              { label: "Unavailable pickup date", shortLabel: "Unavailable", dotClassName: "bg-slate-400" },
+                              { label: "Selected rental window", shortLabel: "Selected", dotClassName: "bg-[#F97316]" },
                             ]}
                             loadingMessage="Checking pickup availability..."
                             emptyMonthMessage={(monthLabel, nextAvailable) =>
@@ -1535,10 +1602,6 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                 {holdMinutes}
                 {" minutes while you finish booking."}
               </div>
-
-              <p className="text-xs text-slate-500">
-                {content.footerNote}
-              </p>
 
               {/* Continue */}
               <div className="w-full grid gap-2">

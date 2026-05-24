@@ -35,6 +35,8 @@ export async function getDumpsterPriceForZip(
   const buildQuote = (price: number, overridePrice: number | null, pricingSource: "zip_override" | "global_default") =>
     buildBookingPriceQuote({
       zip,
+      dumpsterSize: selectedDumpster.dumpsterSize,
+      dumpsterProductId: selectedDumpster.dumpsterProductId,
       deliveryDate: bookingInput?.deliveryDate,
       pickupDate: bookingInput?.pickupDate,
       pickupMode: bookingInput?.pickupMode,

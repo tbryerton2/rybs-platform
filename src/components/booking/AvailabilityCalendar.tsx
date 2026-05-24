@@ -16,6 +16,7 @@ export type CalendarAvailabilityEntry = {
 
 type CalendarLegendItem = {
   label: string;
+  shortLabel?: string;
   dotClassName: string;
 };
 
@@ -45,6 +46,7 @@ type AvailabilityCalendarProps = {
   loadingMessage?: string;
   loadingSecondaryMessage?: string;
   errorMessage?: string;
+  availabilityNote?: string;
   onRetry?: () => void;
   emptyMonthMessage?: (monthLabel: string, nextAvailableDate?: string | null) => string;
   getAriaLabel?: (entry: CalendarAvailabilityEntry | undefined, date: string) => string;
@@ -128,6 +130,22 @@ function getStatusLabel(entry: CalendarAvailabilityEntry | undefined) {
   return "Unavailable";
 }
 
+function getMobileTileLabel(label: string) {
+  switch (label) {
+    case "Selected":
+      return "Sel.";
+    case "Included":
+      return "In";
+    case "Pickup":
+      return "Pick";
+    case "Unavailable":
+    case "Blocked":
+      return "Unav.";
+    default:
+      return label;
+  }
+}
+
 export function AvailabilityCalendar({
   selectedDate,
   onSelectDate,
@@ -141,6 +159,7 @@ export function AvailabilityCalendar({
   loadingMessage = "Loading calendar availability…",
   loadingSecondaryMessage = "This usually takes a few seconds.",
   errorMessage = "We couldn’t load availability. Please try again.",
+  availabilityNote,
   onRetry,
   emptyMonthMessage,
   getAriaLabel,
@@ -192,18 +211,18 @@ export function AvailabilityCalendar({
   );
 
   const resolvedLegendItems = legendItems ?? [
-    { label: "Available", dotClassName: "bg-emerald-500" },
-    { label: "Unavailable", dotClassName: "bg-slate-400" },
-    { label: "Selected rental", dotClassName: "bg-[#F97316]" },
+    { label: "Available delivery date", shortLabel: "Available", dotClassName: "bg-emerald-500" },
+    { label: "Unavailable delivery date", shortLabel: "Unavailable", dotClassName: "bg-slate-400" },
+    { label: "Selected rental window", shortLabel: "Selected", dotClassName: "bg-[#F97316]" },
   ];
 
   return (
     <div
-      className="rounded-[28px] border border-slate-200/80 bg-white/95 p-4 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.45)] sm:p-4"
+      className="w-full max-w-full min-w-0 rounded-[28px] border border-slate-200/80 bg-white/95 p-3 shadow-[0_24px_70px_-36px_rgba(15,23,42,0.45)] sm:p-4"
       aria-busy={loading}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
-        <div>
+      <div className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+        <div className="min-w-0">
           <h2 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">
             {formatMonthLabel(visibleMonth)}
           </h2>
@@ -237,15 +256,15 @@ export function AvailabilityCalendar({
           }`}
           aria-hidden={loading}
         >
-          <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 sm:gap-1.5 sm:text-[11px]">
+          <div className="mt-3 grid min-w-0 grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 sm:gap-1.5 sm:text-[11px]">
             {WEEKDAY_LABELS.map((label) => (
-              <div key={label} className="py-1.5">
+              <div key={label} className="min-w-0 py-1.5">
                 {label}
               </div>
             ))}
           </div>
 
-          <div className="mt-1 grid grid-cols-7 gap-1 sm:gap-1.5">
+          <div className="mt-1 grid min-w-0 grid-cols-7 gap-1 sm:gap-1.5">
             {monthDates.map((date) => {
               const ymd = toYmd(date);
               const entry = availabilityByDate.get(ymd);
@@ -263,7 +282,7 @@ export function AvailabilityCalendar({
                 entry.state === "unavailable";
 
               const baseClassName =
-                "group relative min-h-[56px] rounded-[16px] border px-2 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 sm:min-h-[74px] sm:px-2.5 sm:py-2.5";
+                "group relative min-h-[56px] min-w-0 overflow-hidden rounded-[16px] border px-1 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 sm:min-h-[74px] sm:px-2.5 sm:py-2.5";
 
               let stateClassName =
                 "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50";
@@ -348,12 +367,16 @@ export function AvailabilityCalendar({
                               : !entry || entry.state === "past"
                                 ? "Past"
                                 : entry.state === "unavailable"
-                                  ? "Sold out"
+                                  ? "Unavailable"
                                   : `${entry.remaining} left`;
 
-                      return label ? (
+                      if (!label) return null;
+
+                      const mobileLabel = getMobileTileLabel(label);
+
+                      return (
                         <span
-                          className={`text-[10px] font-medium ${
+                          className={`block max-w-full whitespace-nowrap text-[9px] font-medium leading-none sm:text-[10px] ${
                             !entry || entry.state === "unavailable" || entry.state === "past"
                               ? isSelected
                                 ? "text-white/85"
@@ -363,9 +386,16 @@ export function AvailabilityCalendar({
                                 : "text-current/80"
                           }`}
                         >
-                          {label}
+                          {mobileLabel === label ? (
+                            label
+                          ) : (
+                            <>
+                              <span className="sm:hidden">{mobileLabel}</span>
+                              <span className="hidden sm:inline">{label}</span>
+                            </>
+                          )}
                         </span>
-                      ) : null;
+                      );
                     })()}
                   </div>
                 </button>
@@ -373,15 +403,28 @@ export function AvailabilityCalendar({
             })}
           </div>
 
-          <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/80 pt-2">
-            <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+          <div className="mt-3 flex min-w-0 flex-col gap-3 border-t border-slate-200/80 pt-3">
+            <div className="flex min-w-0 flex-wrap gap-1.5 text-slate-500 sm:gap-2">
               {resolvedLegendItems.map((item) => (
-                <div key={item.label} className="inline-flex items-center gap-2 rounded-full bg-slate-100/70 px-2.5 py-1">
+                <div key={item.label} className="inline-flex max-w-full items-center gap-2 whitespace-nowrap rounded-full border border-slate-200/80 bg-slate-100/70 px-3 py-1.5 text-xs leading-none sm:px-3.5 sm:py-2 sm:text-sm">
                   <span className={`inline-flex h-2.5 w-2.5 rounded-full ${item.dotClassName}`} aria-hidden="true" />
-                  {item.label}
+                  {item.shortLabel ? (
+                    <>
+                      <span className="sm:hidden">{item.shortLabel}</span>
+                      <span className="hidden sm:inline">{item.label}</span>
+                    </>
+                  ) : (
+                    item.label
+                  )}
                 </div>
               ))}
             </div>
+
+            {availabilityNote ? (
+              <p className="text-xs leading-5 text-slate-500">
+                {availabilityNote}
+              </p>
+            ) : null}
 
             {loadError ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">

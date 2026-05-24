@@ -1,4 +1,4 @@
-import { getMinPickupLeadDays } from "@/lib/config";
+import { getMinPickupLeadDays } from "./config.ts";
 
 export const NY_SALES_TAX_RATE = 0.08;
 
@@ -38,6 +38,8 @@ export type RentalPeriodDetails = {
 
 export type BookingPriceQuote = RentalPeriodDetails & {
   zip: string;
+  dumpsterSize?: string | null;
+  dumpsterProductId?: string | null;
   basePrice: number;
   basePriceCents: number;
   rentalPrice: number;
@@ -204,6 +206,8 @@ export function priceQuoteMatchesSelection(
   quote: BookingPriceQuote | null | undefined,
   selection: {
     zip?: string | null;
+    dumpsterSize?: string | null;
+    dumpsterProductId?: string | null;
     deliveryDate?: string | null;
     pickupDate?: string | null;
     pickupMode?: QuotePickupMode | null;
@@ -212,10 +216,24 @@ export function priceQuoteMatchesSelection(
   if (!quote) return false;
 
   const zip = String(selection.zip ?? "").trim();
+  const selectionHasDumpsterSize = Object.prototype.hasOwnProperty.call(selection, "dumpsterSize");
+  const selectionHasDumpsterProductId = Object.prototype.hasOwnProperty.call(selection, "dumpsterProductId");
+  const dumpsterSize = String(selection.dumpsterSize ?? "").trim();
+  const quoteDumpsterSize = String(quote.dumpsterSize ?? "").trim();
+  const dumpsterProductId = String(selection.dumpsterProductId ?? "").trim();
+  const quoteDumpsterProductId = String(quote.dumpsterProductId ?? "").trim();
   const deliveryDate = isYmd(selection.deliveryDate) ? String(selection.deliveryDate) : null;
   const pickupMode = selection.pickupMode === "date" ? "date" : "unspecified";
   const pickupDate =
     pickupMode === "date" && isYmd(selection.pickupDate) ? String(selection.pickupDate) : null;
+
+  if (selectionHasDumpsterSize && quoteDumpsterSize !== dumpsterSize) {
+    return false;
+  }
+
+  if (selectionHasDumpsterProductId && quoteDumpsterProductId !== dumpsterProductId) {
+    return false;
+  }
 
   return (
     quote.zip === zip &&
@@ -227,6 +245,8 @@ export function priceQuoteMatchesSelection(
 
 export function buildBookingPriceQuote(input: {
   zip: string;
+  dumpsterSize?: string | null;
+  dumpsterProductId?: string | null;
   deliveryDate?: string | null;
   pickupDate?: string | null;
   pickupMode?: QuotePickupMode | null;
@@ -261,6 +281,8 @@ export function buildBookingPriceQuote(input: {
 
   return {
     zip: input.zip,
+    dumpsterSize: input.dumpsterSize,
+    dumpsterProductId: input.dumpsterProductId,
     ...details,
     basePrice,
     basePriceCents,

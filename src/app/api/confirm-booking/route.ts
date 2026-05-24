@@ -12,6 +12,10 @@ import { getDumpsterPriceForZip } from "@/lib/pricing";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
+import { createCheckoutPayment, linkCheckoutPaymentToBooking } from "@/lib/payments/payment-service";
+import { getCustomerFacingPaymentFailureMessage } from "@/lib/payments/payment-errors";
+import type { CheckoutPaymentResult, PaymentProvider } from "@/lib/payments/types";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
@@ -21,6 +25,8 @@ type ConfirmBody = {
   holdId?: string;
   totalPriceCents?: number;
   totalDollars?: number;
+  paymentProvider?: "square";
+  paymentMethodToken?: string;
   bookingDraft?: {
     deliveryDate?: string;
     pickupDate?: string;
@@ -90,6 +96,8 @@ export async function POST(req: Request) {
 
     const holdId = (body.holdId || "").trim();
     const draft = body.bookingDraft || {};
+    const paymentProvider = (body.paymentProvider ?? "square") as PaymentProvider;
+    const paymentMethodToken = body.paymentMethodToken?.trim() || "";
     const totalPriceCents = Number(body.totalPriceCents);
     const fallbackTotalDollars = Number(body.totalDollars);
     const normalizedTotalPriceCents =
@@ -99,7 +107,11 @@ export async function POST(req: Request) {
         ? Math.round(fallbackTotalDollars * 100)
         : null;
 
-    if (normalizedTotalPriceCents == null) {
+    if (paymentProvider !== "square") {
+      return NextResponse.json({ ok: false, error: "Unsupported payment provider." }, { status: 400 });
+    }
+
+    if (!paymentMethodToken && normalizedTotalPriceCents == null) {
       return NextResponse.json({ ok: false, error: "Missing/invalid totalPriceCents." }, { status: 400 });
     }
 
@@ -248,7 +260,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (pricing.priceQuote.totalCents !== normalizedTotalPriceCents) {
+    if (normalizedTotalPriceCents != null && pricing.priceQuote.totalCents !== normalizedTotalPriceCents) {
       await supabase
         .from("booking_holds")
         .update({ status: "active" })
@@ -310,6 +322,72 @@ export async function POST(req: Request) {
       );
     }
 
+    let checkoutPayment: CheckoutPaymentResult | null = null;
+
+    if (paymentMethodToken) {
+      try {
+        const tenant = await getCurrentTenant();
+        checkoutPayment = await createCheckoutPayment({
+          businessId: tenant.id,
+          bookingHoldId: holdId,
+          amountCents: pricing.priceQuote.totalCents,
+          currency: "USD",
+          paymentProvider,
+          paymentMethodToken,
+          description: customerName
+            ? `Dumpster rental for ${customerName} on ${deliveryDate}`
+            : `Dumpster rental on ${deliveryDate}`,
+        });
+      } catch (paymentError) {
+        await supabase
+          .from("booking_holds")
+          .update({ status: "active" })
+          .eq("id", holdId)
+          .eq("status", "converting");
+
+        console.error("[confirm-booking] checkout payment failed before provider result:", paymentError);
+        const paymentMessage = getCustomerFacingPaymentFailureMessage({
+          failureCode: "TEMPORARY_ERROR",
+          failureMessage: paymentError instanceof Error ? paymentError.message : null,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: paymentMessage,
+            customerMessage: paymentMessage,
+          },
+          { status: 409 },
+        );
+      }
+
+      if (!checkoutPayment.ok || checkoutPayment.status !== "paid") {
+        await supabase
+          .from("booking_holds")
+          .update({ status: "active" })
+          .eq("id", holdId)
+          .eq("status", "converting");
+
+        const statusCode =
+          checkoutPayment.status === "failed" || checkoutPayment.status === "canceled" ? 402 : 409;
+        const paymentMessage = getCustomerFacingPaymentFailureMessage({
+          failureCode: checkoutPayment.failureCode,
+          failureMessage: checkoutPayment.failureMessage,
+        });
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error: paymentMessage,
+            customerMessage: paymentMessage,
+            paymentStatus: checkoutPayment.status,
+            failureCode: checkoutPayment.failureCode,
+          },
+          { status: statusCode },
+        );
+      }
+    }
+
     let createdBooking;
     try {
       createdBooking = await createBookingRecord({
@@ -322,6 +400,10 @@ export async function POST(req: Request) {
           total_price_cents: pricing.priceQuote.totalCents,
           dumpster_size: selectedDumpster.dumpsterSize,
           dumpster_product_id: selectedDumpster.dumpsterProductId,
+          payment_status: checkoutPayment ? "paid" : undefined,
+          paid_at: checkoutPayment ? checkoutPayment.paidAt ?? new Date().toISOString() : null,
+          payment_provider: checkoutPayment?.paymentProvider ?? null,
+          payment_provider_payment_id: checkoutPayment?.providerPaymentId ?? null,
         },
         identity: {
           customerName,
@@ -370,6 +452,20 @@ export async function POST(req: Request) {
         { ok: false, error: insertError instanceof Error ? insertError.message : "Booking creation failed." },
         { status: 500 }
       );
+    }
+
+    let paymentLinkWarning: string | null = null;
+
+    if (checkoutPayment) {
+      try {
+        await linkCheckoutPaymentToBooking(checkoutPayment.paymentId, createdBooking.bookingId);
+      } catch (paymentLinkError) {
+        paymentLinkWarning =
+          paymentLinkError instanceof Error
+            ? paymentLinkError.message
+            : "Payment was captured but could not be linked to the booking record.";
+        console.error("booking payment link failed after confirm-booking:", paymentLinkError);
+      }
     }
 
     let reorderReferenceSkipped = false;
@@ -456,7 +552,7 @@ export async function POST(req: Request) {
           bookingId: createdBooking.bookingId,
           bookingRef: createdBooking.bookingRef,
           customerEmail: customerEmail || null,
-          warning: "Booking created, but hold status failed to finalize.",
+          warning: paymentLinkWarning || "Booking created, but hold status failed to finalize.",
         },
         { status: 200 }
       );
@@ -470,9 +566,12 @@ export async function POST(req: Request) {
       placementPersistenceSkipped: createdBooking.placementPersistenceSkipped,
       reorderReferenceSkipped,
       reorderReferencePersisted,
-      warning: createdBooking.placementPersistenceSkipped
-        ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
-        : undefined,
+      paymentId: checkoutPayment?.paymentId,
+      warning:
+        paymentLinkWarning ??
+        (createdBooking.placementPersistenceSkipped
+          ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
+          : undefined),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Confirm failed.";

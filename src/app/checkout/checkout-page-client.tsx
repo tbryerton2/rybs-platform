@@ -20,6 +20,107 @@ import {
 } from "@/lib/placement";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 
+type SquareTokenizeResult = {
+  status: string;
+  token?: string;
+  errors?: Array<{
+    message?: string;
+    detail?: string;
+  }>;
+};
+
+type SquareCard = {
+  attach(selector: string): Promise<void>;
+  tokenize(): Promise<SquareTokenizeResult>;
+  destroy?: () => Promise<void> | void;
+};
+
+type SquarePayments = {
+  card(): Promise<SquareCard>;
+};
+
+declare global {
+  interface Window {
+    Square?: {
+      payments(applicationId: string, locationId: string): SquarePayments;
+    };
+  }
+}
+
+const SQUARE_ENVIRONMENT = (process.env.NEXT_PUBLIC_SQUARE_ENVIRONMENT || "").trim().toLowerCase();
+const SQUARE_APPLICATION_ID = (process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID || "").trim();
+const SQUARE_LOCATION_ID = (process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID || "").trim();
+const SQUARE_SCRIPT_ID = "square-web-payments-sdk";
+const SQUARE_CARD_CONTAINER_ID = "square-card-container";
+const ENABLE_SIMULATED_CHECKOUT = process.env.NEXT_PUBLIC_ENABLE_SIMULATED_CHECKOUT === "true";
+const PAYMENT_UNAVAILABLE_MESSAGE =
+  "Online card payment is unavailable right now. Please contact us to complete your booking or try again later.";
+
+function getSquareScriptSrc(environment: string) {
+  if (environment === "production") return "https://web.squarecdn.com/v1/square.js";
+  return "https://sandbox.web.squarecdn.com/v1/square.js";
+}
+
+function getSquareConfigStatus() {
+  if (!SQUARE_ENVIRONMENT || !SQUARE_APPLICATION_ID || !SQUARE_LOCATION_ID) {
+    return {
+      configured: false,
+      reason: PAYMENT_UNAVAILABLE_MESSAGE,
+    };
+  }
+
+  if (SQUARE_ENVIRONMENT !== "sandbox" && SQUARE_ENVIRONMENT !== "production") {
+    return {
+      configured: false,
+      reason: PAYMENT_UNAVAILABLE_MESSAGE,
+    };
+  }
+
+  return {
+    configured: true,
+    reason: null,
+  };
+}
+
+function loadSquareScript() {
+  if (window.Square) return Promise.resolve();
+
+  const scriptSrc = getSquareScriptSrc(SQUARE_ENVIRONMENT);
+  const existingScript = document.getElementById(SQUARE_SCRIPT_ID) as HTMLScriptElement | null;
+
+  if (existingScript?.dataset.loaded === "true") {
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const script = existingScript ?? document.createElement("script");
+
+    const handleLoad = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    const handleError = () => reject(new Error("Unable to load Square payment form."));
+
+    script.addEventListener("load", handleLoad, { once: true });
+    script.addEventListener("error", handleError, { once: true });
+
+    if (!existingScript) {
+      script.id = SQUARE_SCRIPT_ID;
+      script.src = scriptSrc;
+      script.async = true;
+      document.head.appendChild(script);
+    }
+  });
+}
+
+function getTokenizationError(result: SquareTokenizeResult) {
+  if (result.errors?.length) {
+    return "Please check your card details and try again.";
+  }
+
+  return "We could not securely read your card details. Please try again.";
+}
+
 type BookingDraft = {
   zip?: string;
   county?: string;
@@ -129,6 +230,11 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [hydrated, setHydrated] = useState(false);
+  const [squareCard, setSquareCard] = useState<SquareCard | null>(null);
+  const [squareReady, setSquareReady] = useState(false);
+  const [squareLoading, setSquareLoading] = useState(false);
+  const [squareError, setSquareError] = useState<string | null>(null);
+  const [squareFallbackReason, setSquareFallbackReason] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -300,6 +406,79 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     draft.zip,
   ]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const squareConfig = getSquareConfigStatus();
+
+    if (!squareConfig.configured) {
+      setSquareCard(null);
+      setSquareReady(false);
+      setSquareLoading(false);
+      setSquareError(null);
+      setSquareFallbackReason(squareConfig.reason);
+      return;
+    }
+
+    let cancelled = false;
+    let activeCard: SquareCard | null = null;
+
+    setSquareCard(null);
+    setSquareReady(false);
+    setSquareLoading(true);
+    setSquareError(null);
+    setSquareFallbackReason(null);
+
+    (async () => {
+      try {
+        await loadSquareScript();
+
+        if (cancelled) return;
+
+        if (!window.Square) {
+          throw new Error("Square payment form is unavailable.");
+        }
+
+        const payments = window.Square.payments(SQUARE_APPLICATION_ID, SQUARE_LOCATION_ID);
+        const card = await payments.card();
+        activeCard = card;
+
+        if (cancelled) {
+          await card.destroy?.();
+          return;
+        }
+
+        await card.attach(`#${SQUARE_CARD_CONTAINER_ID}`);
+
+        if (cancelled) {
+          await card.destroy?.();
+          return;
+        }
+
+        setSquareCard(card);
+        setSquareReady(true);
+      } catch (setupError) {
+        if (cancelled) return;
+
+        setSquareError(
+          setupError instanceof Error
+            ? setupError.message
+            : "Square payment form could not be initialized.",
+        );
+        setSquareFallbackReason(PAYMENT_UNAVAILABLE_MESSAGE);
+      } finally {
+        if (!cancelled) setSquareLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setSquareReady(false);
+      setSquareCard(null);
+      void activeCard?.destroy?.();
+    };
+  }, [hydrated]);
+
 
   const deliveryDateLabel = useMemo(
     () => formatDateLong((draft.deliveryDate || "").trim()),
@@ -350,126 +529,195 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     return secondsLeft <= 0;
   }, [secondsLeft]);
 
-  async function handleSimulatePayment() {
-    setError(null);
+  function getCheckoutSubmissionDetails() {
+    const priceQuote = draft.priceQuote;
 
-    if (!draft.priceQuote) {
+    if (!priceQuote) {
       setError("Pricing is still loading. Please wait a moment and try again.");
-      return;
+      return null;
     }
 
     if (holdExpired) {
       setError("Your hold has expired. Please choose a new delivery date.");
-      return;
+      return null;
     }
 
     if (!draft.holdId) {
       setError("Your session has expired. Please start again.");
-      return;
+      return null;
     }
 
     // ✅ Ensure we have a valid YYYY-MM-DD delivery date to send to the API
     const deliveryDateYMD = (draft.deliveryDate || draft.holdDeliveryDate || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDateYMD)) {
       setError("Delivery date is missing or invalid. Please go back and choose a new delivery date.");
+      return null;
+    }
+
+    const pickupDateYMD = (draft.pickupDate || priceQuote.effectivePickupDate || "").trim();
+    if (!isYMD(pickupDateYMD)) {
+      setError("Pickup date is missing. Please go back and choose your rental timing.");
+      return null;
+    }
+
+    return { deliveryDateYMD, pickupDateYMD, priceQuote };
+  }
+
+  async function validateActiveHold() {
+    const validateRes = await fetch("/api/validate-hold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ holdId: draft.holdId }),
+    });
+
+    const validateJson = await validateRes.json().catch(() => ({}));
+
+    if (!validateRes.ok || !validateJson?.valid) {
+      setError("Your hold has expired. Please choose a new delivery date.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function confirmBooking(
+    details: { deliveryDateYMD: string; priceQuote: BookingPriceQuote },
+    payment?: { paymentMethodToken: string },
+  ) {
+    const confirmPayload = payment
+      ? {
+          holdId: draft.holdId,
+          deliveryDate: details.deliveryDateYMD,
+          bookingDraft: draft,
+          paymentProvider: "square",
+          paymentMethodToken: payment.paymentMethodToken,
+        }
+      : {
+          holdId: draft.holdId,
+          deliveryDate: details.deliveryDateYMD, // ✅ IMPORTANT: send YYYY-MM-DD explicitly
+          bookingDraft: draft,
+          totalPriceCents: totalCents,
+        };
+
+    // ✅ Convert hold -> booking
+    const confirmRes = await fetch("/api/confirm-booking", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(confirmPayload),
+    });
+
+    const confirmJson = await confirmRes.json().catch(() => ({}));
+
+    if (!confirmRes.ok || !confirmJson?.ok) {
+      setError(
+        confirmJson?.customerMessage ||
+          confirmJson?.error ||
+          "We couldn't confirm your booking. Please try again."
+      );
+      return false;
+    }
+
+    if (confirmJson?.placementPersistenceSkipped) {
+      try {
+        sessionStorage.setItem(
+          getLastBookingWarningStorageKey(),
+          JSON.stringify({
+            bookingId: confirmJson.bookingId || draft.holdId,
+            type: "placement-persistence-skipped",
+            message: confirmJson.warning,
+          }),
+        );
+      } catch {
+        // ignore
+      }
+    } else {
+      try {
+        sessionStorage.removeItem(getLastBookingWarningStorageKey());
+      } catch {
+        // ignore
+      }
+    }
+
+    // 🧹 Clear draft now that booking is confirmed
+    try {
+      sessionStorage.removeItem(getBookingStorageKey());
+    } catch {
+      // ignore
+    }
+
+    // 🚀 Redirect to success page
+    const bookingId = confirmJson.bookingId || draft.holdId;
+    const bookingRef = String(confirmJson.bookingRef ?? "").trim();
+    const bookingEmail = String(confirmJson.customerEmail ?? draft.customerEmail ?? "").trim();
+    const nextParams = new URLSearchParams({
+      bookingId: String(bookingId),
+      ...(bookingRef ? { bookingRef } : {}),
+      ...(bookingEmail ? { email: bookingEmail } : {}),
+      rentalPriceCents: String(baseRentalCents),
+      standardRentalDays: String(details.priceQuote.standardRentalDays),
+      bookedRentalDays: String(details.priceQuote.bookedRentalDays ?? details.priceQuote.standardRentalDays),
+      maxRentalDays: details.priceQuote.maxRentalDays != null ? String(details.priceQuote.maxRentalDays) : "",
+      allowExtendedRentalAtBooking: details.priceQuote.allowExtendedRentalAtBooking ? "1" : "0",
+      dailyOveragePriceCents: String(details.priceQuote.dailyOveragePriceCents),
+      extraDays: String(details.priceQuote.extraDays),
+      extraDaysChargeCents: String(extraDaysChargeCents),
+      salesTaxCents: String(salesTaxCents),
+      totalCents: String(totalCents),
+    });
+    router.push(`/success?${nextParams.toString()}`);
+    return true;
+  }
+
+  async function handleSquarePayment() {
+    setError(null);
+    setSquareError(null);
+
+    if (!squareCard || !squareReady) {
+      setError("Secure card checkout is still loading. Please wait a moment and try again.");
       return;
     }
 
-    const pickupDateYMD = (draft.pickupDate || draft.priceQuote?.effectivePickupDate || "").trim();
-    if (!isYMD(pickupDateYMD)) {
-      setError("Pickup date is missing. Please go back and choose your rental timing.");
-      return;
+    const details = getCheckoutSubmissionDetails();
+    if (!details) return;
+
+    setIsPaying(true);
+
+    try {
+      // 🔒 Validate hold before tokenizing/payment
+      const holdValid = await validateActiveHold();
+      if (!holdValid) return;
+
+      const tokenResult = await squareCard.tokenize();
+      if (tokenResult.status !== "OK" || !tokenResult.token) {
+        setSquareError(getTokenizationError(tokenResult));
+        return;
+      }
+
+      await confirmBooking(details, { paymentMethodToken: tokenResult.token });
+    } catch {
+      setError("Payment failed. Please try again.");
+    } finally {
+      setIsPaying(false);
     }
+  }
+
+  async function handleSimulatePayment() {
+    setError(null);
+
+    const details = getCheckoutSubmissionDetails();
+    if (!details) return;
 
     setIsPaying(true);
 
     try {
       // 🔒 Validate hold before payment
-      const validateRes = await fetch("/api/validate-hold", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ holdId: draft.holdId }),
-      });
-
-      const validateJson = await validateRes.json().catch(() => ({}));
-
-      if (!validateRes.ok || !validateJson?.valid) {
-        setError("Your hold has expired. Please choose a new delivery date.");
-        return;
-      }
+      const holdValid = await validateActiveHold();
+      if (!holdValid) return;
 
       // 💳 Simulate payment
       await new Promise((r) => setTimeout(r, 600));
 
-      // ✅ Convert hold -> booking
-      const confirmRes = await fetch("/api/confirm-booking", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          holdId: draft.holdId,
-          deliveryDate: deliveryDateYMD, // ✅ IMPORTANT: send YYYY-MM-DD explicitly
-          bookingDraft: draft,
-          totalPriceCents: totalCents,
-        }),
-      });
-
-      const confirmJson = await confirmRes.json().catch(() => ({}));
-
-      if (!confirmRes.ok || !confirmJson?.ok) {
-        setError(
-          confirmJson?.error || "We couldn't confirm your booking. Please try again."
-        );
-        return;
-      }
-
-      if (confirmJson?.placementPersistenceSkipped) {
-        try {
-          sessionStorage.setItem(
-            getLastBookingWarningStorageKey(),
-            JSON.stringify({
-              bookingId: confirmJson.bookingId || draft.holdId,
-              type: "placement-persistence-skipped",
-              message: confirmJson.warning,
-            }),
-          );
-        } catch {
-          // ignore
-        }
-      } else {
-        try {
-          sessionStorage.removeItem(getLastBookingWarningStorageKey());
-        } catch {
-          // ignore
-        }
-      }
-
-      // 🧹 Clear draft now that booking is confirmed
-      try {
-        sessionStorage.removeItem(getBookingStorageKey());
-      } catch {
-        // ignore
-      }
-
-      // 🚀 Redirect to success page
-      const bookingId = confirmJson.bookingId || draft.holdId;
-      const bookingRef = String(confirmJson.bookingRef ?? "").trim();
-      const bookingEmail = String(confirmJson.customerEmail ?? draft.customerEmail ?? "").trim();
-      const nextParams = new URLSearchParams({
-        bookingId: String(bookingId),
-        ...(bookingRef ? { bookingRef } : {}),
-        ...(bookingEmail ? { email: bookingEmail } : {}),
-        rentalPriceCents: String(baseRentalCents),
-        standardRentalDays: String(draft.priceQuote.standardRentalDays),
-        bookedRentalDays: String(draft.priceQuote.bookedRentalDays ?? draft.priceQuote.standardRentalDays),
-        maxRentalDays: draft.priceQuote.maxRentalDays != null ? String(draft.priceQuote.maxRentalDays) : "",
-        allowExtendedRentalAtBooking: draft.priceQuote.allowExtendedRentalAtBooking ? "1" : "0",
-        dailyOveragePriceCents: String(draft.priceQuote.dailyOveragePriceCents),
-        extraDays: String(draft.priceQuote.extraDays),
-        extraDaysChargeCents: String(extraDaysChargeCents),
-        salesTaxCents: String(salesTaxCents),
-        totalCents: String(totalCents),
-      });
-      router.push(`/success?${nextParams.toString()}`);
+      await confirmBooking(details);
     } catch {
       setError("Payment failed. Please try again.");
     } finally {
@@ -488,6 +736,14 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const totalCents = (draft.priceQuote?.totalCents ?? subtotalCents + salesTaxCents) + feesCents;
   const fmtMoney = (cents: number) => formatUsdFromCents(cents);
   const canSubmitPayment = !!draft.priceQuote && !quoteLoading;
+  const squareConfig = getSquareConfigStatus();
+  const squareConfigured = squareConfig.configured;
+  const canSubmitSquarePayment = squareConfigured && squareReady && !!squareCard && canSubmitPayment;
+  const showSimulatedPayment = ENABLE_SIMULATED_CHECKOUT;
+  const showPaymentUnavailableMessage =
+    !showSimulatedPayment &&
+    ((!squareConfigured && Boolean(squareFallbackReason)) ||
+      (squareConfigured && Boolean(squareError) && !squareReady));
     
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
@@ -749,17 +1005,73 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                     {content.holdExpiredNotice}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={handleSimulatePayment}
-                  disabled={isPaying || holdExpired || !canSubmitPayment}
-                  className="group w-full h-14 rounded-2xl bg-[#0F172A] text-white font-semibold text-base shadow-md transition-all duration-200 ease-out hover:bg-[#0B1220] hover:shadow-lg active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span className="flex items-center justify-center gap-2">
-                    {isPaying ? content.paymentProcessingLabel : quoteLoading ? content.paymentLoadingLabel : content.paymentIdleLabel}
-                    <span className="transition-transform group-hover:translate-x-1 text-white/90">→</span>
-                  </span>
-                </button>
+
+                {squareConfigured ? (
+                  <div className="space-y-3">
+                    <div
+                      id={SQUARE_CARD_CONTAINER_ID}
+                      className="rounded-xl border border-slate-200 bg-white p-4"
+                    />
+
+                    {squareLoading ? (
+                      <div className="text-sm text-slate-600">Loading secure card checkout…</div>
+                    ) : null}
+
+                    {squareError && (squareReady || showSimulatedPayment) ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {squareError}
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={handleSquarePayment}
+                      disabled={isPaying || holdExpired || !canSubmitSquarePayment}
+                      className="group w-full h-14 rounded-2xl bg-[#0F172A] text-white font-semibold text-base shadow-md transition-all duration-200 ease-out hover:bg-[#0B1220] hover:shadow-lg active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        {isPaying
+                          ? content.paymentProcessingLabel
+                          : squareLoading || quoteLoading
+                            ? content.paymentLoadingLabel
+                            : `Pay ${fmtMoney(totalCents)}`}
+                        <span className="transition-transform group-hover:translate-x-1 text-white/90">→</span>
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+
+                {showPaymentUnavailableMessage ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    {squareFallbackReason || PAYMENT_UNAVAILABLE_MESSAGE}
+                  </div>
+                ) : null}
+
+                {showSimulatedPayment ? (
+                  <div className={squareConfigured ? "mt-4 border-t border-slate-200 pt-4" : ""}>
+                    {squareFallbackReason ? (
+                      <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {squareFallbackReason}
+                      </div>
+                    ) : squareConfigured ? (
+                      <div className="mb-3 text-xs text-slate-500 text-center">
+                        Development fallback: simulated checkout is enabled.
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={handleSimulatePayment}
+                      disabled={isPaying || holdExpired || !canSubmitPayment}
+                      className="group w-full h-14 rounded-2xl border border-slate-200 bg-white text-slate-900 font-semibold text-base shadow-sm transition-all duration-200 ease-out hover:bg-slate-50 hover:shadow-md active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <span className="flex items-center justify-center gap-2">
+                        {isPaying ? content.paymentProcessingLabel : quoteLoading ? content.paymentLoadingLabel : content.paymentIdleLabel}
+                        <span className="transition-transform group-hover:translate-x-1 text-slate-500">→</span>
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
 
                 {holdExpired && (
                   <button

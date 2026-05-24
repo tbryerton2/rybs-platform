@@ -27,6 +27,7 @@ function todayYmdUtc() {
 }
 
 const CALENDAR_RPC_BATCH_SIZE = 14;
+const ENABLE_AVAILABILITY_DEBUG_LOGS = process.env.ENABLE_AVAILABILITY_DEBUG_LOGS === "true";
 
 type CalendarAvailabilityResult = {
   date: string;
@@ -53,6 +54,7 @@ async function getAvailabilityEntry(
   dumpsterSize: string,
   dumpsterProductId: string | null,
   fixedDeliveryDate: string | null = null,
+  activeHoldContext: { holdId: string; deliveryDate: string; pickupDate: string } | null = null,
 ): Promise<CalendarAvailabilityResult> {
   if (blockedLabel) {
     return {
@@ -78,12 +80,22 @@ async function getAvailabilityEntry(
     };
   }
 
+  const requestedDeliveryDate = fixedDeliveryDate ?? date;
+  const requestedPickupDate = fixedDeliveryDate ? date : addDaysYmd(date, standardRentalDays);
+  const excludeHoldIds =
+    activeHoldContext &&
+    activeHoldContext.deliveryDate === requestedDeliveryDate &&
+    activeHoldContext.pickupDate === requestedPickupDate
+      ? [activeHoldContext.holdId]
+      : undefined;
+
   const availability = await getDeliveryAvailabilitySnapshot({
-    deliveryDate: fixedDeliveryDate ?? date,
+    deliveryDate: requestedDeliveryDate,
     rpcDays: standardRentalDays,
     dumpsterSize,
     dumpsterProductId,
     pickupDate: fixedDeliveryDate ? date : null,
+    excludeHoldIds,
     logContext: "api/availability/calendar",
   });
 
@@ -134,8 +146,16 @@ export async function GET(req: Request) {
     dumpsterProductId: url.searchParams.get("dumpsterProductId"),
   });
   const fixedDeliveryDate = (url.searchParams.get("deliveryDate") || "").trim();
+  const rawHoldId = url.searchParams.get("holdId");
+  const holdId = (rawHoldId || "").trim();
+  const holdDeliveryDate = (url.searchParams.get("holdDeliveryDate") || "").trim();
+  const holdPickupDate = (url.searchParams.get("holdPickupDate") || "").trim();
   const rawDays = Number(url.searchParams.get("days") || 0);
   const days = Math.min(186, Math.max(28, Math.floor(rawDays || 112)));
+
+  if (rawHoldId !== null && !holdId) {
+    return NextResponse.json({ ok: false, error: "Invalid holdId" }, { status: 400 });
+  }
 
   if (!isYmd(start)) {
     return NextResponse.json({ ok: false, error: "Invalid start date" }, { status: 400 });
@@ -144,6 +164,15 @@ export async function GET(req: Request) {
   if (fixedDeliveryDate && !isYmd(fixedDeliveryDate)) {
     return NextResponse.json({ ok: false, error: "Invalid deliveryDate" }, { status: 400 });
   }
+
+  if ((holdDeliveryDate || holdPickupDate) && (!isYmd(holdDeliveryDate) || !isYmd(holdPickupDate))) {
+    return NextResponse.json({ ok: false, error: "Invalid hold date" }, { status: 400 });
+  }
+
+  const activeHoldContext =
+    holdId && isYmd(holdDeliveryDate) && isYmd(holdPickupDate)
+      ? { holdId, deliveryDate: holdDeliveryDate, pickupDate: holdPickupDate }
+      : null;
 
   const today = todayYmdUtc();
 
@@ -166,6 +195,7 @@ export async function GET(req: Request) {
             selectedDumpster.dumpsterSize,
             selectedDumpster.dumpsterProductId,
             fixedDeliveryDate || null,
+            activeHoldContext,
           );
         }),
       );
@@ -175,18 +205,20 @@ export async function GET(req: Request) {
     const nextAvailableDate =
       results.find((entry) => entry.state === "available" || entry.state === "limited")?.date ?? null;
 
-    console.info("[api/availability/calendar] window availability", {
-      requestedDumpsterSize: selectedDumpster.dumpsterSize,
-      requestedDumpsterProductId: selectedDumpster.dumpsterProductId,
-      fixedDeliveryDate: fixedDeliveryDate || null,
-      dates: results.map((entry) => ({
-        date: entry.date,
-        requestedPickupDate: entry.requestedPickupDate,
-        remaining: entry.remaining,
-        state: entry.state,
-        debug: entry.debug,
-      })),
-    });
+    if (ENABLE_AVAILABILITY_DEBUG_LOGS) {
+      console.info("[api/availability/calendar] window availability", {
+        requestedDumpsterSize: selectedDumpster.dumpsterSize,
+        requestedDumpsterProductId: selectedDumpster.dumpsterProductId,
+        fixedDeliveryDate: fixedDeliveryDate || null,
+        dates: results.map((entry) => ({
+          date: entry.date,
+          requestedPickupDate: entry.requestedPickupDate,
+          remaining: entry.remaining,
+          state: entry.state,
+          debug: entry.debug,
+        })),
+      });
+    }
 
     return NextResponse.json({
       ok: true,

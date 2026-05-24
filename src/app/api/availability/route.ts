@@ -11,10 +11,16 @@ import {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const date = (searchParams.get("date") || "").trim(); // YYYY-MM-DD
+  const rawHoldId = searchParams.get("holdId");
+  const holdId = (rawHoldId || "").trim();
   const selectedDumpster = resolveSelectedDumpster({
     dumpsterSize: searchParams.get("dumpsterSize"),
     dumpsterProductId: searchParams.get("dumpsterProductId"),
   });
+
+  if (rawHoldId !== null && !holdId) {
+    return NextResponse.json({ ok: false, error: "Invalid holdId" }, { status: 400 });
+  }
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ ok: false, error: "Invalid date" }, { status: 400 });
@@ -41,6 +47,7 @@ export async function GET(req: Request) {
       dumpsterSize: selectedDumpster.dumpsterSize,
       dumpsterProductId: selectedDumpster.dumpsterProductId,
       pickupDate: null,
+      excludeHoldIds: holdId ? [holdId] : undefined,
       logContext: "api/availability",
     });
 

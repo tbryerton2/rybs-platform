@@ -27,6 +27,14 @@ type PlacementInsertFields = {
   special_delivery_instructions?: string | null;
 };
 
+type BookingPaymentStatus =
+  | "unpaid"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "partially_refunded";
+
 type CreateBookingRecordInput = {
   supabase: SupabaseClient;
   booking: {
@@ -40,6 +48,10 @@ type CreateBookingRecordInput = {
     dumpster_size?: string | null;
     dumpster_product_id?: string | null;
     notes?: string | null;
+    payment_status?: BookingPaymentStatus;
+    paid_at?: string | null;
+    payment_provider?: string | null;
+    payment_provider_payment_id?: string | null;
   };
   identity: BookingIdentityInput;
   placement?: PlacementInsertFields;
@@ -122,6 +134,10 @@ export async function createBookingRecord({
     max_rental_days_snapshot: pricing?.max_rental_days_snapshot ?? null,
     allow_extended_rental_at_booking_snapshot:
       pricing?.allow_extended_rental_at_booking_snapshot ?? null,
+    payment_status: booking.payment_status ?? "unpaid",
+    paid_at: booking.paid_at ?? null,
+    payment_provider: booking.payment_provider ?? null,
+    payment_provider_payment_id: booking.payment_provider_payment_id ?? null,
   };
 
   const insertWithPlacementRow = placement ? { ...baseInsertRow, ...placement } : baseInsertRow;

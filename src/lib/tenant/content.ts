@@ -397,11 +397,11 @@ const BOOKING_ADDRESS_FALLBACK: BookingAddressContent = {
 };
 
 const BOOKING_DATE_FALLBACK: BookingDateContent = {
-  title: "Choose an open delivery day",
+  title: "Choose a delivery day",
   description: "Availability is visible up front, so the next opening is easy to spot.",
-  earliestAvailablePrefix: "Earliest available:",
+  earliestAvailablePrefix: "Earliest available delivery:",
   holdNoteTemplate: "We'll hold your selected dates for {minutes} minutes while you finish booking.",
-  footerNote: "Disabled dates are not bookable online. Availability updates automatically as inventory changes.",
+  footerNote: "Unavailable dates cannot be booked online. Availability updates automatically as inventory changes.",
   nextAvailablePrefix: "Next available delivery date:",
   availabilityError: "Could not load calendar availability.",
 };
@@ -861,16 +861,25 @@ export async function getBookingAddressContent(): Promise<BookingAddressContent>
 
 export async function getBookingDateContent(): Promise<BookingDateContent> {
   const raw = asObject(await getTenantContent("content.booking.date"));
+  const title = asString(raw.title, BOOKING_DATE_FALLBACK.title);
+  const earliestAvailablePrefix = asString(
+    raw.earliestAvailablePrefix,
+    BOOKING_DATE_FALLBACK.earliestAvailablePrefix,
+  );
+  const footerNote = asString(raw.footerNote, BOOKING_DATE_FALLBACK.footerNote);
 
   return {
-    title: asString(raw.title, BOOKING_DATE_FALLBACK.title),
+    title: title.trim() === "Choose an open delivery day" ? BOOKING_DATE_FALLBACK.title : title,
     description: asString(raw.description, BOOKING_DATE_FALLBACK.description),
-    earliestAvailablePrefix: asString(
-      raw.earliestAvailablePrefix,
-      BOOKING_DATE_FALLBACK.earliestAvailablePrefix,
-    ),
+    earliestAvailablePrefix:
+      earliestAvailablePrefix.trim() === "Earliest available:"
+        ? BOOKING_DATE_FALLBACK.earliestAvailablePrefix
+        : earliestAvailablePrefix,
     holdNoteTemplate: asString(raw.holdNoteTemplate, BOOKING_DATE_FALLBACK.holdNoteTemplate),
-    footerNote: asString(raw.footerNote, BOOKING_DATE_FALLBACK.footerNote),
+    footerNote:
+      footerNote.trim() === "Disabled dates are not bookable online. Availability updates automatically as inventory changes."
+        ? BOOKING_DATE_FALLBACK.footerNote
+        : footerNote,
     nextAvailablePrefix: asString(raw.nextAvailablePrefix, BOOKING_DATE_FALLBACK.nextAvailablePrefix),
     availabilityError: asString(raw.availabilityError, BOOKING_DATE_FALLBACK.availabilityError),
   };
