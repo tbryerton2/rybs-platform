@@ -9,6 +9,9 @@ export type ZipFormState = {
   success: boolean;
   message: string;
   error?: string;
+  fieldErrors?: {
+    state?: string;
+  };
   messageKey: number;
 };
 
@@ -32,6 +35,10 @@ function asString(value: FormDataEntryValue | null) {
 function normalizeText(value: string) {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+function normalizeState(value: string) {
+  return value.trim().toUpperCase();
 }
 
 function normalizeCurrency(value: string) {
@@ -60,12 +67,47 @@ export async function updateZipLocationAction(
   const id = parseId(formData.get("id"));
   const town = normalizeText(asString(formData.get("town")));
   const county = normalizeText(asString(formData.get("county")));
+  const state = normalizeState(asString(formData.get("state")));
+
+  const activeResult = await supabaseAdmin
+    .from("service_area_zips")
+    .select("active")
+    .eq("id", id)
+    .single();
+
+  if (activeResult.error) {
+    return {
+      success: false,
+      message: "",
+      error: activeResult.error.message,
+      messageKey: Date.now(),
+    };
+  }
+
+  const isActive = Boolean(activeResult.data?.active);
+  const stateError =
+    isActive && !state
+      ? "State is required for active ZIP codes."
+      : state && !/^[A-Z]{2}$/.test(state)
+        ? "Use a 2-letter state code, like NY."
+        : null;
+
+  if (stateError) {
+    return {
+      success: false,
+      message: "",
+      error: stateError,
+      fieldErrors: { state: stateError },
+      messageKey: Date.now(),
+    };
+  }
 
   const { error } = await supabaseAdmin
     .from("service_area_zips")
     .update({
       town,
       county,
+      state: state || null,
     })
     .eq("id", id);
 
@@ -93,6 +135,43 @@ export async function toggleZipActiveAction(
 ): Promise<ZipToggleState> {
   const id = parseId(formData.get("id"));
   const nextActive = asString(formData.get("nextActive")) === "true";
+
+  if (nextActive) {
+    const locationResult = await supabaseAdmin
+      .from("service_area_zips")
+      .select("state" as string)
+      .eq("id", id)
+      .single();
+
+    if (locationResult.error) {
+      return {
+        success: false,
+        message: "",
+        error: locationResult.error.message,
+        messageKey: Date.now(),
+      };
+    }
+
+    const location = locationResult.data as { state?: string | null } | null;
+    const state = normalizeState(String(location?.state ?? ""));
+    if (!state) {
+      return {
+        success: false,
+        message: "",
+        error: "State is required for active ZIP codes.",
+        messageKey: Date.now(),
+      };
+    }
+
+    if (!/^[A-Z]{2}$/.test(state)) {
+      return {
+        success: false,
+        message: "",
+        error: "Use a 2-letter state code, like NY.",
+        messageKey: Date.now(),
+      };
+    }
+  }
 
   const { error } = await supabaseAdmin
     .from("service_area_zips")

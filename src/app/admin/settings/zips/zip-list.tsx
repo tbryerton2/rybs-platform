@@ -19,6 +19,7 @@ type ServiceZipRow = {
   active: boolean;
   county: string | null;
   town: string | null;
+  state: string | null;
   price_14_yard_override: number | null;
 };
 
@@ -135,6 +136,7 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
         row.zip,
         row.town ?? "",
         row.county ?? "",
+        row.state ?? "",
         row.active ? "enabled active" : "disabled inactive",
         row.price_14_yard_override != null ? String(row.price_14_yard_override) : "default",
       ]
@@ -242,6 +244,7 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
                   <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                     <th className="px-6 py-4">ZIP code</th>
                     <th className="px-6 py-4">Town</th>
+                    <th className="px-6 py-4">State</th>
                     <th className="px-6 py-4">Status</th>
                     <th className="px-6 py-4">Pricing</th>
                     <th className="px-6 py-4 text-right">
@@ -266,6 +269,10 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
                       <td className="px-6 py-4 align-top">
                         <div className="text-sm font-medium text-slate-900">{row.town ?? "—"}</div>
                         <div className="mt-1 text-sm text-slate-500">{row.county ?? "—"}</div>
+                      </td>
+
+                      <td className="px-6 py-4 align-top">
+                        <div className="text-sm font-medium text-slate-900">{row.state ?? "—"}</div>
                       </td>
 
                       <td className="px-6 py-4 align-top">
@@ -307,7 +314,7 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
                         {row.town ?? "—"}
                       </div>
                       <div className="mt-1 text-sm text-slate-500">
-                        {row.county ?? "County unavailable"}
+                        {[row.county ?? "County unavailable", row.state].filter(Boolean).join(" • ")}
                       </div>
                     </div>
 

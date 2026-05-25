@@ -14,6 +14,7 @@ type BookingDraft = {
   zip?: string;
   county?: string;
   town?: string;
+  serviceState?: string | null;
   dumpsterSize?: string;
   dumpsterProductId?: string | null;
   dumpsterDisplayName?: string;
@@ -40,7 +41,7 @@ type BookingDraft = {
 type ZipStatus =
   | { state: "idle" }
   | { state: "checking" }
-  | { state: "valid"; county: string; town: string }
+  | { state: "valid"; county: string; town: string; serviceState?: string | null }
   | { state: "invalid"; message: string };
 
 function inputClass() {
@@ -126,7 +127,12 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
       }
 
       if (existing.town && existing.county && storedZip && storedZip === nextZip) {
-        setZipStatus({ state: "valid", town: existing.town, county: existing.county });
+        setZipStatus({
+          state: "valid",
+          town: existing.town,
+          county: existing.county,
+          serviceState: existing.serviceState ?? null,
+        });
       }
 
       if (hasValidatedStoredZip) {
@@ -241,11 +247,13 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
     nextZip,
     county,
     town,
+    serviceState,
     priceQuote,
   }: {
     nextZip: string;
     county: string;
     town: string;
+    serviceState?: string | null;
     priceQuote: BookingPriceQuote | null;
   }) {
     const raw = sessionStorage.getItem(getBookingStorageKey());
@@ -260,6 +268,7 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
         zip: nextZip,
         county,
         town,
+        serviceState,
         bookingOrigin,
         priceQuote: zipChanged ? null : priceQuote,
         ...(zipChanged && !hasSelectedDumpsterInQuery
@@ -329,15 +338,19 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
 
     const county = String(json.county ?? "");
     const town = String(json.town ?? "");
+    const serviceState = /^[A-Za-z]{2}$/.test(String(json.state ?? "").trim())
+      ? String(json.state).trim().toUpperCase()
+      : null;
     persistServiceArea({
       nextZip,
       county,
       town,
+      serviceState,
       priceQuote: json.priceQuote ?? null,
     });
 
     setZip(nextZip);
-    setZipStatus({ state: "valid", county, town });
+    setZipStatus({ state: "valid", county, town, serviceState });
     return true;
   }
 

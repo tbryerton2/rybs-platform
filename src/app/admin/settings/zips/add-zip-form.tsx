@@ -1,11 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { addServiceZipAction, type AddZipFormState } from "./actions";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 
 const initialState: AddZipFormState = {
   error: null,
+  createdZipId: null,
+  createdZip: null,
   messageKey: 0,
 };
 
@@ -14,11 +18,11 @@ function sanitizeZip(value: string) {
 }
 
 export function AddZipForm({ compact = false }: { compact?: boolean }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(
     addServiceZipAction,
     initialState,
   );
-  const [zip, setZip] = useState("");
 
   useEffect(() => {
     if (state.error) {
@@ -26,8 +30,14 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
     }
   }, [state.error, state.messageKey]);
 
-  function updateZip(nextValue: string) {
-    setZip(sanitizeZip(nextValue));
+  useEffect(() => {
+    if (!state.createdZipId || !state.createdZip) return;
+
+    router.refresh();
+  }, [router, state.createdZip, state.createdZipId, state.messageKey]);
+
+  function updateZip(input: HTMLInputElement) {
+    input.value = sanitizeZip(input.value);
   }
 
   function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
@@ -35,13 +45,14 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
 
     const pasted = sanitizeZip(event.clipboardData.getData("text"));
     const input = event.currentTarget;
-    const selectionStart = input.selectionStart ?? zip.length;
-    const selectionEnd = input.selectionEnd ?? zip.length;
+    const currentZip = input.value;
+    const selectionStart = input.selectionStart ?? currentZip.length;
+    const selectionEnd = input.selectionEnd ?? currentZip.length;
     const nextValue = sanitizeZip(
-      `${zip.slice(0, selectionStart)}${pasted}${zip.slice(selectionEnd)}`,
+      `${currentZip.slice(0, selectionStart)}${pasted}${currentZip.slice(selectionEnd)}`,
     );
 
-    setZip(nextValue);
+    input.value = nextValue;
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -79,10 +90,12 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
     }
   }
 
+  const setupHref = state.createdZipId ? `/admin/settings/zips/${state.createdZipId}` : null;
+
   return (
     <form
       action={formAction}
-      className={compact ? "w-full max-w-full" : "space-y-3"}
+      className={compact ? "w-full max-w-full space-y-3" : "space-y-3"}
     >
       <div
         className={
@@ -99,11 +112,11 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
             ZIP code
           </label>
           <input
+            key={state.createdZipId ? state.messageKey : "zip-input"}
             id="zip"
             name="zip"
             type="text"
-            value={zip}
-            onChange={(event) => updateZip(event.target.value)}
+            onChange={(event) => updateZip(event.currentTarget)}
             onPaste={handlePaste}
             onKeyDown={handleKeyDown}
             onBeforeInput={handleBeforeInput}
@@ -129,6 +142,23 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
           </button>
         </div>
       </div>
+
+      {setupHref && state.createdZip ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="leading-6">
+              <span className="font-semibold">ZIP {state.createdZip} was added successfully.</span>{" "}
+              Set it up now to add state, town, county, and pricing details.
+            </p>
+            <Link
+              href={setupHref}
+              className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              Set up ZIP
+            </Link>
+          </div>
+        </div>
+      ) : null}
     </form>
   );
 }

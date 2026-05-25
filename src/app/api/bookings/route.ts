@@ -11,6 +11,18 @@ import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
 
+function withOtherConcernDetails(
+  specialDeliveryInstructions: string | null | undefined,
+  accessIssues: string[] | undefined,
+  otherConcernDetails: string | null | undefined,
+) {
+  const special = (specialDeliveryInstructions || "").trim();
+  const concern = (otherConcernDetails || "").trim();
+  const concernLine = accessIssues?.includes("other_concern") && concern ? `Other concern: ${concern}` : "";
+
+  return [special, concernLine].filter(Boolean).join("\n") || null;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -62,6 +74,7 @@ export async function POST(req: Request) {
       placement_details,
       access_issues,
       gate_instructions,
+      other_concern_details,
       delivery_presence,
       alternate_contact_name,
       alternate_contact_phone,
@@ -143,6 +156,10 @@ export async function POST(req: Request) {
     }
 
     const normalizedCustomerPhone = normalizePhone(customer_phone);
+    const otherConcernError =
+      Array.isArray(access_issues) && access_issues.includes("other_concern") && !String(other_concern_details ?? "").trim()
+        ? "Please describe the concern."
+        : null;
     const placement = sanitizePlacementDetails({
       placementPreference: placement_preference,
       placementDetails: placement_details,
@@ -152,9 +169,13 @@ export async function POST(req: Request) {
       alternateContactName: alternate_contact_name,
       alternateContactPhone: alternate_contact_phone,
       placementPhotoUrl: placement_photo_url,
-      specialDeliveryInstructions: special_delivery_instructions,
+      specialDeliveryInstructions: withOtherConcernDetails(
+        special_delivery_instructions,
+        access_issues,
+        other_concern_details,
+      ),
     });
-    const placementError = validatePlacementDetails(placement);
+    const placementError = validatePlacementDetails(placement) || otherConcernError;
 
     if (placementError) {
       return NextResponse.json({ ok: false, error: placementError }, { status: 400 });

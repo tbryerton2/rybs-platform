@@ -6,6 +6,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type AddZipFormState = {
   error: string | null;
+  createdZipId: number | null;
+  createdZip: string | null;
   messageKey: number;
 };
 
@@ -30,16 +32,20 @@ export async function addServiceZipAction(
   if (!isValidZip(zip)) {
     return {
       error: "ZIP code must be exactly 5 digits.",
+      createdZipId: null,
+      createdZip: null,
       messageKey: Date.now(),
     };
   }
 
-  const { error } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("service_area_zips")
     .insert({
       zip,
       active: true,
-    });
+    })
+    .select("id, zip")
+    .single();
 
   if (error) {
     const message = error.message.toLowerCase();
@@ -51,18 +57,27 @@ export async function addServiceZipAction(
     ) {
       return {
         error: `ZIP ${zip} already exists.`,
+        createdZipId: null,
+        createdZip: null,
         messageKey: Date.now(),
       };
     }
 
     return {
       error: "Unable to add ZIP code right now. Please try again.",
+      createdZipId: null,
+      createdZip: null,
       messageKey: Date.now(),
     };
   }
 
   revalidatePath("/admin/settings/zips");
-  redirect(`/admin/settings/zips?added=${encodeURIComponent(zip)}`);
+  return {
+    error: null,
+    createdZipId: Number(data.id),
+    createdZip: String(data.zip ?? zip),
+    messageKey: Date.now(),
+  };
 }
 
 export async function toggleServiceZipAction(formData: FormData) {

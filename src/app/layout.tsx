@@ -98,7 +98,7 @@ export default async function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <div className="min-h-screen bg-[#F8FAFC]">
           {/* Global Header */}
-          <header className="sticky top-0 z-50 border-b border-slate-200 bg-[#F8FAFC]/90 backdrop-blur">
+          <header className="sticky top-0 z-50 bg-[#f5f4f0]/95 backdrop-blur">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 {showHeaderLogo ? (
@@ -115,7 +115,8 @@ export default async function RootLayout({
               </div>
               {primaryCtaHref ? (
                 <a
-                  className="rounded-2xl border border-slate-300 px-4 py-2 text-sm text-[#0F172A] hover:bg-white"
+                  className="rounded-2xl border px-4 py-2 text-sm text-[#0F172A] hover:bg-white"
+                  style={{ borderColor: "#c0b9ae" }}
                   href={primaryCtaHref}
                 >
                   {brand.headerPrimaryCtaLabel || "Call/Text"}

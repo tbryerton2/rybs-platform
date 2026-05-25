@@ -133,6 +133,8 @@ type BookingDraft = {
   includedRentalDays?: number;
   extraDayPrice?: number;
   basePrice?: number;
+  customerFirstName?: string;
+  customerLastName?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -199,6 +201,13 @@ function getBookingStorageKey() {
   return getTenantStorageKey(TENANT_STORAGE_KEYS.booking);
 }
 
+function getCustomerDisplayName(draft: BookingDraft) {
+  return (
+    (draft.customerName || "").trim() ||
+    `${(draft.customerFirstName || "").trim()} ${(draft.customerLastName || "").trim()}`.trim()
+  );
+}
+
 function getLastBookingWarningStorageKey() {
   return getTenantStorageKey(TENANT_STORAGE_KEYS.lastBookingWarning);
 }
@@ -235,6 +244,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const [squareLoading, setSquareLoading] = useState(false);
   const [squareError, setSquareError] = useState<string | null>(null);
   const [squareFallbackReason, setSquareFallbackReason] = useState<string | null>(null);
+  const customerDisplayName = getCustomerDisplayName(draft);
 
   useEffect(() => {
     try {
@@ -267,7 +277,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     );
     const hasPickupDate = isYMD((draft.pickupDate || draft.priceQuote?.effectivePickupDate || "").trim());
     const hasContactDetails = Boolean(
-      (draft.customerName || "").trim() &&
+      customerDisplayName &&
         (draft.customerEmail || "").trim() &&
         (draft.customerPhone || "").trim() &&
         (draft.customerStreet || "").trim() &&
@@ -304,7 +314,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     hydrated,
     draft.customerCity,
     draft.customerEmail,
-    draft.customerName,
+    customerDisplayName,
     draft.customerPhone,
     draft.customerState,
     draft.customerStreet,
@@ -846,7 +856,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                     <div className="flex items-baseline">
                       <span className="w-16 text-slate-500">Name:</span>
                       <span className="font-medium text-slate-900">
-                        {(draft.customerName || "").trim() || "—"}
+                        {customerDisplayName || "—"}
                       </span>
                     </div>
 

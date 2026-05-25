@@ -32,6 +32,7 @@ type Payload = {
   placement_details?: string | null;
   access_issues?: string[];
   gate_instructions?: string | null;
+  other_concern_details?: string | null;
   delivery_presence?: string | null;
   alternate_contact_name?: string | null;
   alternate_contact_phone?: string | null;
@@ -41,6 +42,18 @@ type Payload = {
   dumpster_size?: string | null;
   dumpster_product_id?: string | null;
 };
+
+function withOtherConcernDetails(
+  specialDeliveryInstructions: string | null | undefined,
+  accessIssues: string[] | undefined,
+  otherConcernDetails: string | null | undefined,
+) {
+  const special = (specialDeliveryInstructions || "").trim();
+  const concern = (otherConcernDetails || "").trim();
+  const concernLine = accessIssues?.includes("other_concern") && concern ? `Other concern: ${concern}` : "";
+
+  return [special, concernLine].filter(Boolean).join("\n") || null;
+}
 
 export async function POST(req: Request) {
   try {
@@ -115,6 +128,10 @@ export async function POST(req: Request) {
 
     const supabase = supabaseServer();
     const customerPhone = normalizePhone(body.customer_phone);
+    const otherConcernError =
+      body.access_issues?.includes("other_concern") && !body.other_concern_details?.trim()
+        ? "Please describe the concern."
+        : null;
     const placement = sanitizePlacementDetails({
       placementPreference: body.placement_preference,
       placementDetails: body.placement_details,
@@ -124,9 +141,13 @@ export async function POST(req: Request) {
       alternateContactName: body.alternate_contact_name,
       alternateContactPhone: body.alternate_contact_phone,
       placementPhotoUrl: body.placement_photo_url,
-      specialDeliveryInstructions: body.special_delivery_instructions,
+      specialDeliveryInstructions: withOtherConcernDetails(
+        body.special_delivery_instructions,
+        body.access_issues,
+        body.other_concern_details,
+      ),
     });
-    const placementError = validatePlacementDetails(placement);
+    const placementError = validatePlacementDetails(placement) || otherConcernError;
 
     if (placementError) {
       return NextResponse.json({ ok: false, error: placementError }, { status: 400 });

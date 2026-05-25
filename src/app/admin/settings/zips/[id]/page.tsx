@@ -48,6 +48,16 @@ function fieldValue(value: string | null) {
   return value?.trim() ? value : "—";
 }
 
+type ZipRecord = {
+  id: number;
+  zip: string;
+  county: string | null;
+  active: boolean;
+  town: string | null;
+  state: string | null;
+  price_14_yard_override: number | null;
+};
+
 export default async function AdminZipDetailPage({
   params,
 }: PageProps) {
@@ -61,7 +71,7 @@ export default async function AdminZipDetailPage({
     await Promise.all([
       supabaseAdmin
         .from("service_area_zips")
-        .select("id, zip, county, active, town, price_14_yard_override")
+        .select("id, zip, county, active, town, state, price_14_yard_override" as string)
         .eq("id", id)
         .single(),
       getEditableDumpsterProductSettings(),
@@ -72,6 +82,7 @@ export default async function AdminZipDetailPage({
     ]);
 
   if (error || !zipRecord) notFound();
+  const zip = zipRecord as unknown as ZipRecord;
   if (pricingOverridesResult.error) {
     throw new Error(pricingOverridesResult.error.message);
   }
@@ -132,25 +143,25 @@ export default async function AdminZipDetailPage({
 
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                 <form action={deleteServiceZipAction}>
-                  <input type="hidden" name="id" value={zipRecord.id} />
-                  <DeleteZipButton zip={zipRecord.zip} />
+                  <input type="hidden" name="id" value={zip.id} />
+                  <DeleteZipButton zip={zip.zip} />
                 </form>
 
                 <ZipStatusToggleForm
-                  id={zipRecord.id}
-                  initialActive={zipRecord.active}
+                  id={zip.id}
+                  initialActive={zip.active}
                 />
               </div>
             </div>
           </div>
 
-          <div className="grid gap-4 px-6 py-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 px-6 py-6 sm:grid-cols-2 xl:grid-cols-5">
             <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 ZIP Code
               </div>
               <div className="mt-2 text-lg font-semibold text-slate-900">
-                {zipRecord.zip}
+                {zip.zip}
               </div>
             </div>
 
@@ -158,7 +169,7 @@ export default async function AdminZipDetailPage({
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 Status
               </div>
-              <div className="mt-2">{statusBadge(zipRecord.active)}</div>
+              <div className="mt-2">{statusBadge(zip.active)}</div>
             </div>
 
             <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
@@ -166,7 +177,7 @@ export default async function AdminZipDetailPage({
                 Town
               </div>
               <div className="mt-2 text-sm font-medium text-slate-900">
-                {fieldValue(zipRecord.town)}
+                {fieldValue(zip.town)}
               </div>
             </div>
 
@@ -175,7 +186,16 @@ export default async function AdminZipDetailPage({
                 County
               </div>
               <div className="mt-2 text-sm font-medium text-slate-900">
-                {fieldValue(zipRecord.county)}
+                {fieldValue(zip.county)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                State
+              </div>
+              <div className="mt-2 text-sm font-medium text-slate-900">
+                {fieldValue(zip.state)}
               </div>
             </div>
           </div>
@@ -190,9 +210,10 @@ export default async function AdminZipDetailPage({
           </div>
 
           <LocationDetailsForm
-            id={zipRecord.id}
-            town={zipRecord.town}
-            county={zipRecord.county}
+            id={zip.id}
+            town={zip.town}
+            county={zip.county}
+            stateCode={zip.state}
           />
         </section>
 
@@ -208,7 +229,7 @@ export default async function AdminZipDetailPage({
           </div>
 
           <PricingOverrideForm
-            id={zipRecord.id}
+            id={zip.id}
             pricingOverrides={pricingOverrides}
           />
         </section>

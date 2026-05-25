@@ -14,6 +14,7 @@ type Props = {
   id: number;
   town: string | null;
   county: string | null;
+  stateCode: string | null;
 };
 
 const initialState: ZipFormState = {
@@ -22,7 +23,7 @@ const initialState: ZipFormState = {
   messageKey: 0,
 };
 
-export function LocationDetailsForm({ id, town, county }: Props) {
+export function LocationDetailsForm({ id, town, county, stateCode }: Props) {
   const [state, formAction] = useActionState(updateZipLocationAction, initialState);
     useEffect(() => {
       if (state.success && state.message) {
@@ -43,7 +44,7 @@ export function LocationDetailsForm({ id, town, county }: Props) {
       <form action={formAction} className="px-6 pb-6">
         <input type="hidden" name="id" value={id} />
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-3">
           <label className="block">
             <div className="mb-2 text-sm font-medium text-slate-700">Town</div>
             <input
@@ -64,6 +65,24 @@ export function LocationDetailsForm({ id, town, county }: Props) {
               placeholder="Enter county"
               className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
             />
+          </label>
+
+          <label className="block">
+            <div className="mb-2 text-sm font-medium text-slate-700">State</div>
+            <input
+              type="text"
+              name="state"
+              defaultValue={stateCode ?? ""}
+              placeholder="NY"
+              maxLength={2}
+              onInput={(event) => {
+                event.currentTarget.value = event.currentTarget.value.trim().toUpperCase();
+              }}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+            />
+            {state.fieldErrors?.state ? (
+              <div className="mt-2 text-sm text-red-700">{state.fieldErrors.state}</div>
+            ) : null}
           </label>
         </div>
 

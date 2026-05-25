@@ -31,6 +31,8 @@ type ConfirmBody = {
     deliveryDate?: string;
     pickupDate?: string;
     pickupMode?: "unspecified" | "date";
+    customerFirstName?: string;
+    customerLastName?: string;
     customerName?: string;
     customerEmail?: string;
     customerPhone?: string;
@@ -42,6 +44,7 @@ type ConfirmBody = {
     placementDetails?: string | null;
     accessIssues?: string[];
     gateInstructions?: string | null;
+    otherConcernDetails?: string | null;
     deliveryPresence?: string | null;
     alternateContactName?: string | null;
     alternateContactPhone?: string | null;
@@ -56,6 +59,8 @@ type ConfirmBody = {
   deliveryDate?: string;
   pickupDate?: string;
   pickupMode?: "unspecified" | "date";
+  customerFirstName?: string;
+  customerLastName?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -67,6 +72,7 @@ type ConfirmBody = {
   placementDetails?: string | null;
   accessIssues?: string[];
   gateInstructions?: string | null;
+  otherConcernDetails?: string | null;
   deliveryPresence?: string | null;
   alternateContactName?: string | null;
   alternateContactPhone?: string | null;
@@ -79,6 +85,33 @@ type ConfirmBody = {
 
 function isYMD(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test((s || "").trim());
+}
+
+function getCustomerName({
+  customerName,
+  customerFirstName,
+  customerLastName,
+}: {
+  customerName?: string | null;
+  customerFirstName?: string | null;
+  customerLastName?: string | null;
+}) {
+  return (
+    (customerName || "").trim() ||
+    `${(customerFirstName || "").trim()} ${(customerLastName || "").trim()}`.trim()
+  );
+}
+
+function withOtherConcernDetails(
+  specialDeliveryInstructions: string | null | undefined,
+  accessIssues: string[] | undefined,
+  otherConcernDetails: string | null | undefined,
+) {
+  const special = (specialDeliveryInstructions || "").trim();
+  const concern = (otherConcernDetails || "").trim();
+  const concernLine = accessIssues?.includes("other_concern") && concern ? `Other concern: ${concern}` : "";
+
+  return [special, concernLine].filter(Boolean).join("\n") || null;
 }
 
 export async function GET() {
@@ -119,7 +152,11 @@ export async function POST(req: Request) {
     const pickupDate = ((draft.pickupDate ?? body.pickupDate) || "").trim();
     const pickupMode = (draft.pickupMode ?? body.pickupMode) === "date" ? "date" : "unspecified";
 
-    const customerName = ((draft.customerName ?? body.customerName) || "").trim();
+    const customerName = getCustomerName({
+      customerName: draft.customerName ?? body.customerName,
+      customerFirstName: draft.customerFirstName ?? body.customerFirstName,
+      customerLastName: draft.customerLastName ?? body.customerLastName,
+    });
     const customerEmail = ((draft.customerEmail ?? body.customerEmail) || "").trim();
     const customerPhone = normalizePhone(draft.customerPhone ?? body.customerPhone);
     const customerStreet = ((draft.customerStreet ?? body.customerStreet) || "").trim();
@@ -131,19 +168,28 @@ export async function POST(req: Request) {
       dumpsterSize: draft.dumpsterSize ?? body.dumpsterSize,
       dumpsterProductId: draft.dumpsterProductId ?? body.dumpsterProductId,
     });
+    const accessIssues = draft.accessIssues ?? body.accessIssues ?? [];
+    const otherConcernDetails = draft.otherConcernDetails ?? body.otherConcernDetails ?? null;
     const placement = sanitizePlacementDetails({
       placementPreference: draft.placementPreference ?? body.placementPreference ?? null,
       placementDetails: draft.placementDetails ?? body.placementDetails ?? null,
-      accessIssues: draft.accessIssues ?? body.accessIssues ?? [],
+      accessIssues,
       gateInstructions: draft.gateInstructions ?? body.gateInstructions ?? null,
       deliveryPresence: draft.deliveryPresence ?? body.deliveryPresence ?? null,
       alternateContactName: draft.alternateContactName ?? body.alternateContactName ?? null,
       alternateContactPhone: draft.alternateContactPhone ?? body.alternateContactPhone ?? null,
       placementPhotoUrl: draft.placementPhotoUrl ?? body.placementPhotoUrl ?? null,
-      specialDeliveryInstructions:
+      specialDeliveryInstructions: withOtherConcernDetails(
         draft.specialDeliveryInstructions ?? body.specialDeliveryInstructions ?? null,
+        accessIssues,
+        otherConcernDetails,
+      ),
     });
-    const placementError = validatePlacementDetails(placement);
+    const otherConcernError =
+      accessIssues.includes("other_concern") && !(otherConcernDetails || "").trim()
+        ? "Please describe the concern."
+        : null;
+    const placementError = validatePlacementDetails(placement) || otherConcernError;
 
     if (!holdId) {
       return NextResponse.json({ ok: false, error: "Missing holdId." }, { status: 400 });

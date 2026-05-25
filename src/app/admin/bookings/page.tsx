@@ -832,11 +832,7 @@ function buildPlacementInstructionLines(details: ReturnType<typeof sanitizePlace
     details.placementDetails,
     details.specialDeliveryInstructions,
     details.gateInstructions,
-    details.deliveryPresence === "call_if_issue"
-      ? "Call on arrival"
-      : details.deliveryPresence === "customer_present"
-        ? "Customer onsite"
-        : null,
+    details.deliveryPresence === "customer_present" ? "Customer onsite" : null,
     details.accessIssues.length ? `Access notes: ${details.accessIssues.map(getAccessIssueLabel).join(", ")}` : null,
     details.alternateContactName || details.alternateContactPhone
       ? `Alternate contact: ${[details.alternateContactName, details.alternateContactPhone].filter(Boolean).join(" • ")}`

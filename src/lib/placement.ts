@@ -28,7 +28,6 @@ export type AccessIssue = (typeof ACCESS_ISSUES)[number];
 export const DELIVERY_PRESENCE_OPTIONS = [
   "customer_present",
   "deliver_without_customer",
-  "call_if_issue",
 ] as const;
 
 export type DeliveryPresence = (typeof DELIVERY_PRESENCE_OPTIONS)[number];
@@ -41,7 +40,7 @@ export const placementPreferenceLabel: Record<PlacementPreference, string> = {
   parking_lot: "Parking lot",
   alley_side_access: "Alley / side access",
   jobsite_custom_area: "Jobsite / custom area",
-  other: "Other",
+  other: "Other / specific instructions",
 };
 
 export const accessIssueLabel: Record<AccessIssue, string> = {
@@ -59,7 +58,6 @@ export const accessIssueLabel: Record<AccessIssue, string> = {
 export const deliveryPresenceLabel: Record<DeliveryPresence, string> = {
   customer_present: "I'll be there for delivery",
   deliver_without_customer: "You can deliver without me",
-  call_if_issue: "Call me if there is any issue",
 };
 
 export type PlacementDetails = {
@@ -141,10 +139,6 @@ export function sanitizePlacementDetails(input: Partial<PlacementDetails> | Reco
 export function validatePlacementDetails(details: PlacementDetails) {
   if (!details.placementPreference) {
     return "Choose where you want the dumpster placed.";
-  }
-
-  if (!details.placementDetails) {
-    return "Add exact placement details for the driver.";
   }
 
   if (!details.deliveryPresence) {
@@ -258,14 +252,6 @@ export function getPlacementOperationalSignals(details: PlacementDetails | null 
     });
   }
 
-  if (details.deliveryPresence === "call_if_issue") {
-    signals.push({
-      key: "call-on-arrival",
-      label: "Call on arrival",
-      tone: "blue",
-    });
-  }
-
   if (details.deliveryPresence === "customer_present") {
     signals.push({
       key: "customer-onsite",
@@ -319,9 +305,7 @@ export function getPlacementDispatchSummary(details: PlacementDetails | null | u
       ? "customer onsite"
       : details?.deliveryPresence === "deliver_without_customer"
         ? "no customer needed onsite"
-        : details?.deliveryPresence === "call_if_issue"
-          ? "call on arrival"
-          : null;
+        : null;
 
   return [placementDetail, accessSummary, presenceSummary].filter(Boolean).join(" • ");
 }

@@ -24,6 +24,8 @@ type BookingDraft = {
   extraDayPrice?: number;
   basePrice?: number;
 
+  customerFirstName?: string;
+  customerLastName?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -129,6 +131,13 @@ function getBookingStorageKey() {
   return getTenantStorageKey(TENANT_STORAGE_KEYS.booking);
 }
 
+function getCustomerDisplayName(draft: BookingDraft) {
+  return (
+    (draft.customerName || "").trim() ||
+    `${(draft.customerFirstName || "").trim()} ${(draft.customerLastName || "").trim()}`.trim()
+  );
+}
+
 type ConfirmPageClientProps = {
   content: {
     title: string;
@@ -159,6 +168,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
   const extraDays = draft.priceQuote?.extraDays ?? 0;
   const extraDaysChargeCents = draft.priceQuote?.extraDaysChargeCents ?? 0;
   const pickupMode = "date" as const;
+  const customerDisplayName = getCustomerDisplayName(draft);
 
   function persist(patch: Partial<BookingDraft>) {
     const raw = sessionStorage.getItem(getBookingStorageKey());
@@ -195,7 +205,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
       (draft.dumpsterSize || "").trim() || (draft.dumpsterProductId || "").trim(),
     );
     const hasContactDetails = Boolean(
-      (draft.customerName || "").trim() &&
+      customerDisplayName &&
         (draft.customerEmail || "").trim() &&
         (draft.customerPhone || "").trim() &&
         (draft.customerStreet || "").trim() &&
@@ -222,7 +232,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
     if (!hasContactDetails) {
       router.replace("/book/placement");
     }
-  }, [draft, loadedDraft, router]);
+  }, [customerDisplayName, draft, loadedDraft, router]);
 
   // tick timer every 1s
   useEffect(() => {
@@ -439,7 +449,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
                 <div className="grid gap-y-2.5 text-sm">
                   <div className="grid grid-cols-[72px_1fr] items-baseline gap-x-4">
                     <span className="text-slate-500">Name:</span>
-                    <span className="font-medium text-slate-900">{(draft.customerName || "").trim() || "—"}</span>
+                    <span className="font-medium text-slate-900">{customerDisplayName || "—"}</span>
                   </div>
 
                   <div className="grid grid-cols-[72px_1fr] items-baseline gap-x-4">

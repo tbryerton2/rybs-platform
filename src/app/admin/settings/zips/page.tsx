@@ -14,6 +14,7 @@ type ServiceZipRow = {
   active: boolean;
   county: string | null;
   town: string | null;
+  state: string | null;
   price_14_yard_override: number | null;
 };
 
@@ -36,14 +37,14 @@ export default async function AdminServiceAreaPage({
 
   const { data, error } = await supabaseAdmin
     .from("service_area_zips")
-    .select("id, zip, active, county, town, price_14_yard_override")
+    .select("id, zip, active, county, town, state, price_14_yard_override" as string)
     .order("zip", { ascending: true });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  const rows = (data ?? []) as ServiceZipRow[];
+  const rows = (data ?? []) as unknown as ServiceZipRow[];
 
   return (
     <AdminPage>

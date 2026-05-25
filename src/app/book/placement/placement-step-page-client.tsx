@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import {
@@ -9,6 +9,7 @@ import {
   DELIVERY_PRESENCE_OPTIONS,
   PLACEMENT_PREFERENCES,
   accessIssueLabel,
+  deliveryPresenceLabel,
   placementPreferenceLabel,
   sanitizePlacementDetails,
   validatePlacementDetails,
@@ -19,6 +20,7 @@ import {
 
 type BookingDraft = {
   zip?: string;
+  serviceState?: string | null;
   dumpsterSize?: string;
   dumpsterProductId?: string | null;
   deliveryDate?: string;
@@ -26,6 +28,8 @@ type BookingDraft = {
   priceQuote?: { effectivePickupDate?: string | null } | null;
   holdId?: string;
   holdExpiresAt?: string;
+  customerFirstName?: string;
+  customerLastName?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -39,6 +43,7 @@ type BookingDraft = {
   placementDetails?: string | null;
   accessIssues?: AccessIssue[];
   gateInstructions?: string | null;
+  otherConcernDetails?: string | null;
   deliveryPresence?: DeliveryPresence | null;
   alternateContactName?: string | null;
   alternateContactPhone?: string | null;
@@ -79,12 +84,57 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
 }
 
+function normalizeStateCode(value: string | null | undefined) {
+  const state = String(value ?? "").trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(state) ? state : "";
+}
+
+function getCustomerNames(draft: BookingDraft) {
+  const firstName = (draft.customerFirstName ?? "").trim();
+  const lastName = (draft.customerLastName ?? "").trim();
+
+  if (firstName || lastName) return { firstName, lastName };
+
+  const nameParts = (draft.customerName ?? "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: nameParts[0] ?? "",
+    lastName: nameParts.slice(1).join(" "),
+  };
+}
+
+function getDraftStateCode(draft: BookingDraft) {
+  return normalizeStateCode(draft.customerState) || normalizeStateCode(draft.serviceState);
+}
+
 function cardInputClass(multiline = false) {
   return [
     "w-full rounded-xl border border-slate-300 bg-white px-4 text-slate-900 shadow-sm outline-none transition",
     "focus:border-[#F97316] focus:ring-4 focus:ring-[#F97316]/15",
     multiline ? "min-h-[96px] py-3" : "h-12",
   ].join(" ");
+}
+
+function FormLabel({
+  children,
+  required = false,
+}: {
+  children: ReactNode;
+  required?: boolean;
+}) {
+  return (
+    <label className="text-sm font-medium text-slate-700">
+      {children}
+      {required ? (
+        <>
+          <span aria-hidden="true" className="text-[#F97316]">
+            {" "}
+            *
+          </span>
+          <span className="sr-only"> required</span>
+        </>
+      ) : null}
+    </label>
+  );
 }
 
 function OptionalRow({
@@ -141,6 +191,8 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   const router = useRouter();
 
   const [hasHydratedDraft, setHasHydratedDraft] = useState(false);
+  const hasEditedStateRef = useRef(false);
+  const hasAttemptedStateAutofillRef = useRef(false);
   const [draft, setDraft] = useState<BookingDraft>({});
   const initialDraft = draft;
   const serviceZip = (initialDraft.zip || initialDraft.customerZip || "").replace(/\D/g, "").slice(0, 5);
@@ -159,18 +211,21 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   const hasRequiredPriorSteps =
     /^\d{5}$/.test(serviceZip) && hasDumpsterSelection && hasDeliveryDate && hasPickupDate && hasActiveHold;
 
-  const [name, setName] = useState(initialDraft.customerName ?? "");
+  const initialCustomerNames = getCustomerNames(initialDraft);
+  const [firstName, setFirstName] = useState(initialCustomerNames.firstName);
+  const [lastName, setLastName] = useState(initialCustomerNames.lastName);
   const [email, setEmail] = useState(initialDraft.customerEmail ?? "");
   const [phone, setPhone] = useState(formatPhoneUS(initialDraft.customerPhone ?? ""));
   const [street, setStreet] = useState(initialDraft.customerStreet ?? "");
   const [city, setCity] = useState(initialDraft.customerCity ?? "");
-  const [stateCode, setStateCode] = useState(initialDraft.customerState ?? "");
+  const [stateCode, setStateCode] = useState(getDraftStateCode(initialDraft));
   const [placementPreference, setPlacementPreference] = useState<PlacementPreference | "">(
     initialDraft.placementPreference ?? "",
   );
   const [placementDetails, setPlacementDetails] = useState(initialDraft.placementDetails ?? "");
   const [accessIssues, setAccessIssues] = useState<AccessIssue[]>(initialDraft.accessIssues ?? []);
   const [gateInstructions, setGateInstructions] = useState(initialDraft.gateInstructions ?? "");
+  const [otherConcernDetails, setOtherConcernDetails] = useState(initialDraft.otherConcernDetails ?? "");
   const [deliveryPresence, setDeliveryPresence] = useState<DeliveryPresence | "">(
     initialDraft.deliveryPresence ?? "",
   );
@@ -198,17 +253,20 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
   useEffect(() => {
     const nextDraft = readDraft();
+    const nextCustomerNames = getCustomerNames(nextDraft);
     setDraft(nextDraft);
-    setName(nextDraft.customerName ?? "");
+    setFirstName(nextCustomerNames.firstName);
+    setLastName(nextCustomerNames.lastName);
     setEmail(nextDraft.customerEmail ?? "");
     setPhone(formatPhoneUS(nextDraft.customerPhone ?? ""));
     setStreet(nextDraft.customerStreet ?? "");
     setCity(nextDraft.customerCity ?? "");
-    setStateCode(nextDraft.customerState ?? "");
+    setStateCode(getDraftStateCode(nextDraft));
     setPlacementPreference(nextDraft.placementPreference ?? "");
     setPlacementDetails(nextDraft.placementDetails ?? "");
     setAccessIssues(nextDraft.accessIssues ?? []);
     setGateInstructions(nextDraft.gateInstructions ?? "");
+    setOtherConcernDetails(nextDraft.otherConcernDetails ?? "");
     setDeliveryPresence(nextDraft.deliveryPresence ?? "");
     setAlternateContactName(nextDraft.alternateContactName ?? "");
     setAlternateContactPhone(formatPhoneUS(nextDraft.alternateContactPhone ?? ""));
@@ -247,6 +305,76 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
     serviceZip,
   ]);
 
+  useEffect(() => {
+    if (!hasHydratedDraft || hasAttemptedStateAutofillRef.current) return;
+
+    hasAttemptedStateAutofillRef.current = true;
+
+    if (stateCode.trim()) return;
+
+    const savedServiceState = normalizeStateCode(draft.serviceState);
+    if (savedServiceState) {
+      setStateCode((current) =>
+        current.trim() || hasEditedStateRef.current ? current : savedServiceState,
+      );
+      return;
+    }
+
+    if (!/^\d{5}$/.test(serviceZip)) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const params = new URLSearchParams({
+          zip: serviceZip,
+          dumpsterSize: initialDraft.dumpsterSize || "",
+        });
+
+        if (initialDraft.dumpsterProductId) {
+          params.set("dumpsterProductId", initialDraft.dumpsterProductId);
+        }
+
+        const res = await fetch(`/api/zip-check?${params.toString()}`, { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+
+        if (cancelled || !res.ok || !json?.serviced) return;
+
+        const nextState = normalizeStateCode(json.state);
+        if (!nextState) return;
+
+        setStateCode((current) =>
+          current.trim() || hasEditedStateRef.current ? current : nextState,
+        );
+
+        const existing = readDraft();
+        if (!normalizeStateCode(existing.serviceState)) {
+          sessionStorage.setItem(
+            getBookingStorageKey(),
+            JSON.stringify({
+              ...existing,
+              serviceState: nextState,
+            }),
+          );
+          setDraft((current) => ({ ...current, serviceState: nextState }));
+        }
+      } catch {
+        // Leave state empty when service-area state cannot be found confidently.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    draft.serviceState,
+    hasHydratedDraft,
+    initialDraft.dumpsterProductId,
+    initialDraft.dumpsterSize,
+    serviceZip,
+    stateCode,
+  ]);
+
   const sanitizedPlacement = useMemo(
     () =>
       sanitizePlacementDetails({
@@ -277,8 +405,17 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
     ],
   );
 
+  const customerName = useMemo(
+    () => `${firstName.trim()} ${lastName.trim()}`.trim(),
+    [firstName, lastName],
+  );
   const validationError = validatePlacementDetails(sanitizedPlacement);
   const gateFieldVisible = showAccessDetails && accessIssues.includes("gated_property");
+  const otherConcernFieldVisible = showAccessDetails && accessIssues.includes("other_concern");
+  const otherConcernError =
+    otherConcernFieldVisible && !otherConcernDetails.trim() ? "Please describe the concern." : null;
+  const placementValidationError = validationError || otherConcernError;
+  const placementDetailsVisible = placementPreference === "other";
   const streetPermitNoteVisible = placementPreference === "street_curb";
   const defaultContactSummary = formatPhoneUS(phone) || "Use main booking phone";
   const alternateContactSummary =
@@ -293,15 +430,16 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
     : "Add any extra notes for dispatch or the driver";
 
   const contactError = useMemo(() => {
-    if (!name.trim()) return "Enter your name.";
-    if (!isValidEmail(email)) return "Enter a valid email address.";
+    if (!firstName.trim()) return "Enter your first name.";
+    if (!lastName.trim()) return "Enter your last name.";
+    if (!email.trim() || !isValidEmail(email)) return "Please enter a valid email address.";
     if (digitsOnly(phone).length !== 10) return "Enter a valid 10-digit phone number.";
     if (!street.trim()) return "Enter the delivery street address.";
     if (!city.trim()) return "Enter the delivery city.";
     if (!/^[A-Z]{2}$/.test(stateCode.trim().toUpperCase())) return "Enter a valid 2-letter state code.";
     if (!/^\d{5}$/.test(serviceZip)) return "Service ZIP is missing. Please check your service area again.";
     return null;
-  }, [city, email, name, phone, serviceZip, stateCode, street]);
+  }, [city, email, firstName, lastName, phone, serviceZip, stateCode, street]);
 
   function persistDraft() {
     const existing = readDraft();
@@ -310,7 +448,9 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
       getBookingStorageKey(),
       JSON.stringify({
         ...existing,
-        customerName: name.trim(),
+        customerFirstName: firstName.trim(),
+        customerLastName: lastName.trim(),
+        customerName,
         customerEmail: email.trim(),
         customerPhone: digitsOnly(phone),
         customerStreet: street.trim(),
@@ -322,6 +462,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
         placementDetails: sanitizedPlacement.placementDetails,
         accessIssues: sanitizedPlacement.accessIssues,
         gateInstructions: sanitizedPlacement.gateInstructions,
+        otherConcernDetails: otherConcernDetails.trim(),
         deliveryPresence: sanitizedPlacement.deliveryPresence,
         alternateContactName: sanitizedPlacement.alternateContactName,
         alternateContactPhone: sanitizedPlacement.alternateContactPhone,
@@ -371,12 +512,12 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
   function handleContinue() {
     if (contactError) return;
-    if (validationError) return;
+    if (placementValidationError) return;
     persistDraft();
     router.push("/confirm");
   }
 
-  const canContinue = !contactError && !validationError && !isUploadingPhoto;
+  const canContinue = !contactError && !placementValidationError && !isUploadingPhoto;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
@@ -418,7 +559,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
             <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">Your details</h1>
             <p className="text-[#475569]">
-              Add your contact information and delivery details now that your date is available.
+              Add your contact information and delivery details now that your date has been selected.
             </p>
           </div>
 
@@ -438,19 +579,34 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
               </div>
 
               <div className="mt-5 grid gap-5">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Name</label>
-                  <input
-                    className={cardInputClass()}
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g., John Doe"
-                    autoComplete="name"
-                  />
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <FormLabel required>First name</FormLabel>
+                    <input
+                      className={cardInputClass()}
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="e.g., John"
+                      autoComplete="given-name"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <FormLabel required>Last name</FormLabel>
+                    <input
+                      className={cardInputClass()}
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="e.g., Doe"
+                      autoComplete="family-name"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Email</label>
+                  <FormLabel required>Email</FormLabel>
                   <input
                     className={cardInputClass()}
                     value={email}
@@ -458,11 +614,12 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                     placeholder="e.g., you@email.com"
                     type="email"
                     autoComplete="email"
+                    required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Phone</label>
+                  <FormLabel required>Phone</FormLabel>
                   <input
                     className={cardInputClass()}
                     value={phone}
@@ -474,7 +631,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Street address</label>
+                  <FormLabel required>Street address</FormLabel>
                   <input
                     className={cardInputClass()}
                     value={street}
@@ -485,7 +642,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">City</label>
+                  <FormLabel required>City</FormLabel>
                   <input
                     className={cardInputClass()}
                     value={city}
@@ -497,11 +654,14 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
                 <div className="grid gap-5 sm:grid-cols-[1fr_120px]">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">State</label>
+                    <FormLabel required>State</FormLabel>
                     <input
                       className={cardInputClass()}
                       value={stateCode}
-                      onChange={(e) => setStateCode(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        hasEditedStateRef.current = true;
+                        setStateCode(e.target.value.toUpperCase());
+                      }}
                       placeholder="e.g., NY"
                       autoComplete="address-level1"
                       maxLength={2}
@@ -509,7 +669,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">ZIP</label>
+                    <FormLabel required>ZIP</FormLabel>
                     <div className="flex h-12 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900">
                       {serviceZip}
                     </div>
@@ -546,7 +706,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
             <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Placement preference</label>
+                  <FormLabel required>Placement preference</FormLabel>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {PLACEMENT_PREFERENCES.map((option) => (
                       <label
@@ -576,21 +736,23 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                   </div>
                 ) : null}
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Exact placement details</label>
-                  <textarea
-                    className={cardInputClass(true)}
-                    value={placementDetails}
-                    onChange={(e) => setPlacementDetails(e.target.value)}
-                    placeholder={content.placementExample}
-                  />
-                  <p className="text-xs text-slate-500">
-                    {content.placementExample}
-                  </p>
-                </div>
+                {placementDetailsVisible ? (
+                  <div className="space-y-2">
+                    <FormLabel>Exact placement details</FormLabel>
+                    <textarea
+                      className={cardInputClass(true)}
+                      value={placementDetails}
+                      onChange={(e) => setPlacementDetails(e.target.value)}
+                      placeholder={content.placementExample}
+                    />
+                    <p className="text-xs text-slate-500">
+                      {content.placementExample}
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Delivery presence</label>
+                  <FormLabel required>Delivery presence</FormLabel>
                   <div className="grid gap-2">
                     {DELIVERY_PRESENCE_OPTIONS.map((option) => (
                       <label
@@ -609,11 +771,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                           onChange={() => setDeliveryPresence(option)}
                         />
                         <span className="font-medium">
-                          {option === "customer_present"
-                            ? "I'll be there"
-                            : option === "deliver_without_customer"
-                            ? "You can deliver without me"
-                            : "Call me if there's an issue"}
+                          {deliveryPresenceLabel[option]}
                         </span>
                       </label>
                     ))}
@@ -705,14 +863,24 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
                           {gateFieldVisible ? (
                             <div className="space-y-2">
-                              <label className="text-sm font-medium text-slate-700">
-                                Gate / access instructions
-                              </label>
+                              <FormLabel required>Gate / access instructions</FormLabel>
                               <textarea
                                 className={cardInputClass(true)}
                                 value={gateInstructions}
                                 onChange={(e) => setGateInstructions(e.target.value)}
                                 placeholder="Gate code, call box instructions, or lock notes"
+                              />
+                            </div>
+                          ) : null}
+
+                          {otherConcernFieldVisible ? (
+                            <div className="space-y-2">
+                              <FormLabel required>Please describe the concern</FormLabel>
+                              <textarea
+                                className={cardInputClass(true)}
+                                value={otherConcernDetails}
+                                onChange={(e) => setOtherConcernDetails(e.target.value)}
+                                placeholder="Example: low hanging wires near the driveway, tight turn, soft ground, etc."
                               />
                             </div>
                           ) : null}
@@ -848,9 +1016,9 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                   </div>
                 </div>
 
-                {validationError ? (
+                {placementValidationError ? (
                   <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-                    {validationError}
+                    {placementValidationError}
                   </div>
                 ) : null}
               </div>
