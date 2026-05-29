@@ -309,10 +309,14 @@ export function createSquarePaymentAdapter(): PaymentProviderAdapter {
     async charge(input: PaymentProviderChargeInput): Promise<PaymentProviderChargeResult> {
       const locationId = getSquareLocationId();
       const client = createSquareClient(environment);
+      const sourceId = requireSquareId(
+        input.paymentSourceId ?? input.paymentMethodToken,
+        "paymentSourceId",
+      );
 
       try {
         const response = await client.payments.create({
-          sourceId: input.paymentMethodToken,
+          sourceId,
           idempotencyKey: input.idempotencyKey,
           amountMoney: {
             amount: BigInt(input.amountCents),
@@ -320,6 +324,7 @@ export function createSquarePaymentAdapter(): PaymentProviderAdapter {
           },
           autocomplete: true,
           locationId,
+          customerId: clean(input.providerCustomerId) ?? undefined,
           referenceId: input.paymentId,
           note: input.description,
         });

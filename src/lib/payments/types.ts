@@ -195,10 +195,14 @@ export type StoredCheckoutPayment = {
 export type PaymentProviderChargeInput = {
   paymentId: string;
   businessId: string;
-  bookingHoldId: string;
+  bookingHoldId?: string | null;
+  bookingId?: string | null;
+  bookingChargeId?: string | null;
   amountCents: number;
   currency: CurrencyCode;
-  paymentMethodToken: string;
+  paymentMethodToken?: string;
+  paymentSourceId?: string;
+  providerCustomerId?: string | null;
   idempotencyKey: string;
   description?: string;
 };

@@ -6,10 +6,15 @@ import { getAssignableDumpstersForBooking } from "@/lib/admin/dumpster-assignmen
 import { bookingPlacementSchemaMessage, isBookingSchemaError } from "@/lib/booking-schema";
 import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
 import {
+  chargePendingBookingChargeWithSavedCard,
+  PostBookingChargePaymentServiceError,
+} from "@/lib/payments/post-booking-charge-payment-service";
+import {
   sanitizePlacementDetails,
   validatePlacementDetails,
 } from "@/lib/placement";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type BookingStatus =
   | "confirmed"
@@ -17,6 +22,23 @@ type BookingStatus =
   | "delivered"
   | "picked_up"
   | "cancelled";
+
+type BookingChargeType =
+  | "weight_overage"
+  | "damage"
+  | "extra_day"
+  | "trip_fee"
+  | "prohibited_material"
+  | "manual_adjustment";
+
+const BOOKING_CHARGE_TYPES = new Set<BookingChargeType>([
+  "weight_overage",
+  "damage",
+  "extra_day",
+  "trip_fee",
+  "prohibited_material",
+  "manual_adjustment",
+]);
 
 type OperationalFieldName =
   | "status"
@@ -58,6 +80,59 @@ function redirectWithOperationalControlsError(id: string, error: string) {
 
 function redirectWithAssignmentError(id: string, error: string): never {
   redirect(`/admin/bookings/${id}?assignmentError=${encodeURIComponent(error)}#assigned-dumpster`);
+}
+
+function redirectWithChargeError(id: string, error: string): never {
+  redirect(`/admin/bookings/${id}?chargeError=${encodeURIComponent(error)}#charges-adjustments`);
+}
+
+function getSavedCardChargeErrorMessage(error: unknown) {
+  if (!(error instanceof PostBookingChargePaymentServiceError)) {
+    return error instanceof Error ? error.message : "Unable to charge the saved card.";
+  }
+
+  switch (error.code) {
+    case "CARD_ON_FILE_CONSENT_MISSING":
+      return "Card-on-file authorization was not found for this booking.";
+    case "SAVED_CARD_MISSING":
+      return "No active saved card is available for this customer.";
+    case "SAVED_CARD_INVALID":
+      return "The saved card record is missing provider references.";
+    case "CHARGE_NOT_PENDING":
+      return "Only charges marked ready to charge can be charged.";
+    case "PAYMENT_ALREADY_PENDING":
+      return "A saved-card charge attempt is already in progress for this charge.";
+    case "PAYMENT_ALREADY_EXISTS":
+      return "A payment attempt already exists for this charge. Refresh the page and review the charge status.";
+    case "PROVIDER_CHARGE_FAILED":
+      return error.result?.failureMessage || "Square declined or failed the saved-card charge.";
+    case "BOOKKEEPING_FAILED_AFTER_PROVIDER_SUCCESS":
+      return "Square reported a successful payment, but the booking charge could not be marked paid. Review payment records before retrying.";
+    default:
+      return error.message;
+  }
+}
+
+function normalizeBookingChargeType(value: string): BookingChargeType | null {
+  return BOOKING_CHARGE_TYPES.has(value as BookingChargeType) ? (value as BookingChargeType) : null;
+}
+
+function parseAmountCents(rawDollars: string, rawCents: string) {
+  const cents = rawCents.trim();
+  if (cents) {
+    if (!/^\d+$/.test(cents)) return null;
+    const amountCents = Number(cents);
+    return Number.isSafeInteger(amountCents) ? amountCents : null;
+  }
+
+  const normalized = rawDollars.replace(/[$,\s]/g, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+
+  const [dollarsPart, centsPart = ""] = normalized.split(".");
+  const dollars = Number(dollarsPart);
+  if (!Number.isSafeInteger(dollars)) return null;
+
+  return dollars * 100 + Number(centsPart.padEnd(2, "0"));
 }
 
 function normalizeOperationalFieldValue(fieldName: OperationalFieldName, value: unknown) {
@@ -106,6 +181,156 @@ export async function updateNotesAction(formData: FormData) {
   revalidatePath("/admin");
 
   redirect(`/admin/bookings/${id}?saved=notes#notes`);
+}
+
+export async function createDraftBookingChargeAction(formData: FormData) {
+  const bookingId = asString(formData.get("bookingId"));
+  const chargeType = normalizeBookingChargeType(asString(formData.get("chargeType")));
+  const amountCents = parseAmountCents(
+    asString(formData.get("amount")),
+    asString(formData.get("amountCents")),
+  );
+  const description = emptyToNull(asString(formData.get("description")));
+  const evidenceNotes = emptyToNull(asString(formData.get("evidenceNotes")));
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!chargeType) {
+    redirectWithChargeError(bookingId, "Choose a valid charge type.");
+  }
+  if (!amountCents || amountCents <= 0) {
+    redirectWithChargeError(bookingId, "Enter an amount greater than $0.00.");
+  }
+  if (!description) {
+    redirectWithChargeError(bookingId, "Add a short description for this draft charge.");
+  }
+
+  const tenant = await getCurrentTenant();
+  const booking = await supabaseAdmin
+    .from("bookings")
+    .select("id")
+    .eq("id", bookingId)
+    .maybeSingle<{ id: string }>();
+
+  if (booking.error) {
+    redirectWithChargeError(bookingId, booking.error.message);
+  }
+
+  if (!booking.data) {
+    redirectWithChargeError(bookingId, "Booking not found.");
+  }
+
+  const { error } = await supabaseAdmin.from("booking_charges").insert({
+    business_id: tenant.id,
+    booking_id: bookingId,
+    charge_type: chargeType,
+    description,
+    amount_cents: amountCents,
+    currency: "USD",
+    status: "draft",
+    evidence_notes: evidenceNotes,
+  });
+
+  if (error) {
+    redirectWithChargeError(bookingId, error.message);
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=charge#charges-adjustments`);
+}
+
+export async function markBookingChargeReadyAction(formData: FormData) {
+  const bookingId = asString(formData.get("bookingId"));
+  const chargeId = asString(formData.get("chargeId"));
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!chargeId) {
+    redirectWithChargeError(bookingId, "Missing charge id.");
+  }
+
+  const tenant = await getCurrentTenant();
+  const charge = await supabaseAdmin
+    .from("booking_charges")
+    .select("id, booking_id, business_id, status, amount_cents, description")
+    .eq("id", chargeId)
+    .eq("booking_id", bookingId)
+    .eq("business_id", tenant.id)
+    .maybeSingle<{
+      id: string;
+      booking_id: string;
+      business_id: string;
+      status: string;
+      amount_cents: number;
+      description: string | null;
+    }>();
+
+  if (charge.error) {
+    redirectWithChargeError(bookingId, charge.error.message);
+  }
+
+  if (!charge.data) {
+    redirectWithChargeError(bookingId, "Draft charge not found for this booking.");
+  }
+
+  if (charge.data.status !== "draft") {
+    redirectWithChargeError(bookingId, "Only draft charges can be marked ready to charge.");
+  }
+
+  if (!Number.isFinite(charge.data.amount_cents) || charge.data.amount_cents <= 0) {
+    redirectWithChargeError(bookingId, "Charge amount must be greater than $0.00 before it can be marked ready.");
+  }
+
+  if (!charge.data.description?.trim()) {
+    redirectWithChargeError(bookingId, "Charge description is required before it can be marked ready.");
+  }
+
+  const { error } = await supabaseAdmin
+    .from("booking_charges")
+    .update({ status: "pending" })
+    .eq("id", chargeId)
+    .eq("booking_id", bookingId)
+    .eq("business_id", tenant.id)
+    .eq("status", "draft");
+
+  if (error) {
+    redirectWithChargeError(bookingId, error.message);
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=charge-ready#charges-adjustments`);
+}
+
+export async function chargeBookingChargeSavedCardAction(formData: FormData) {
+  const bookingId = asString(formData.get("bookingId"));
+  const bookingChargeId = asString(formData.get("bookingChargeId"));
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!bookingChargeId) {
+    redirectWithChargeError(bookingId, "Missing charge id.");
+  }
+
+  const tenant = await getCurrentTenant();
+
+  try {
+    await chargePendingBookingChargeWithSavedCard({
+      businessId: tenant.id,
+      bookingId,
+      bookingChargeId,
+    });
+  } catch (error) {
+    redirectWithChargeError(bookingId, getSavedCardChargeErrorMessage(error));
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=charge-paid#charges-adjustments`);
 }
 
 export async function updateBookingStatusAction(formData: FormData) {

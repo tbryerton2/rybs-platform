@@ -12,6 +12,7 @@ import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/book
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { evaluateBookingAttention } from "@/lib/admin/booking-attention";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import { formatUsdFromCents } from "@/lib/money";
 import {
   buildPickupPlanningModel,
@@ -31,6 +32,9 @@ import {
   type PlacementPreference,
 } from "@/lib/placement";
 import {
+  chargeBookingChargeSavedCardAction,
+  createDraftBookingChargeAction,
+  markBookingChargeReadyAction,
   quickCancelBookingAction,
   quickMarkDeliveredAction,
   quickMarkPickedUpAction,
@@ -85,6 +89,10 @@ type Booking = {
   pickup_date: string | null;
   status: BookingStatus;
   total_price_cents: number | null;
+  payment_status: string | null;
+  paid_at: string | null;
+  payment_provider: string | null;
+  payment_provider_payment_id: string | null;
   dumpster_id: string | null;
   dumpster_size: string | null;
   dumpster_product_id: string | null;
@@ -142,6 +150,69 @@ type LinkedCustomer = {
   portal_status: string | null;
 };
 
+type BookingPaymentSummary = {
+  id: string;
+  booking_charge_id?: string | null;
+  provider: string;
+  provider_environment: string;
+  status: string;
+  amount_cents: number;
+  currency: string;
+  provider_payment_id: string | null;
+  failure_code?: string | null;
+  failure_message?: string | null;
+  paid_at: string | null;
+  failed_at: string | null;
+  created_at: string;
+};
+
+type BookingChargeType =
+  | "weight_overage"
+  | "damage"
+  | "extra_day"
+  | "trip_fee"
+  | "prohibited_material"
+  | "manual_adjustment";
+
+type BookingChargeSummary = {
+  id: string;
+  charge_type: BookingChargeType;
+  description: string | null;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  evidence_notes: string | null;
+  customer_payment_method_id: string | null;
+  provider: string | null;
+  provider_environment: string | null;
+  provider_payment_id: string | null;
+  paid_at: string | null;
+  failed_at: string | null;
+  created_at: string;
+};
+
+type BookingConsentSummary = {
+  id: string;
+  consent_type: "rental_terms" | "card_on_file";
+  consent_version: string;
+  accepted_at: string;
+  created_at: string;
+};
+
+type CustomerPaymentMethodSummary = {
+  id: string;
+  provider: string;
+  provider_environment: string;
+  provider_customer_id: string;
+  provider_payment_method_id: string;
+  card_brand: string | null;
+  card_last_4: string | null;
+  card_exp_month: number | null;
+  card_exp_year: number | null;
+  status: string;
+  created_at: string;
+};
+
 type CustomerHistoryEntry = {
   id: string;
   field_name: string;
@@ -151,6 +222,15 @@ type CustomerHistoryEntry = {
   change_reason: string | null;
   created_at: string;
 };
+
+const BOOKING_CHARGE_TYPE_OPTIONS: Array<{ value: BookingChargeType; label: string }> = [
+  { value: "weight_overage", label: "Weight overage" },
+  { value: "damage", label: "Damage" },
+  { value: "extra_day", label: "Extra day" },
+  { value: "trip_fee", label: "Trip fee" },
+  { value: "prohibited_material", label: "Prohibited material" },
+  { value: "manual_adjustment", label: "Manual adjustment" },
+];
 
 function getLatestStatusTimestamp(
   history: BookingHistoryEntry[],
@@ -186,6 +266,17 @@ function formatDateTime(value: string | null) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatDateFromTimestamp(value: string | null) {
+  if (!value) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
   }).format(new Date(value));
 }
 
@@ -226,6 +317,45 @@ function daysOnSiteClasses(days: number | null) {
   if (days >= 7) return "text-rose-600 font-semibold";
   if (days >= 5) return "text-amber-600 font-semibold";
   return "text-slate-900";
+}
+
+function formatPlainLabel(value: string | null | undefined) {
+  if (!value) return "—";
+  return value.replaceAll("_", " ");
+}
+
+function formatTitleLabel(value: string | null | undefined) {
+  const label = formatPlainLabel(value);
+  if (label === "—") return label;
+  return label
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatProviderDisplay(value: string | null | undefined) {
+  if (!value) return "card";
+  if (value === "square") return "Square";
+  return formatTitleLabel(value);
+}
+
+function paymentStatusClasses(status: string | null | undefined) {
+  switch (status) {
+    case "paid":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+    case "pending":
+      return "bg-amber-50 text-amber-700 ring-amber-200";
+    case "failed":
+    case "canceled":
+    case "cancelled":
+      return "bg-rose-50 text-rose-700 ring-rose-200";
+    case "refunded":
+    case "partially_refunded":
+      return "bg-blue-50 text-blue-700 ring-blue-200";
+    case "unpaid":
+    default:
+      return "bg-slate-100 text-slate-700 ring-slate-200";
+  }
 }
 
 function statusClasses(status: BookingStatus) {
@@ -397,6 +527,73 @@ function formatAssignedDumpsterLabel(option: AssignableDumpsterOption) {
   return `${option.displayName}${details.length ? ` • ${details.join(" • ")}` : ""}`;
 }
 
+function getLatestConsent(consents: BookingConsentSummary[], consentType: BookingConsentSummary["consent_type"]) {
+  return consents.find((consent) => consent.consent_type === consentType) ?? null;
+}
+
+function getSavedPaymentMethod(paymentMethods: CustomerPaymentMethodSummary[]) {
+  return (
+    paymentMethods.find((method) => method.status === "active") ??
+    paymentMethods[0] ??
+    null
+  );
+}
+
+function formatCardExpiration(method: CustomerPaymentMethodSummary | null) {
+  if (!method?.card_exp_month || !method.card_exp_year) return "—";
+  return `${String(method.card_exp_month).padStart(2, "0")}/${method.card_exp_year}`;
+}
+
+function formatSavedCardLabel(method: CustomerPaymentMethodSummary | null) {
+  if (!method) return "—";
+  const brand = method.card_brand ? formatPlainLabel(method.card_brand) : "Card";
+  const last4 = method.card_last_4 ? ` ending ${method.card_last_4}` : "";
+  return `${brand}${last4}`;
+}
+
+function getBookingChargeTypeLabel(chargeType: string | null | undefined) {
+  return BOOKING_CHARGE_TYPE_OPTIONS.find((option) => option.value === chargeType)?.label ?? formatTitleLabel(chargeType);
+}
+
+function chargeStatusClasses(status: string | null | undefined) {
+  switch (status) {
+    case "draft":
+      return "bg-amber-50 text-amber-700 ring-amber-200";
+    case "paid":
+      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+    case "failed":
+    case "canceled":
+      return "bg-rose-50 text-rose-700 ring-rose-200";
+    case "waived":
+    case "refunded":
+      return "bg-blue-50 text-blue-700 ring-blue-200";
+    case "pending":
+    default:
+      return "bg-slate-100 text-slate-700 ring-slate-200";
+  }
+}
+
+function getBookingChargeStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "draft":
+      return "Draft — not charged yet";
+    case "pending":
+      return "Ready to charge";
+    case "paid":
+      return "Paid";
+    case "failed":
+      return "Failed";
+    case "waived":
+      return "Waived";
+    case "canceled":
+      return "Canceled";
+    case "refunded":
+      return "Refunded";
+    default:
+      return formatTitleLabel(status);
+  }
+}
+
 function AuditHistoryCard({
   title,
   beforeValue,
@@ -451,6 +648,12 @@ function getSavedMessage(saved: string | undefined) {
       return "Operational controls saved.";
     case "assigned-dumpster":
       return "Planned dumpster saved.";
+    case "charge":
+      return "Draft charge saved.";
+    case "charge-ready":
+      return "Draft charge marked ready to charge.";
+    case "charge-paid":
+      return "Saved card charged.";
     default:
       return null;
   }
@@ -461,10 +664,10 @@ export default async function AdminBookingDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; placementError?: string; assignmentError?: string }>;
+  searchParams: Promise<{ saved?: string; placementError?: string; assignmentError?: string; chargeError?: string }>;
 }) {
   const { id } = await params;
-  const { saved, placementError, assignmentError } = await searchParams;
+  const { saved, placementError, assignmentError, chargeError } = await searchParams;
 
     const bookingSelect = `
       id,
@@ -483,6 +686,10 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      payment_status,
+      paid_at,
+      payment_provider,
+      payment_provider_payment_id,
       dumpster_id,
       dumpster_size,
       dumpster_product_id,
@@ -526,6 +733,10 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      payment_status,
+      paid_at,
+      payment_provider,
+      payment_provider_payment_id,
       dumpster_id,
       dumpster_size,
       dumpster_product_id,
@@ -558,6 +769,10 @@ export default async function AdminBookingDetailPage({
       pickup_date,
       status,
       total_price_cents,
+      payment_status,
+      paid_at,
+      payment_provider,
+      payment_provider_payment_id,
       base_rental_price_cents,
       included_rental_days,
       rental_duration_days,
@@ -633,6 +848,8 @@ export default async function AdminBookingDetailPage({
     notFound();
   }
 
+  const tenant = await getCurrentTenant();
+
   const [
     sourceBookingResult,
     priorCustomerBookingsResult,
@@ -641,6 +858,11 @@ export default async function AdminBookingDetailPage({
     historyResult,
     linkedCustomerResult,
     linkedCustomerHistoryResult,
+    latestBookingPaymentsResult,
+    bookingChargesResult,
+    bookingChargePaymentsResult,
+    bookingConsentsResult,
+    customerPaymentMethodsResult,
   ] = await Promise.all([
     booking.reordered_from_booking_id
       ? supabaseAdmin
@@ -695,6 +917,42 @@ export default async function AdminBookingDetailPage({
           .order("created_at", { ascending: false })
           .limit(10)
       : Promise.resolve({ data: [], error: null }),
+    supabaseAdmin
+      .from("booking_payments")
+      .select("id, provider, provider_environment, status, amount_cents, currency, provider_payment_id, paid_at, failed_at, created_at")
+      .eq("business_id", tenant.id)
+      .eq("booking_id", booking.id)
+      .is("booking_charge_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1),
+    supabaseAdmin
+      .from("booking_charges")
+      .select("id, charge_type, description, amount_cents, currency, status, evidence_notes, customer_payment_method_id, provider, provider_environment, provider_payment_id, paid_at, failed_at, created_at")
+      .eq("business_id", tenant.id)
+      .eq("booking_id", booking.id)
+      .order("created_at", { ascending: false }),
+    supabaseAdmin
+      .from("booking_payments")
+      .select("id, booking_charge_id, provider, provider_environment, status, amount_cents, currency, provider_payment_id, failure_code, failure_message, paid_at, failed_at, created_at")
+      .eq("business_id", tenant.id)
+      .eq("booking_id", booking.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabaseAdmin
+      .from("booking_consents")
+      .select("id, consent_type, consent_version, accepted_at, created_at")
+      .eq("business_id", tenant.id)
+      .eq("booking_id", booking.id)
+      .order("accepted_at", { ascending: false }),
+    booking.customer_id
+      ? supabaseAdmin
+          .from("customer_payment_methods")
+          .select("id, provider, provider_environment, provider_customer_id, provider_payment_method_id, card_brand, card_last_4, card_exp_month, card_exp_year, status, created_at")
+          .eq("business_id", tenant.id)
+          .eq("customer_id", booking.customer_id)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (sourceBookingResult.error && !isBookingSchemaError(sourceBookingResult.error)) {
@@ -717,6 +975,21 @@ export default async function AdminBookingDetailPage({
   }
   if (linkedCustomerHistoryResult.error && !isBookingSchemaError(linkedCustomerHistoryResult.error)) {
     throw new Error(linkedCustomerHistoryResult.error.message);
+  }
+  if (latestBookingPaymentsResult.error && !isBookingSchemaError(latestBookingPaymentsResult.error)) {
+    throw new Error(latestBookingPaymentsResult.error.message);
+  }
+  if (bookingChargesResult.error && !isBookingSchemaError(bookingChargesResult.error)) {
+    throw new Error(bookingChargesResult.error.message);
+  }
+  if (bookingChargePaymentsResult.error && !isBookingSchemaError(bookingChargePaymentsResult.error)) {
+    throw new Error(bookingChargePaymentsResult.error.message);
+  }
+  if (bookingConsentsResult.error && !isBookingSchemaError(bookingConsentsResult.error)) {
+    throw new Error(bookingConsentsResult.error.message);
+  }
+  if (customerPaymentMethodsResult.error && !isBookingSchemaError(customerPaymentMethodsResult.error)) {
+    throw new Error(customerPaymentMethodsResult.error.message);
   }
 
   const sourceBooking = isBookingSchemaError(sourceBookingResult.error)
@@ -741,6 +1014,43 @@ export default async function AdminBookingDetailPage({
   const linkedCustomerHistory = isBookingSchemaError(linkedCustomerHistoryResult.error)
     ? []
     : ((linkedCustomerHistoryResult.data ?? []) as CustomerHistoryEntry[]);
+  const latestBookingPayment = isBookingSchemaError(latestBookingPaymentsResult.error)
+    ? null
+    : (((latestBookingPaymentsResult.data ?? []) as BookingPaymentSummary[])[0] ?? null);
+  const bookingCharges = isBookingSchemaError(bookingChargesResult.error)
+    ? []
+    : ((bookingChargesResult.data ?? []) as BookingChargeSummary[]);
+  const bookingChargePayments = isBookingSchemaError(bookingChargePaymentsResult.error)
+    ? []
+    : ((bookingChargePaymentsResult.data ?? []) as BookingPaymentSummary[]).filter(
+        (payment) => payment.booking_charge_id,
+      );
+  const bookingConsents = isBookingSchemaError(bookingConsentsResult.error)
+    ? []
+    : ((bookingConsentsResult.data ?? []) as BookingConsentSummary[]);
+  const customerPaymentMethods = isBookingSchemaError(customerPaymentMethodsResult.error)
+    ? []
+    : ((customerPaymentMethodsResult.data ?? []) as CustomerPaymentMethodSummary[]);
+  const latestChargePaymentByChargeId = new Map<string, BookingPaymentSummary>();
+  for (const payment of bookingChargePayments) {
+    if (payment.booking_charge_id && !latestChargePaymentByChargeId.has(payment.booking_charge_id)) {
+      latestChargePaymentByChargeId.set(payment.booking_charge_id, payment);
+    }
+  }
+  const rentalTermsConsent = getLatestConsent(bookingConsents, "rental_terms");
+  const cardOnFileConsent = getLatestConsent(bookingConsents, "card_on_file");
+  const savedPaymentMethod = getSavedPaymentMethod(customerPaymentMethods);
+  const squarePaymentId = booking.payment_provider_payment_id ?? latestBookingPayment?.provider_payment_id ?? null;
+  const cardOnFileConsentAccepted = Boolean(cardOnFileConsent);
+  const savedCardAvailable = Boolean(savedPaymentMethod);
+  const successfulPaymentRecorded =
+    booking.payment_status === "paid" || latestBookingPayment?.status === "paid";
+  const paidAt = booking.paid_at ?? latestBookingPayment?.paid_at ?? null;
+  const paidAmountCents =
+    latestBookingPayment?.status === "paid" ? latestBookingPayment.amount_cents : booking.total_price_cents;
+  const paymentProvider = booking.payment_provider ?? latestBookingPayment?.provider ?? null;
+  const providerEnvironment =
+    latestBookingPayment?.provider_environment ?? savedPaymentMethod?.provider_environment ?? null;
   const deliveredAt = getLatestStatusTimestamp(bookingHistory, "delivered");
   const pickedUpAt = getLatestStatusTimestamp(bookingHistory, "picked_up");
   const accountEmailDiffers =
@@ -1415,6 +1725,373 @@ export default async function AdminBookingDetailPage({
           </div>
         </Section>
       ) : null}
+
+      <Section
+        title="Payment & Authorization"
+        description="Payment status, saved card, and customer authorizations for this booking."
+        icon={<CurrencyDollarIcon className="h-4 w-4" />}
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-slate-900">Payment</div>
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${paymentStatusClasses(
+                    booking.payment_status,
+                  )}`}
+                >
+                  {formatTitleLabel(booking.payment_status)}
+                </span>
+              </div>
+              <div className="text-lg font-semibold text-slate-900">
+                {successfulPaymentRecorded
+                  ? `${formatUsdFromCents(paidAmountCents)} paid${paidAt ? ` on ${formatDateFromTimestamp(paidAt)}` : ""}`
+                  : "No successful payment recorded"}
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                {successfulPaymentRecorded
+                  ? `Paid by card through ${formatProviderDisplay(paymentProvider)}`
+                  : "No successful payment recorded"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-slate-900">Saved Card</div>
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                    savedCardAvailable
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                      : "bg-slate-100 text-slate-700 ring-slate-200"
+                  }`}
+                >
+                  {savedCardAvailable ? "Card on file" : "No card"}
+                </span>
+              </div>
+              <div className="text-lg font-semibold text-slate-900">{formatSavedCardLabel(savedPaymentMethod)}</div>
+              <div className="mt-2 text-sm text-slate-600">
+                {savedPaymentMethod ? `Expires ${formatCardExpiration(savedPaymentMethod)}` : "No saved card is currently available"}
+              </div>
+              {savedPaymentMethod ? (
+                <div className="mt-3 text-sm font-medium text-emerald-700">
+                  Available for authorized post-rental charges.
+                </div>
+              ) : null}
+              {cardOnFileConsentAccepted && !savedCardAvailable ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  Card-on-file authorization was accepted, but no saved card is currently available.
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4">
+              <div className="mb-4 text-sm font-semibold text-slate-900">Customer Authorizations</div>
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">Rental Terms</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {rentalTermsConsent ? formatDateTime(rentalTermsConsent.accepted_at) : "No acceptance found"}
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                      rentalTermsConsent
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                        : "bg-slate-100 text-slate-700 ring-slate-200"
+                    }`}
+                  >
+                    {rentalTermsConsent ? "Accepted" : "Missing"}
+                  </span>
+                </div>
+                <div className="border-t border-slate-200" />
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">Card-on-file authorization</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {cardOnFileConsent ? formatDateTime(cardOnFileConsent.accepted_at) : "No authorization found"}
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                      cardOnFileConsentAccepted
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                        : "bg-slate-100 text-slate-700 ring-slate-200"
+                    }`}
+                  >
+                    {cardOnFileConsentAccepted ? "Accepted" : "Missing"}
+                  </span>
+                </div>
+              </div>
+              {savedCardAvailable && !cardOnFileConsentAccepted ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                  Saved card found, but card-on-file consent was not found for this booking.
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <details className="group rounded-2xl border border-slate-200 bg-white px-4 py-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Technical details</div>
+                <div className="mt-1 text-sm text-slate-500">Provider IDs and consent versions for troubleshooting.</div>
+              </div>
+              <span className="text-slate-400 transition group-open:rotate-180">⌄</span>
+            </summary>
+            <div className="mt-4 grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field
+                label="Square payment ID"
+                value={squarePaymentId ? <span className="font-mono text-xs break-all">{squarePaymentId}</span> : "—"}
+              />
+              <Field
+                label="Provider payment ID"
+                value={
+                  latestBookingPayment?.provider_payment_id ? (
+                    <span className="font-mono text-xs break-all">{latestBookingPayment.provider_payment_id}</span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <Field label="Provider environment" value={formatPlainLabel(providerEnvironment)} />
+              <Field label="Latest payment attempt" value={formatTitleLabel(latestBookingPayment?.status)} />
+              <Field label="Rental terms version" value={rentalTermsConsent?.consent_version ?? "—"} />
+              <Field label="Card-on-file version" value={cardOnFileConsent?.consent_version ?? "—"} />
+              <Field
+                label="Provider payment method ID"
+                value={
+                  savedPaymentMethod?.provider_payment_method_id ? (
+                    <span className="font-mono text-xs break-all">{savedPaymentMethod.provider_payment_method_id}</span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <Field
+                label="Customer provider ID"
+                value={
+                  savedPaymentMethod?.provider_customer_id ? (
+                    <span className="font-mono text-xs break-all">{savedPaymentMethod.provider_customer_id}</span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+            </div>
+          </details>
+        </div>
+      </Section>
+
+      <div id="charges-adjustments">
+        <Section
+          title="Charges & Adjustments"
+          description="Additional charges documented after booking, such as overage, damage, or extra rental days."
+          icon={<CurrencyDollarIcon className="h-4 w-4" />}
+        >
+          <div className="space-y-5">
+            {chargeError ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                {chargeError}
+              </div>
+            ) : null}
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {bookingCharges.length === 0 ? (
+                <div className="px-5 py-6 text-sm text-slate-500">No additional charges yet.</div>
+              ) : (
+                <div className="divide-y divide-slate-200">
+                  {bookingCharges.map((charge) => {
+                    const chargePayment = latestChargePaymentByChargeId.get(charge.id) ?? null;
+                    const paidAt = charge.paid_at ?? chargePayment?.paid_at ?? null;
+                    const failedAt = charge.failed_at ?? chargePayment?.failed_at ?? null;
+                    const providerPaymentId =
+                      charge.provider_payment_id ?? chargePayment?.provider_payment_id ?? null;
+
+                    return (
+                      <div key={charge.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-sm font-semibold text-slate-900">
+                              {getBookingChargeTypeLabel(charge.charge_type)}
+                            </div>
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${chargeStatusClasses(
+                                charge.status,
+                              )}`}
+                            >
+                              {getBookingChargeStatusLabel(charge.status)}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-sm text-slate-700">
+                            {charge.description || "No description provided."}
+                          </div>
+                          {charge.status === "paid" ? (
+                            <div className="mt-2 text-sm font-medium text-emerald-700">
+                              Paid{paidAt ? ` on ${formatDateTime(paidAt)}` : ""}.
+                            </div>
+                          ) : null}
+                          {charge.status === "failed" ? (
+                            <div className="mt-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                              Failed{failedAt ? ` on ${formatDateTime(failedAt)}` : ""}.
+                              {chargePayment?.failure_message ? ` ${chargePayment.failure_message}` : ""}
+                            </div>
+                          ) : null}
+                          {charge.evidence_notes ? (
+                            <div className="mt-2 text-sm text-slate-500">
+                              <span className="font-medium text-slate-600">Evidence/internal notes:</span>{" "}
+                              {charge.evidence_notes}
+                            </div>
+                          ) : null}
+                          <div className="mt-2 text-xs text-slate-400">
+                            Created {formatDateTime(charge.created_at)}
+                          </div>
+                          {charge.status === "draft" ? (
+                            <form action={markBookingChargeReadyAction} className="mt-4">
+                              <input type="hidden" name="bookingId" value={booking.id} />
+                              <input type="hidden" name="chargeId" value={charge.id} />
+                              <button
+                                type="submit"
+                                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                Mark ready to charge
+                              </button>
+                            </form>
+                          ) : null}
+                          {charge.status === "pending" ? (
+                            <details className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                              <summary className="cursor-pointer text-sm font-semibold text-amber-900">
+                                Charge saved card
+                              </summary>
+                              <div className="mt-3 space-y-3">
+                                <p className="text-sm text-amber-900">
+                                  This will charge the customer&apos;s saved card immediately.
+                                </p>
+                                <form action={chargeBookingChargeSavedCardAction}>
+                                  <input type="hidden" name="bookingId" value={booking.id} />
+                                  <input type="hidden" name="bookingChargeId" value={charge.id} />
+                                  <button
+                                    type="submit"
+                                    className="inline-flex items-center justify-center rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+                                  >
+                                    Yes, charge saved card
+                                  </button>
+                                </form>
+                              </div>
+                            </details>
+                          ) : null}
+                          {providerPaymentId || charge.provider_environment || chargePayment?.failure_code ? (
+                            <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                                Technical details
+                              </summary>
+                              <div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+                                <Field
+                                  label="Provider"
+                                  value={formatPlainLabel(charge.provider ?? chargePayment?.provider)}
+                                />
+                                <Field
+                                  label="Provider environment"
+                                  value={formatPlainLabel(
+                                    charge.provider_environment ?? chargePayment?.provider_environment,
+                                  )}
+                                />
+                                <Field
+                                  label="Provider payment ID"
+                                  value={
+                                    providerPaymentId ? (
+                                      <span className="font-mono text-xs break-all">{providerPaymentId}</span>
+                                    ) : (
+                                      "—"
+                                    )
+                                  }
+                                />
+                                <Field label="Latest payment attempt" value={formatTitleLabel(chargePayment?.status)} />
+                                <Field label="Failure code" value={chargePayment?.failure_code ?? "—"} />
+                              </div>
+                            </details>
+                          ) : null}
+                        </div>
+                        <div className="text-left text-lg font-semibold text-slate-900 lg:text-right">
+                          {formatUsdFromCents(charge.amount_cents)} {charge.currency}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <form action={createDraftBookingChargeAction} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <input type="hidden" name="bookingId" value={booking.id} />
+              <div className="mb-4">
+                <div className="text-sm font-semibold text-slate-900">Add draft charge</div>
+                <div className="mt-1 text-sm text-slate-500">
+                  Draft charges are documentation only. No customer card will be charged.
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[minmax(180px,0.75fr)_minmax(140px,0.45fr)_minmax(0,1fr)]">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Charge type</span>
+                  <select
+                    name="chargeType"
+                    defaultValue="weight_overage"
+                    className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                  >
+                    {BOOKING_CHARGE_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Amount</span>
+                  <input
+                    type="text"
+                    name="amount"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Description</span>
+                  <input
+                    type="text"
+                    name="description"
+                    placeholder="e.g., Weight ticket overage"
+                    className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-4 block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-700">Evidence/internal notes</span>
+                <textarea
+                  name="evidenceNotes"
+                  rows={3}
+                  placeholder="Scale ticket, photos, driver notes, or other internal context."
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                />
+              </label>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Save draft charge
+                </button>
+              </div>
+            </form>
+          </div>
+        </Section>
+      </div>
 
       <Section title="Financial Summary" icon={<CurrencyDollarIcon className="h-4 w-4" />}>
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70">
