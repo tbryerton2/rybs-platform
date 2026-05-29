@@ -449,16 +449,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     }
   }, [selectedDumpster.dumpsterProductId, selectedDumpster.dumpsterSize]);
 
-  const getActiveHoldIdForWindow = useCallback(
-    (deliveryYmd: string, pickupYmd: string) => {
-      const holdContext = getActiveHoldContext();
-      if (!holdContext) return null;
-      if (holdContext.holdDeliveryDate !== deliveryYmd) return null;
-      if (holdContext.holdPickupDate !== pickupYmd) return null;
-      return holdContext.holdId;
-    },
-    [getActiveHoldContext],
-  );
+  const getActiveHoldId = useCallback(() => getActiveHoldContext()?.holdId ?? null, [getActiveHoldContext]);
 
   const addActiveHoldContextParams = useCallback(
     (params: URLSearchParams) => {
@@ -552,13 +543,6 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
         ...existing,
         deliveryDate: d,
 
-        holdId: undefined,
-        holdDeliveryDate: undefined,
-        holdPickupDate: undefined,
-        holdExpiresAt: undefined,
-        holdDumpsterSize: undefined,
-        holdDumpsterProductId: undefined,
-
         maxPickupDate: undefined,
         maxDaysAllowed: undefined,
         limitedAck: false,
@@ -571,23 +555,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     setHold({ state: "idle" });
   }
 
-  function clearPersistedHold() {
-    const raw = sessionStorage.getItem(getBookingStorageKey());
-    const existing: BookingDraft = raw ? JSON.parse(raw) : {};
-
-    sessionStorage.setItem(
-      getBookingStorageKey(),
-      JSON.stringify({
-        ...existing,
-        holdId: undefined,
-        holdDeliveryDate: undefined,
-        holdPickupDate: undefined,
-        holdExpiresAt: undefined,
-        holdDumpsterSize: undefined,
-        holdDumpsterProductId: undefined,
-      }),
-    );
-
+  function resetHoldState() {
     setHold({ state: "idle" });
   }
 
@@ -645,7 +613,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           params.set("dumpsterProductId", selectedDumpster.dumpsterProductId);
         }
 
-        const activeHoldId = getActiveHoldIdForWindow(d, selectedPickupDate);
+        const activeHoldId = getActiveHoldId();
         if (activeHoldId) {
           params.set("holdId", activeHoldId);
         }
@@ -704,7 +672,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
     };
   }, [
     bookingZip,
-    getActiveHoldIdForWindow,
+    getActiveHoldId,
     normalizedDate,
     ready,
     selectedDumpster,
@@ -1195,7 +1163,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
+    <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
       <div className="mx-auto max-w-2xl px-3 pt-10 pb-16 sm:px-6">
         <div className="min-w-0 rounded-[32px] bg-white px-4 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
           {/* Header stack (match Step 1 style) */}
@@ -1386,7 +1354,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                             const checked = event.target.checked;
                             setNeedsExtraDays(checked);
                             setTimingError(null);
-                            clearPersistedHold();
+                            resetHoldState();
                             if (!checked) {
                               setPickupDate(standardPickupDate);
                             } else {
@@ -1421,7 +1389,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                               onClick={() => {
                                 setPickupDate(pickupNextAvailableDate);
                                 setTimingError(null);
-                                clearPersistedHold();
+                                resetHoldState();
                               }}
                               className="inline-flex min-h-9 max-w-full items-center justify-center rounded-full border border-[#F97316]/20 bg-[#FFF7ED] px-3 py-1.5 text-center text-sm font-semibold leading-5 text-[#C2410C] shadow-sm transition hover:border-[#F97316]/35 hover:bg-white focus:outline-none focus:ring-4 focus:ring-[#F97316]/15 sm:h-9 sm:px-3.5 sm:py-0"
                             >
@@ -1437,7 +1405,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                             onSelectDate={(value) => {
                               setPickupDate(value);
                               setTimingError(null);
-                              clearPersistedHold();
+                              resetHoldState();
                             }}
                             entries={pickupCalendarEntries}
                             loading={pickupCalendarIsLoading}

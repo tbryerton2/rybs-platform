@@ -281,6 +281,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
         ? {
             id: createSectionId(type),
             type,
+            caption: "",
             sectionTitle: "",
             intro: "",
             items: [{ label: "", headline: "", body: "" }],
@@ -288,6 +289,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
         : {
             id: createSectionId(type),
             type,
+            caption: "",
             sectionTitle: "",
             intro: "",
             items: [{ label: "", title: "", body: "" }],
@@ -547,6 +549,11 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                   {expanded ? (
                     <div className="bg-slate-50/50 px-5 py-5">
                       <div className="space-y-6">
+                        <Field
+                          label="Section Caption"
+                          value={section.caption}
+                          onChange={(value) => updateActiveHomeSection({ ...section, caption: value })}
+                        />
                         <Field
                           label="Heading"
                           value={section.sectionTitle}

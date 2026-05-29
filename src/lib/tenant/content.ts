@@ -48,6 +48,7 @@ export type HomeFlexibleSectionContent =
   | {
       id: string;
       type: "card_grid";
+      caption: string;
       sectionTitle: string;
       intro: string;
       items: Array<{
@@ -59,6 +60,7 @@ export type HomeFlexibleSectionContent =
   | {
       id: string;
       type: "steps";
+      caption: string;
       sectionTitle: string;
       intro: string;
       items: Array<{
@@ -607,6 +609,7 @@ function normalizeHomeFlexibleSections(rawValue: unknown): HomeFlexibleSectionCo
           {
             id: asString(item.id, `card-grid-${index + 1}`),
             type: "card_grid" as const,
+            caption: asString(item.caption, ""),
             sectionTitle: asString(item.sectionTitle, HOME_VALUE_PROPS_FALLBACK.sectionTitle),
             intro: asString(item.intro, HOME_VALUE_PROPS_FALLBACK.intro),
             items: asRecordArray(item.items).map((entry, itemIndex) => {
@@ -628,6 +631,7 @@ function normalizeHomeFlexibleSections(rawValue: unknown): HomeFlexibleSectionCo
           {
             id: asString(item.id, `steps-${index + 1}`),
             type: "steps" as const,
+            caption: asString(item.caption, ""),
             sectionTitle: asString(item.sectionTitle, HOME_HOW_IT_WORKS_FALLBACK.sectionTitle),
             intro: asString(item.intro, HOME_HOW_IT_WORKS_FALLBACK.intro),
             items: asRecordArray(item.items).map((entry, itemIndex) => {
@@ -668,6 +672,7 @@ export async function getHomeSectionsContent(
     {
       id: "why-choose-us",
       type: "card_grid",
+      caption: "",
       sectionTitle: valueProps.sectionTitle,
       intro: valueProps.intro,
       items: valueProps.items.map((item) => ({
@@ -679,6 +684,7 @@ export async function getHomeSectionsContent(
     {
       id: "how-it-works",
       type: "steps",
+      caption: "",
       sectionTitle: howItWorks.sectionTitle,
       intro: howItWorks.intro,
       items: howItWorks.items.map((item) => ({

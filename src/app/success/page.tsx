@@ -45,7 +45,7 @@ export default async function SuccessPage({ searchParams }: SuccessPageProps) {
     Number.isFinite(totalCents);
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
+    <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
       <div className="mx-auto max-w-2xl px-6 pb-20 pt-16">
         <div className="rounded-[32px] bg-white px-10 py-12 text-center shadow-xl ring-1 ring-slate-200/70">
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">

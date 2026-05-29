@@ -1,6 +1,7 @@
 // src/app/api/availability/route.ts
 import { NextResponse } from "next/server";
 import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
+import { getValidActiveHoldExclusionId } from "@/lib/booking-hold-exclusion";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import {
@@ -41,13 +42,20 @@ export async function GET(req: Request) {
   }
 
   try {
+    const excludeHoldId = holdId
+      ? await getValidActiveHoldExclusionId({
+          holdId,
+          dumpsterSize: selectedDumpster.dumpsterSize,
+          dumpsterProductId: selectedDumpster.dumpsterProductId,
+        })
+      : null;
     const availability = await getDeliveryAvailabilitySnapshot({
       deliveryDate: date,
       rpcDays: rentalPolicy.standardRentalDays,
       dumpsterSize: selectedDumpster.dumpsterSize,
       dumpsterProductId: selectedDumpster.dumpsterProductId,
       pickupDate: null,
-      excludeHoldIds: holdId ? [holdId] : undefined,
+      excludeHoldIds: excludeHoldId ? [excludeHoldId] : undefined,
       logContext: "api/availability",
     });
 

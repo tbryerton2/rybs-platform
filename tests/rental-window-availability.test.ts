@@ -197,6 +197,34 @@ test("pickup-date checks reject a later pickup when the extended window conflict
   assert.equal(extendedWindow.availableCount, 0);
 });
 
+test("pickup-date checks can exclude the current session hold while testing an extended window", () => {
+  const ownHold = {
+    id: "current-session-hold",
+    type: "hold" as const,
+    status: "active",
+    deliveryDate: "2026-05-27",
+    effectivePickupDate: "2026-06-03",
+    assignedDumpsterId: null,
+    dumpsterSize: "50 yard",
+    dumpsterProductId: "50-yard",
+  };
+  const requestedWindow = {
+    requestedDeliveryDate: "2026-05-27",
+    requestedPickupDate: "2026-06-06",
+    dumpsters: [{ id: "d50-a", label: "50A" }],
+    blockers: [ownHold],
+  };
+
+  const selfBlockedWindow = evaluateRentalWindowAvailability(requestedWindow);
+  const extendedWindow = evaluateRentalWindowAvailability({
+    ...requestedWindow,
+    excludeBlockerIds: ["current-session-hold"],
+  });
+
+  assert.equal(selfBlockedWindow.availableCount, 0);
+  assert.equal(extendedWindow.availableCount, 1);
+});
+
 test("backend booking guard rejects an unavailable rental window", async () => {
   await assert.rejects(
     () =>

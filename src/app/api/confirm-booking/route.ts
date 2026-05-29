@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
+import { findBookingConsent, linkBookingConsentsToBooking } from "@/lib/booking-consents";
+import { CARD_ON_FILE_CONSENT_VERSION } from "@/lib/booking-terms";
 import { createBookingRecord } from "@/lib/booking-records";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
@@ -13,6 +15,7 @@ import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placem
 import { attachReorderReference } from "@/lib/reorder";
 import { supabaseServer } from "@/lib/supabase/server";
 import { createCheckoutPayment, linkCheckoutPaymentToBooking } from "@/lib/payments/payment-service";
+import { saveCustomerPaymentMethod } from "@/lib/payments/customer-payment-method-service";
 import { getCustomerFacingPaymentFailureMessage } from "@/lib/payments/payment-errors";
 import type { CheckoutPaymentResult, PaymentProvider } from "@/lib/payments/types";
 import { getCurrentTenant } from "@/lib/tenant/server";
@@ -152,10 +155,12 @@ export async function POST(req: Request) {
     const pickupDate = ((draft.pickupDate ?? body.pickupDate) || "").trim();
     const pickupMode = (draft.pickupMode ?? body.pickupMode) === "date" ? "date" : "unspecified";
 
+    const customerFirstName = ((draft.customerFirstName ?? body.customerFirstName) || "").trim();
+    const customerLastName = ((draft.customerLastName ?? body.customerLastName) || "").trim();
     const customerName = getCustomerName({
       customerName: draft.customerName ?? body.customerName,
-      customerFirstName: draft.customerFirstName ?? body.customerFirstName,
-      customerLastName: draft.customerLastName ?? body.customerLastName,
+      customerFirstName,
+      customerLastName,
     });
     const customerEmail = ((draft.customerEmail ?? body.customerEmail) || "").trim();
     const customerPhone = normalizePhone(draft.customerPhone ?? body.customerPhone);
@@ -501,6 +506,111 @@ export async function POST(req: Request) {
     }
 
     let paymentLinkWarning: string | null = null;
+    let consentLinkWarning: string | null = null;
+    let cardOnFileWarning: string | null = null;
+    let tenantForPostBooking: Awaited<ReturnType<typeof getCurrentTenant>> | null = null;
+
+    try {
+      tenantForPostBooking = await getCurrentTenant();
+      await linkBookingConsentsToBooking({
+        businessId: tenantForPostBooking.id,
+        bookingHoldId: holdId,
+        bookingId: createdBooking.bookingId,
+        customerId: createdBooking.customerId,
+      });
+    } catch (consentLinkError) {
+      consentLinkWarning =
+        consentLinkError instanceof Error
+          ? consentLinkError.message
+          : "Booking was created but consent records could not be linked to the booking.";
+      console.error("[confirm-booking] booking consent link failed after booking creation:", {
+        bookingId: createdBooking.bookingId,
+        holdId,
+        customerId: createdBooking.customerId,
+        error: consentLinkError,
+      });
+    }
+
+    if (paymentMethodToken && checkoutPayment?.status === "paid" && checkoutPayment.paymentProvider === "square") {
+      if (!createdBooking.customerId) {
+        cardOnFileWarning = "Booking was created, but the card was not saved because the booking customer was missing.";
+        console.error("[confirm-booking] skipped card-on-file save because booking customer is missing:", {
+          bookingId: createdBooking.bookingId,
+          holdId,
+        });
+      } else if (!checkoutPayment.providerPaymentId) {
+        cardOnFileWarning = "Booking was created, but the card was not saved because the Square payment ID was missing.";
+        console.error("[confirm-booking] skipped card-on-file save because Square payment ID is missing:", {
+          bookingId: createdBooking.bookingId,
+          holdId,
+          customerId: createdBooking.customerId,
+          paymentId: checkoutPayment.paymentId,
+        });
+      } else {
+        try {
+          const tenant = tenantForPostBooking ?? (await getCurrentTenant());
+          const cardOnFileConsent = await findBookingConsent({
+            businessId: tenant.id,
+            bookingHoldId: holdId,
+            consentType: "card_on_file",
+            consentVersion: CARD_ON_FILE_CONSENT_VERSION,
+          });
+
+          if (!cardOnFileConsent) {
+            cardOnFileWarning =
+              "Booking was created, but the card was not saved because card-on-file authorization was missing.";
+            console.error("[confirm-booking] skipped card-on-file save because consent was missing:", {
+              bookingId: createdBooking.bookingId,
+              holdId,
+              customerId: createdBooking.customerId,
+            });
+          } else {
+            const savedPaymentMethod = await saveCustomerPaymentMethod({
+              businessId: tenant.id,
+              customerId: createdBooking.customerId,
+              provider: "square",
+              providerEnvironment: checkoutPayment.providerEnvironment,
+              cardSaveSourceId: checkoutPayment.providerPaymentId,
+              name: customerName,
+              givenName: customerFirstName || null,
+              familyName: customerLastName || null,
+              email: customerEmail,
+              phone: customerPhone,
+              address: {
+                addressLine1: customerStreet,
+                locality: customerCity,
+                administrativeDistrictLevel1: customerState,
+                postalCode: customerZip,
+                country: "US",
+              },
+              consentText: cardOnFileConsent.consentText,
+              consentAcceptedAt: cardOnFileConsent.acceptedAt,
+              customerIdempotencyKey: `cof-customer-${createdBooking.customerId}`,
+              paymentMethodIdempotencyKey: `cof-card-${createdBooking.bookingId}`,
+            });
+
+            console.info("[confirm-booking] saved card-on-file after checkout:", {
+              bookingId: createdBooking.bookingId,
+              holdId,
+              customerId: createdBooking.customerId,
+              customerProviderAccountId: savedPaymentMethod.customerProviderAccount.id,
+              customerPaymentMethodId: savedPaymentMethod.paymentMethod.id,
+            });
+          }
+        } catch (cardOnFileError) {
+          cardOnFileWarning =
+            cardOnFileError instanceof Error
+              ? cardOnFileError.message
+              : "Booking was created, but the card could not be saved on file.";
+          console.error("[confirm-booking] card-on-file save failed after booking creation:", {
+            bookingId: createdBooking.bookingId,
+            holdId,
+            customerId: createdBooking.customerId,
+            error: cardOnFileError,
+          });
+        }
+      }
+    }
 
     if (checkoutPayment) {
       try {
@@ -598,7 +708,11 @@ export async function POST(req: Request) {
           bookingId: createdBooking.bookingId,
           bookingRef: createdBooking.bookingRef,
           customerEmail: customerEmail || null,
-          warning: paymentLinkWarning || "Booking created, but hold status failed to finalize.",
+          warning:
+            paymentLinkWarning ||
+            consentLinkWarning ||
+            cardOnFileWarning ||
+            "Booking created, but hold status failed to finalize.",
         },
         { status: 200 }
       );
@@ -615,6 +729,8 @@ export async function POST(req: Request) {
       paymentId: checkoutPayment?.paymentId,
       warning:
         paymentLinkWarning ??
+        consentLinkWarning ??
+        cardOnFileWarning ??
         (createdBooking.placementPersistenceSkipped
           ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
           : undefined),

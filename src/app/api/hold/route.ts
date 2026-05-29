@@ -139,28 +139,45 @@ export async function POST(req: Request) {
       return setCookie ? await attachClientIdCookie(res, clientId) : res;
     }
 
-    // 🔒 Basic rate limit: 1 new hold per 10 seconds per client
-    const tenSecondsAgoIso = new Date(Date.now() - 10_000).toISOString();
-
-    const recentHold = await supabase
+    const activeClientHold = await supabase
       .from("booking_holds")
       .select("id")
       .eq("client_id", clientId)
-      .gte("created_at", tenSecondsAgoIso)
+      .eq("status", "active")
+      .gt("expires_at", nowIso)
       .limit(1);
 
-    if (recentHold.error) {
+    if (activeClientHold.error) {
       return NextResponse.json(
-        { ok: false, error: "Rate limit check failed." },
+        { ok: false, error: activeClientHold.error.message || "Hold lookup failed." },
         { status: 500 }
       );
     }
 
-    if (recentHold.data && recentHold.data.length > 0) {
-      return NextResponse.json(
-        { ok: false, error: "Please wait a few seconds before trying again." },
-        { status: 429 }
-      );
+    // 🔒 Basic rate limit: 1 new hold per 10 seconds per client
+    const tenSecondsAgoIso = new Date(Date.now() - 10_000).toISOString();
+
+    if (!activeClientHold.data?.length) {
+      const recentHold = await supabase
+        .from("booking_holds")
+        .select("id")
+        .eq("client_id", clientId)
+        .gte("created_at", tenSecondsAgoIso)
+        .limit(1);
+
+      if (recentHold.error) {
+        return NextResponse.json(
+          { ok: false, error: "Rate limit check failed." },
+          { status: 500 }
+        );
+      }
+
+      if (recentHold.data && recentHold.data.length > 0) {
+        return NextResponse.json(
+          { ok: false, error: "Please wait a few seconds before trying again." },
+          { status: 429 }
+        );
+      }
     }
 
 

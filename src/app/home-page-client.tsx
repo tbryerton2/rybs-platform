@@ -30,6 +30,7 @@ type HomePageClientProps = {
     | {
         id: string;
         type: "card_grid";
+        caption: string;
         sectionTitle: string;
         intro: string;
         items: Array<{
@@ -41,6 +42,7 @@ type HomePageClientProps = {
     | {
         id: string;
         type: "steps";
+        caption: string;
         sectionTitle: string;
         intro: string;
         items: Array<{
@@ -371,11 +373,18 @@ export default function HomePageClient({
 
       <div className="mx-auto max-w-6xl space-y-16 px-6 pb-24 pt-10 md:pt-12">
         {homeSectionsContent.map((section) => {
+          const sectionCaption = section.caption.trim();
+
           if (section.type === "card_grid") {
             return (
               <section key={section.id}>
                 <div className="flex items-end justify-between gap-6">
                   <div>
+                    {sectionCaption ? (
+                      <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#F97316]">
+                        {sectionCaption}
+                      </div>
+                    ) : null}
                     <h2 className="text-2xl font-semibold text-[#0F172A]">
                       {section.sectionTitle}
                     </h2>
@@ -398,6 +407,11 @@ export default function HomePageClient({
 
           return (
             <section key={section.id}>
+              {sectionCaption ? (
+                <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-[#F97316]">
+                  {sectionCaption}
+                </div>
+              ) : null}
               <h2 className="text-2xl font-semibold text-[#0F172A]">
                 {section.sectionTitle}
               </h2>

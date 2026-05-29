@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
+import { getValidActiveHoldExclusionId } from "@/lib/booking-hold-exclusion";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import {
@@ -54,7 +55,7 @@ async function getAvailabilityEntry(
   dumpsterSize: string,
   dumpsterProductId: string | null,
   fixedDeliveryDate: string | null = null,
-  activeHoldContext: { holdId: string; deliveryDate: string; pickupDate: string } | null = null,
+  activeHoldContext: { holdId: string } | null = null,
 ): Promise<CalendarAvailabilityResult> {
   if (blockedLabel) {
     return {
@@ -81,13 +82,7 @@ async function getAvailabilityEntry(
   }
 
   const requestedDeliveryDate = fixedDeliveryDate ?? date;
-  const requestedPickupDate = fixedDeliveryDate ? date : addDaysYmd(date, standardRentalDays);
-  const excludeHoldIds =
-    activeHoldContext &&
-    activeHoldContext.deliveryDate === requestedDeliveryDate &&
-    activeHoldContext.pickupDate === requestedPickupDate
-      ? [activeHoldContext.holdId]
-      : undefined;
+  const excludeHoldIds = activeHoldContext ? [activeHoldContext.holdId] : undefined;
 
   const availability = await getDeliveryAvailabilitySnapshot({
     deliveryDate: requestedDeliveryDate,
@@ -179,6 +174,16 @@ export async function GET(req: Request) {
   try {
     const retailSiteSettings = await getRetailSiteSettings();
     const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
+    const excludeHoldId = activeHoldContext
+      ? await getValidActiveHoldExclusionId({
+          holdId: activeHoldContext.holdId,
+          holdDeliveryDate: holdDeliveryDate,
+          holdPickupDate: holdPickupDate,
+          dumpsterSize: selectedDumpster.dumpsterSize,
+          dumpsterProductId: selectedDumpster.dumpsterProductId,
+        })
+      : null;
+    const activeHoldForAvailability = excludeHoldId ? { holdId: excludeHoldId } : null;
     const dates = Array.from({ length: days }, (_, index) => addDaysYmd(start, index));
     const results: CalendarAvailabilityResult[] = [];
 
@@ -195,7 +200,7 @@ export async function GET(req: Request) {
             selectedDumpster.dumpsterSize,
             selectedDumpster.dumpsterProductId,
             fixedDeliveryDate || null,
-            activeHoldContext,
+            activeHoldForAvailability,
           );
         }),
       );

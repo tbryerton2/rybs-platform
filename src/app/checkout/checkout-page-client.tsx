@@ -7,17 +7,11 @@ import {
   priceQuoteMatchesSelection,
   type BookingPriceQuote,
 } from "@/lib/booking-pricing";
-import { formatUsdFromCents } from "@/lib/money";
-import { getReorderNotice } from "@/lib/reorder";
 import {
-  getAccessIssueLabel,
-  getDeliveryPresenceLabel,
-  getPlacementPreferenceLabel,
-  sanitizePlacementDetails,
-  type AccessIssue,
-  type DeliveryPresence,
-  type PlacementPreference,
-} from "@/lib/placement";
+  CARD_ON_FILE_CONSENT_TEXT,
+  CARD_ON_FILE_CONSENT_VERSION,
+} from "@/lib/booking-terms";
+import { formatUsdFromCents } from "@/lib/money";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 
 type SquareTokenizeResult = {
@@ -142,15 +136,6 @@ type BookingDraft = {
   customerCity?: string;
   customerState?: string;
   customerZip?: string;
-  placementPreference?: PlacementPreference | null;
-  placementDetails?: string | null;
-  accessIssues?: AccessIssue[];
-  gateInstructions?: string | null;
-  deliveryPresence?: DeliveryPresence | null;
-  alternateContactName?: string | null;
-  alternateContactPhone?: string | null;
-  placementPhotoUrl?: string | null;
-  specialDeliveryInstructions?: string | null;
 
   deliveryDate?: string;
 
@@ -169,32 +154,14 @@ function isYMD(s: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test((s || "").trim());
 }
 
-function formatDateLong(ymd: string) {
+function formatDateCompact(ymd: string) {
   if (!isYMD(ymd)) return ymd || "—";
   const [y, m, d] = ymd.split("-").map((n) => Number(n));
   const dt = new Date(y, m - 1, d);
   return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
     month: "short",
-    day: "2-digit",
-    year: "numeric",
+    day: "numeric",
   }).format(dt);
-}
-
-function formatPhoneUS(input: string) {
-  const digits = (input || "").replace(/\D/g, "");
-  if (!digits) return "—";
-
-  // handle leading country code
-  const d = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
-
-  // only format clean 10-digit US numbers
-  if (d.length !== 10) return input.trim() || "—";
-
-  const area = d.slice(0, 3);
-  const mid = d.slice(3, 6);
-  const last = d.slice(6);
-  return `(${area}) ${mid}-${last}`;
 }
 
 function getBookingStorageKey() {
@@ -244,6 +211,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const [squareLoading, setSquareLoading] = useState(false);
   const [squareError, setSquareError] = useState<string | null>(null);
   const [squareFallbackReason, setSquareFallbackReason] = useState<string | null>(null);
+  const [cardOnFileConsentAccepted, setCardOnFileConsentAccepted] = useState(false);
   const customerDisplayName = getCustomerDisplayName(draft);
 
   useEffect(() => {
@@ -491,36 +459,20 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
 
   const deliveryDateLabel = useMemo(
-    () => formatDateLong((draft.deliveryDate || "").trim()),
+    () => formatDateCompact((draft.deliveryDate || "").trim()),
     [draft.deliveryDate]
   );
 
   const pickupLabel = useMemo(() => {
     const pd = (draft.pickupDate || "").trim();
 
-    if (isYMD(pd)) return formatDateLong(pd);
+    if (isYMD(pd)) return formatDateCompact(pd);
 
     const fallbackPickupDate = (draft.priceQuote?.effectivePickupDate || draft.priceQuote?.standardPickupDate || "").trim();
-    if (isYMD(fallbackPickupDate)) return formatDateLong(fallbackPickupDate);
+    if (isYMD(fallbackPickupDate)) return formatDateCompact(fallbackPickupDate);
 
     return "—";
   }, [draft.pickupDate, draft.priceQuote?.effectivePickupDate, draft.priceQuote?.standardPickupDate]);
-
-  const placementDetails = useMemo(
-    () =>
-      sanitizePlacementDetails({
-        placementPreference: draft.placementPreference ?? null,
-        placementDetails: draft.placementDetails ?? null,
-        accessIssues: draft.accessIssues ?? [],
-        gateInstructions: draft.gateInstructions ?? null,
-        deliveryPresence: draft.deliveryPresence ?? null,
-        alternateContactName: draft.alternateContactName ?? null,
-        alternateContactPhone: draft.alternateContactPhone ?? null,
-        placementPhotoUrl: draft.placementPhotoUrl ?? null,
-        specialDeliveryInstructions: draft.specialDeliveryInstructions ?? null,
-      }),
-    [draft],
-  );
 
   const holdExpiresAtMs = useMemo(() => {
     const iso = (draft.holdExpiresAt || "").trim();
@@ -584,6 +536,47 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
     if (!validateRes.ok || !validateJson?.valid) {
       setError("Your hold has expired. Please choose a new delivery date.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function recordCardOnFileConsent() {
+    if (!cardOnFileConsentAccepted) {
+      setError("Please authorize today’s payment and future documented rental charges before continuing.");
+      return false;
+    }
+
+    if (!draft.holdId) {
+      setError("Your session has expired. Please start again.");
+      return false;
+    }
+
+    try {
+      const consentRes = await fetch("/api/booking-consents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingHoldId: draft.holdId,
+          consentType: "card_on_file",
+          consentVersion: CARD_ON_FILE_CONSENT_VERSION,
+          acceptedAt: new Date().toISOString(),
+          sourcePage: "checkout",
+        }),
+      });
+
+      const consentJson = await consentRes.json().catch(() => ({}));
+
+      if (!consentRes.ok || !consentJson?.ok) {
+        setError(
+          consentJson?.error ||
+            "We could not record your card-on-file authorization. Please try again.",
+        );
+        return false;
+      }
+    } catch {
+      setError("We could not record your card-on-file authorization. Please try again.");
       return false;
     }
 
@@ -697,6 +690,9 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
       const holdValid = await validateActiveHold();
       if (!holdValid) return;
 
+      const consentRecorded = await recordCardOnFileConsent();
+      if (!consentRecorded) return;
+
       const tokenResult = await squareCard.tokenize();
       if (tokenResult.status !== "OK" || !tokenResult.token) {
         setSquareError(getTokenizationError(tokenResult));
@@ -724,6 +720,9 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
       const holdValid = await validateActiveHold();
       if (!holdValid) return;
 
+      const consentRecorded = await recordCardOnFileConsent();
+      if (!consentRecorded) return;
+
       // 💳 Simulate payment
       await new Promise((r) => setTimeout(r, 600));
 
@@ -740,7 +739,6 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const baseRentalCents = draft.priceQuote?.rentalPriceCents ?? 0;
   const extraDaysChargeCents = draft.priceQuote?.extraDaysChargeCents ?? 0;
   const subtotalCents = draft.priceQuote?.subtotalCents ?? baseRentalCents + extraDaysChargeCents;
-  const salesTaxRate = draft.priceQuote?.salesTaxRate ?? 0.08;
   const salesTaxCents = draft.priceQuote?.salesTaxCents ?? 0;
   const feesCents = 0; // TODO: fees later
   const totalCents = (draft.priceQuote?.totalCents ?? subtotalCents + salesTaxCents) + feesCents;
@@ -748,23 +746,30 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const canSubmitPayment = !!draft.priceQuote && !quoteLoading;
   const squareConfig = getSquareConfigStatus();
   const squareConfigured = squareConfig.configured;
-  const canSubmitSquarePayment = squareConfigured && squareReady && !!squareCard && canSubmitPayment;
+  const canSubmitSquarePayment =
+    squareConfigured && squareReady && !!squareCard && canSubmitPayment && cardOnFileConsentAccepted;
   const showSimulatedPayment = ENABLE_SIMULATED_CHECKOUT;
   const showPaymentUnavailableMessage =
     !showSimulatedPayment &&
     ((!squareConfigured && Boolean(squareFallbackReason)) ||
       (squareConfigured && Boolean(squareError) && !squareReady));
-    
+  const serviceLocation =
+    [draft.customerCity, draft.customerState].filter(Boolean).join(", ") ||
+    (draft.customerZip || draft.zip || "").trim() ||
+    "—";
+  const dumpsterLabel = (draft.dumpsterDisplayName || draft.dumpsterSize || "").trim() || "—";
+  const showExtraDaysRow = Boolean(draft.priceQuote?.extraDays && extraDaysChargeCents > 0);
+  const showSalesTaxRow = salesTaxCents > 0;
+
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
+    <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
       <div className="mx-auto max-w-2xl px-6 pt-10 pb-16">
         <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 sm:px-12 sm:pb-12 sm:pt-8 shadow-xl ring-1 ring-slate-200/70">
-          {/* Header stack (match other steps) */}
           <div className="space-y-3">
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Step 5 of 5
+                  Secure payment
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
                   <div className="h-2 w-full rounded-full bg-[#F97316]" />
@@ -772,236 +777,59 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
               </div>
             </div>
 
-            <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">{content.title}</h1>
+            <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">Secure checkout</h1>
             <p className="text-[#475569]">{content.description}</p>
           </div>
 
           <section className="mt-8 space-y-6">
-            {/* Order summary */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <div className="text-sm font-semibold text-slate-900">{content.orderSummaryTitle}</div>
 
               <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Base price</span>
-                  <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
-                    {quoteLoading ? "Calculating..." : fmtMoney(baseRentalCents)}
-                  </span>
-                </div>
+                <div className="text-sm">
+                  <div className="space-y-1">
+                    <div className="font-semibold text-slate-900">{dumpsterLabel}</div>
+                    <div className="text-slate-600">
+                      {deliveryDateLabel} → {pickupLabel}
+                    </div>
+                    <div className="text-slate-600">{serviceLocation}</div>
+                  </div>
 
-                {draft.priceQuote?.extraDays ? (
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <span className="text-slate-600">
-                      Extra days ({draft.priceQuote.extraDays} x {fmtMoney(draft.priceQuote.dailyOveragePriceCents)})
+                  <div className="mt-4 space-y-2 border-t border-slate-200 pt-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-600">Base price</span>
+                      <span className="font-semibold text-slate-900 tabular-nums">
+                        {quoteLoading ? "Calculating..." : fmtMoney(baseRentalCents)}
+                      </span>
+                    </div>
+                    {showExtraDaysRow ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-slate-600">Extra days</span>
+                        <span className="font-semibold text-slate-900 tabular-nums">
+                          {quoteLoading ? "Calculating..." : fmtMoney(extraDaysChargeCents)}
+                        </span>
+                      </div>
+                    ) : null}
+                    {showSalesTaxRow ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-slate-600">Sales tax</span>
+                        <span className="font-semibold text-slate-900 tabular-nums">
+                          {quoteLoading ? "Calculating..." : fmtMoney(salesTaxCents)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-4 border-t border-slate-200 pt-3">
+                    <span className="text-base font-semibold text-slate-900">Total</span>
+                    <span className="text-right text-base font-semibold text-slate-900 tabular-nums">
+                      {quoteLoading ? "Calculating..." : fmtMoney(totalCents)}
                     </span>
-                    <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
-                      {quoteLoading ? "Calculating..." : fmtMoney(extraDaysChargeCents)}
-                    </span>
                   </div>
-                ) : null}
-
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-slate-600">NY sales tax ({Math.round(salesTaxRate * 100)}%)</span>
-                  <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
-                    {quoteLoading ? "Calculating..." : fmtMoney(salesTaxCents)}
-                  </span>
-                </div>
-
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Fees</span>
-                  <span className="w-24 text-right font-semibold text-slate-900 tabular-nums">
-                    {fmtMoney(feesCents)}
-                  </span>
-                </div>
-
-                <div className="mt-4 border-t border-slate-200 pt-3 flex items-center justify-between">
-                  <span className="text-base font-semibold text-slate-900">Total</span>
-                  <span className="w-24 text-right text-base font-semibold text-slate-900 tabular-nums">
-                    {quoteLoading ? "Calculating..." : fmtMoney(totalCents)}
-                  </span>
-                </div>
-              </div>
-
-              {draft.priceQuote ? (
-                <div className="mt-3 text-xs text-slate-500">
-                  {`Includes up to ${draft.priceQuote.standardRentalDays} days. `}
-                  {`${fmtMoney(draft.priceQuote.dailyOveragePriceCents)} per extra day after day ${draft.priceQuote.standardRentalDays}. `}
-                  {draft.priceQuote.maxRentalDays
-                    ? `Maximum rental length: ${draft.priceQuote.maxRentalDays} days. `
-                    : ""}
-                  {!draft.priceQuote.allowExtendedRentalAtBooking
-                    ? "Online booking is limited to the included rental period."
-                    : draft.priceQuote.extraDays > 0
-                      ? `This booking includes ${draft.priceQuote.extraDays} extra day${draft.priceQuote.extraDays === 1 ? "" : "s"}.`
-                      : ""}
-                </div>
-              ) : null}
-
-            <div className="mt-4 grid gap-4">
-                {draft.reorderSourceBookingId ? (
-                  <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 text-sm leading-6 text-slate-700">
-                    <div className="font-semibold text-slate-900">{content.reorderTitle}</div>
-                    <div className="mt-1">
-                      {getReorderNotice(draft.reorderSourceBookingRef)}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* 1) Contact */}
-                {/* Contact */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-semibold text-slate-900">Contact</div>
-
-                  <div className="mt-3 space-y-2 text-sm">
-                    <div className="flex items-baseline">
-                      <span className="w-16 text-slate-500">Name:</span>
-                      <span className="font-medium text-slate-900">
-                        {customerDisplayName || "—"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline">
-                      <span className="w-16 text-slate-500">Email:</span>
-                      <span className="font-medium text-slate-900 break-all">
-                        {(draft.customerEmail || "").trim() || "—"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline">
-                      <span className="w-16 text-slate-500">Phone:</span>
-                      <span className="font-medium text-slate-900 tabular-nums">
-                        {formatPhoneUS((draft.customerPhone || "").trim())}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2) Address */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-900">Address</div>
-                  <div className="mt-2 text-slate-700">
-                    {(draft.customerStreet || "").trim() || "—"}
-                    <br />
-                    {[draft.customerCity, draft.customerState].filter(Boolean).join(", ") || "—"}
-                    {draft.customerZip ? ` ${draft.customerZip}` : ""}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-900">Placement & access</div>
-                  <div className="mt-2 space-y-2 text-sm text-slate-700">
-                    <div>
-                      <span className="text-slate-500">Placement:</span>{" "}
-                      <span className="font-medium text-slate-900">
-                        {getPlacementPreferenceLabel(placementDetails.placementPreference)}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Drop area:</span>{" "}
-                      <span className="font-medium text-slate-900">
-                        {placementDetails.placementDetails || "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500">Delivery presence:</span>{" "}
-                      <span className="font-medium text-slate-900">
-                        {getDeliveryPresenceLabel(placementDetails.deliveryPresence)}
-                      </span>
-                    </div>
-                    {placementDetails.accessIssues.length ? (
-                      <div>
-                        <span className="text-slate-500">Access issues:</span>{" "}
-                        <span className="font-medium text-slate-900">
-                          {placementDetails.accessIssues.map(getAccessIssueLabel).join(", ")}
-                        </span>
-                      </div>
-                    ) : null}
-                    {placementDetails.gateInstructions ? (
-                      <div>
-                        <span className="text-slate-500">Gate / access:</span>{" "}
-                        <span className="font-medium text-slate-900">{placementDetails.gateInstructions}</span>
-                      </div>
-                    ) : null}
-                    {placementDetails.alternateContactName || placementDetails.alternateContactPhone ? (
-                      <div>
-                        <span className="text-slate-500">Alternate contact:</span>{" "}
-                        <span className="font-medium text-slate-900">
-                          {[placementDetails.alternateContactName, formatPhoneUS(placementDetails.alternateContactPhone || "")]
-                            .filter((value) => value && value !== "—")
-                            .join(" • ")}
-                        </span>
-                      </div>
-                    ) : null}
-                    {placementDetails.specialDeliveryInstructions ? (
-                      <div>
-                        <span className="text-slate-500">Special instructions:</span>{" "}
-                        <span className="font-medium text-slate-900">
-                          {placementDetails.specialDeliveryInstructions}
-                        </span>
-                      </div>
-                    ) : null}
-                    {placementDetails.placementPhotoUrl ? (
-                      <div className="pt-1">
-                        <a
-                          href={placementDetails.placementPhotoUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm font-semibold text-[#F97316] hover:underline"
-                        >
-                          View placement photo
-                        </a>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                {/* 3) Delivery date */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-900">Dumpster</div>
-                  <div className="mt-2 space-y-2 text-sm text-slate-700">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Size</span>
-                      <span className="font-medium text-slate-900">
-                        {(draft.dumpsterDisplayName || draft.dumpsterSize || "").trim() || "—"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Included weight</span>
-                      <span className="font-medium text-slate-900">
-                        {typeof draft.includedWeightTons === "number"
-                          ? `${draft.includedWeightTons} ton${draft.includedWeightTons === 1 ? "" : "s"}`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Per-ton overage</span>
-                      <span className="font-medium text-slate-900">
-                        {typeof draft.tonOveragePrice === "number"
-                          ? `${fmtMoney(Math.round(draft.tonOveragePrice * 100))} per ton`
-                          : "—"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-900">Delivery date</div>
-                  <div className="mt-1 text-slate-700">{deliveryDateLabel}</div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {content.deliveryTimeNote}
-                  </div>
-                </div>
-
-                {/* 4) Pickup date */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-900">Pickup</div>
-                  <div className="mt-1 text-slate-700">{pickupLabel}</div>
-                  <div className="mt-1 text-xs text-slate-500">{content.pickupNotice}</div>
                 </div>
               </div>
             </div>
 
-            {/* Payment placeholder */}
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <div className="text-sm font-semibold text-slate-900">{content.paymentTitle}</div>
               <p className="mt-1 text-sm text-slate-600">
@@ -1015,6 +843,34 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                     {content.holdExpiredNotice}
                   </div>
                 )}
+
+                <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-4">
+                  <label className="flex items-start gap-3 text-sm text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={cardOnFileConsentAccepted}
+                      onChange={(event) => {
+                        setCardOnFileConsentAccepted(event.target.checked);
+                        if (event.target.checked) setError(null);
+                      }}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]"
+                    />
+                    <span className="leading-6">
+                      I authorize today’s payment and authorize my card to be securely saved with Square for
+                      documented additional charges related to this rental, including extra weight, damage,
+                      prohibited materials, extra rental days, failed access, or other fees described in the
+                      Rental Terms.
+                    </span>
+                  </label>
+                  <details className="mt-3 text-xs leading-5 text-slate-600">
+                    <summary className="cursor-pointer font-semibold text-[#F97316]">
+                      View card-on-file authorization
+                    </summary>
+                    <div className="mt-2 whitespace-pre-line">
+                      {CARD_ON_FILE_CONSENT_TEXT}
+                    </div>
+                  </details>
+                </div>
 
                 {squareConfigured ? (
                   <div className="space-y-3">
@@ -1072,7 +928,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                     <button
                       type="button"
                       onClick={handleSimulatePayment}
-                      disabled={isPaying || holdExpired || !canSubmitPayment}
+                      disabled={isPaying || holdExpired || !canSubmitPayment || !cardOnFileConsentAccepted}
                       className="group w-full h-14 rounded-2xl border border-slate-200 bg-white text-slate-900 font-semibold text-base shadow-sm transition-all duration-200 ease-out hover:bg-slate-50 hover:shadow-md active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <span className="flex items-center justify-center gap-2">

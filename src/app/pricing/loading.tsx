@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <main className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
+    <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
       <div className="mx-auto max-w-6xl px-6 pt-20">
         <div className="rounded-3xl bg-white p-10 shadow-sm ring-1 ring-slate-200">
           <div className="text-sm text-slate-500">Loading pricing...</div>

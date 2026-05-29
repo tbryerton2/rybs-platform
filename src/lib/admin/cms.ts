@@ -32,6 +32,7 @@ export type HomeHeroValue = {
 export type HomeCardGridSection = {
   id: string;
   type: "card_grid";
+  caption: string;
   sectionTitle: string;
   intro: string;
   items: Array<{
@@ -44,6 +45,7 @@ export type HomeCardGridSection = {
 export type HomeStepsSection = {
   id: string;
   type: "steps";
+  caption: string;
   sectionTitle: string;
   intro: string;
   items: Array<{
@@ -162,6 +164,7 @@ function normalizeCardGridSection(rawValue: unknown, fallbackId: string): HomeCa
   return {
     id: asString(raw.id, fallbackId),
     type: "card_grid",
+    caption: asString(raw.caption),
     sectionTitle: asString(raw.sectionTitle),
     intro: asString(raw.intro),
     items: asRecordArray(raw.items).map((item) => ({
@@ -178,6 +181,7 @@ function normalizeStepsSection(rawValue: unknown, fallbackId: string): HomeSteps
   return {
     id: asString(raw.id, fallbackId),
     type: "steps",
+    caption: asString(raw.caption),
     sectionTitle: asString(raw.sectionTitle),
     intro: asString(raw.intro),
     items: asRecordArray(raw.items).map((item) => ({

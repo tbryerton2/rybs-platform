@@ -65,7 +65,7 @@ export default async function PricingPage({
   });
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] text-[#0F172A]">
+    <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
       {preview ? (
         <section className="border-b border-amber-200 bg-amber-50">
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3 text-sm text-amber-900">
