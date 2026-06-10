@@ -27,7 +27,8 @@ type PortalRequestBaseRow = {
 type PortalRequestBookingRow = {
   id: string;
   customer_id: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -56,9 +57,10 @@ export type PortalRequestListRow = {
     name: string | null;
     email: string | null;
   } | null;
-  booking: {
-    id: string;
-    customer_name: string | null;
+	  booking: {
+	    id: string;
+	    customer_first_name: string | null;
+	    customer_last_name: string | null;
     customer_street: string | null;
     customer_city: string | null;
     customer_zip: string | null;
@@ -86,10 +88,11 @@ export type PortalRequestDetail = {
     email: string | null;
     phone: string | null;
   } | null;
-  booking: {
-    id: string;
-    status: string | null;
-    customer_name: string | null;
+	  booking: {
+	    id: string;
+	    status: string | null;
+	    customer_first_name: string | null;
+	    customer_last_name: string | null;
     customer_street: string | null;
     customer_city: string | null;
     customer_zip: string | null;
@@ -116,9 +119,9 @@ async function loadBookings(bookingIds: string[]) {
     return new Map<string, PortalRequestBookingRow>();
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("bookings")
-    .select("id, customer_id, customer_name, customer_street, customer_city, customer_zip, status, delivery_date, pickup_date")
+	  const { data, error } = await supabaseAdmin
+	    .from("bookings")
+	    .select("id, customer_id, customer_first_name, customer_last_name, customer_street, customer_city, customer_zip, status, delivery_date, pickup_date")
     .in("id", bookingIds);
 
   if (error) {
@@ -223,10 +226,11 @@ export async function getPortalRequests(filter: string): Promise<PortalRequestLi
             }
           : null,
         booking: booking
-          ? {
-              id: booking.id,
-              customer_name: booking.customer_name,
-              customer_street: booking.customer_street,
+	          ? {
+	              id: booking.id,
+	              customer_first_name: booking.customer_first_name,
+	              customer_last_name: booking.customer_last_name,
+	              customer_street: booking.customer_street,
               customer_city: booking.customer_city,
               customer_zip: booking.customer_zip,
               status: booking.status,
@@ -273,11 +277,12 @@ export async function getPortalRequestDetail(id: string): Promise<PortalRequestD
         }
       : null,
     booking: booking
-      ? {
-          id: booking.id,
-          status: booking.status,
-          customer_name: booking.customer_name,
-          customer_street: booking.customer_street,
+	      ? {
+	          id: booking.id,
+	          status: booking.status,
+	          customer_first_name: booking.customer_first_name,
+	          customer_last_name: booking.customer_last_name,
+	          customer_street: booking.customer_street,
           customer_city: booking.customer_city,
           customer_zip: booking.customer_zip,
           delivery_date: booking.delivery_date ?? null,

@@ -14,6 +14,7 @@ import {
 } from "@/lib/rental-action-requests";
 import { getPortalRequests } from "@/lib/admin/portal-requests";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { formatCustomerName } from "@/lib/customer-name";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -131,7 +132,12 @@ export default async function AdminPortalRequestsPage({
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-semibold text-slate-900">
-                        {request.customer?.name || request.booking?.customer_name || "Unknown customer"}
+                        {request.customer?.name ||
+                          formatCustomerName(
+                            request.booking?.customer_first_name,
+                            request.booking?.customer_last_name,
+                            "Unknown customer",
+                          )}
                       </div>
                       <div className="mt-1 text-slate-500">{request.customer?.email || "—"}</div>
                     </td>

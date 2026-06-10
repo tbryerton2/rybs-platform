@@ -2,9 +2,12 @@ import HomePageClient from "@/app/home-page-client";
 import { getRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
 import {
   getHomeFaqContent,
+  getHomeDumpsterSizesContent,
   getHomeHeroContent,
   getHomeSectionsContent,
   getHomeServiceAreaContent,
+  getHomeServiceAreaLookupContent,
+  getHomeStatsBarContent,
   getSupportMarketingContent,
 } from "@/lib/tenant/content";
 
@@ -20,14 +23,20 @@ export default async function HomePage({
   const [
     heroContent,
     serviceAreaContent,
+    statsBarContent,
     homeSectionsContent,
+    dumpsterSizesContent,
+    serviceAreaLookupContent,
     faqContent,
     supportMarketingContent,
     retailSiteSettings,
   ] = await Promise.all([
     getHomeHeroContent({ preview }),
     getHomeServiceAreaContent({ preview }),
+    getHomeStatsBarContent({ preview }),
     getHomeSectionsContent({ preview }),
+    getHomeDumpsterSizesContent({ preview }),
+    getHomeServiceAreaLookupContent({ preview }),
     getHomeFaqContent({ preview }),
     getSupportMarketingContent({ preview }),
     getRetailSiteSettings(),
@@ -38,7 +47,10 @@ export default async function HomePage({
       previewMode={preview}
       heroContent={heroContent}
       serviceAreaContent={serviceAreaContent}
+      statsBarContent={statsBarContent}
       homeSectionsContent={homeSectionsContent}
+      dumpsterSizesContent={dumpsterSizesContent}
+      serviceAreaLookupContent={serviceAreaLookupContent}
       faqContent={faqContent}
       supportMarketingContent={supportMarketingContent}
       visibilitySettings={retailSiteSettings.home.visibility}

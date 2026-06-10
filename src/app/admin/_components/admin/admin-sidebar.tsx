@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { ArrowRightOnRectangleIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { adminNavGroups, isAdminNavItemActive } from "./admin-nav";
 import { AdminNavItem } from "./admin-nav-item";
 
@@ -58,6 +58,13 @@ export function AdminSidebar({
             <p className="mt-1 text-sm leading-5 text-slate-500">
               Dispatch, customers, website settings, and admin tools.
             </p>
+            <a
+              href="/admin/logout"
+              className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
+            >
+              <ArrowRightOnRectangleIcon className="h-4 w-4" />
+              Sign out
+            </a>
           </div>
 
           <button

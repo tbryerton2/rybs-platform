@@ -1,10 +1,13 @@
 // src/app/admin/_components/DeliveriesTodayCard.tsx
 import Link from "next/link";
 import { Card } from "./Card";
+import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
+import { formatCustomerName } from "@/lib/customer-name";
 
 type DeliveryItem = {
   id: string;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_city: string | null;
   customer_zip: string | null;
   delivery_date: string;
@@ -34,7 +37,7 @@ export function DeliveriesTodayCard(props: {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-slate-900">
-                      {item.customer_name ?? "Unnamed customer"}
+                      {formatCustomerName(item.customer_first_name, item.customer_last_name, "Unnamed customer")}
                     </div>
                     <div className="mt-0.5 text-xs text-slate-600">
                       {item.customer_city ?? "—"} • {item.customer_zip ?? "—"}
@@ -51,9 +54,12 @@ export function DeliveriesTodayCard(props: {
 
                     <form action={props.onMarkDelivered}>
                       <input type="hidden" name="id" value={item.id} />
-                      <button className="rounded-lg bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-500">
+                      <FormSubmitButton
+                        loadingLabel="Marking..."
+                        className="rounded-lg bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-500"
+                      >
                         Mark delivered
-                      </button>
+                      </FormSubmitButton>
                     </form>
                   </div>
                 </div>

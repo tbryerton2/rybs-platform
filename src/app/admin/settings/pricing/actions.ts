@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import {
   isMissingPricingSettingsIncludedServicesBlurbColumnError,
   isMissingPricingSettingsRentalPeriodColumnsError,
@@ -263,6 +264,8 @@ export async function updatePricingSettingsAction(
   prevState: PricingSettingsFormState,
   formData: FormData
 ): Promise<PricingSettingsFormState> {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id")).trim();
   const values = buildValues(formData);
 
@@ -363,6 +366,8 @@ export async function updateDumpsterProductSettingAction(
   prevState: DumpsterProductSettingsFormState,
   formData: FormData
 ): Promise<DumpsterProductSettingsFormState> {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id")).trim();
   const values = buildDumpsterProductValues(formData);
 

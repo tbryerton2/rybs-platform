@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     const { data, error } = await supabaseAdmin
       .from("bookings")
       .select(
-        "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, service_county, service_town, status, placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions",
+        "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, service_county, service_town, status, placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions",
       )
       .eq("id", bookingId)
       .eq("customer_id", customer.id)

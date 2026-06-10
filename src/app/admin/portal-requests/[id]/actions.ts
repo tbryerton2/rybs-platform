@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type RentalActionStatus = "submitted" | "under_review" | "approved" | "denied" | "completed";
@@ -21,6 +22,8 @@ function emptyToNull(value: string) {
 }
 
 export async function updatePortalRequestAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const status = asString(formData.get("status")) as RentalActionStatus;
   const customerVisibleStatus = asString(

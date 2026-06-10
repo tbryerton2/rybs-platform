@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import { RETAIL_SITE_CMS_CONTENT_KEYS } from "@/lib/admin/cms";
@@ -30,7 +32,16 @@ function parseEntries(body: Record<string, unknown>) {
   return key ? [{ key, value: body.value ?? {} }] : [];
 }
 
+function revalidateRetailCmsPaths() {
+  revalidatePath("/");
+  revalidatePath("/pricing");
+  revalidatePath("/admin/cms");
+}
+
 export async function POST(req: Request) {
+  const adminAuth = await requireAdminOwnerForApi();
+  if (!adminAuth.ok) return adminAuth.response;
+
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action ?? "").trim();
   const entries = parseEntries(body);
@@ -71,6 +82,8 @@ export async function POST(req: Request) {
     if (failed?.error) {
       return NextResponse.json({ ok: false, error: failed.error.message }, { status: 500 });
     }
+
+    revalidateRetailCmsPaths();
 
     return NextResponse.json({
       ok: true,
@@ -127,6 +140,8 @@ export async function POST(req: Request) {
   if (failedPublished?.error) {
     return NextResponse.json({ ok: false, error: failedPublished.error.message }, { status: 500 });
   }
+
+  revalidateRetailCmsPaths();
 
   return NextResponse.json({
     ok: true,

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { normalizeHomeStatsIconKey, type HomeStatsIconKey } from "@/lib/home-stats-icons";
 import { getTenantContent, type TenantContentReadOptions } from "./server";
 
 type HomeHeroContent = {
@@ -7,6 +8,7 @@ type HomeHeroContent = {
   headlineLine1: string;
   headlineLine2: string | null;
   subheadline: string;
+  imageUrl: string;
   imageAlt: string;
   availabilityHelper: string;
   trustItems: string[];
@@ -23,6 +25,51 @@ type HomeServiceAreaContent = {
   closeLabel: string;
 };
 
+export type HomeStatsBarContent = {
+  enabled: boolean;
+  items: Array<{
+    id: string;
+    text: string;
+    icon: HomeStatsIconKey;
+    sort_order: number;
+    active: boolean;
+  }>;
+};
+
+export type HomeDumpsterSizeContent = {
+  id: string;
+  sizeYards: number;
+  title: string;
+  shortDescription: string;
+  longDescription: string;
+  checklistItems: string[];
+  dimensions: string;
+  weightIncluded: string;
+  rentalWindowDays: number | null;
+  badgeLabel: string;
+  isFeatured: boolean;
+};
+
+export type HomeDumpsterSizesContent = {
+  enabled: boolean;
+  eyebrow: string;
+  title: string;
+  intro: string;
+  items: HomeDumpsterSizeContent[];
+};
+
+export type HomeServiceAreaLookupContent = {
+  enabled: boolean;
+  eyebrow: string;
+  headline: string;
+  description: string;
+  zipPlaceholder: string;
+  buttonText: string;
+  areasEyebrow: string;
+  areaPills: string[];
+  helperText: string;
+};
+
 type HomeValuePropsContent = {
   sectionTitle: string;
   intro: string;
@@ -30,6 +77,7 @@ type HomeValuePropsContent = {
     title: string;
     headline: string;
     body: string;
+    icon: HomeStatsIconKey;
   }>;
 };
 
@@ -40,6 +88,7 @@ type HomeHowItWorksContent = {
     stepLabel: string;
     title: string;
     body: string;
+    icon: HomeStatsIconKey;
   }>;
   footnote: string;
 };
@@ -55,6 +104,7 @@ export type HomeFlexibleSectionContent =
         label: string;
         headline: string;
         body: string;
+        icon: HomeStatsIconKey;
       }>;
     }
   | {
@@ -67,6 +117,7 @@ export type HomeFlexibleSectionContent =
         label: string;
         title: string;
         body: string;
+        icon: HomeStatsIconKey;
       }>;
       footnote: string;
     };
@@ -234,10 +285,11 @@ type BookingSuccessContent = {
 };
 
 const HOME_HERO_FALLBACK: HomeHeroContent = {
-  eyebrow: null,
+  eyebrow: "Serving Central New York",
   headlineLine1: "Dumpster Rentals Made Easy",
   headlineLine2: null,
   subheadline: "Proudly serving Central New York with fast delivery and honest pricing.",
+  imageUrl: "/hero-dumpster.png",
   imageAlt: "Clean roll-off dumpster delivery in Central New York",
   availabilityHelper: "Get instant pricing and availability in your area.",
   trustItems: ["Locally owned", "Fully insured", "Upfront pricing"],
@@ -259,6 +311,94 @@ const HOME_SERVICE_AREA_FALLBACK: HomeServiceAreaContent = {
   closeLabel: "Got it",
 };
 
+const HOME_STATS_BAR_FALLBACK: HomeStatsBarContent = {
+  enabled: true,
+  items: [
+    {
+      id: "next-day-delivery",
+      icon: "truck",
+      text: "Next-day delivery available",
+      sort_order: 1,
+      active: true,
+    },
+    {
+      id: "family-owned",
+      icon: "home",
+      text: "Family owned & operated",
+      sort_order: 2,
+      active: true,
+    },
+    {
+      id: "insured-licensed",
+      icon: "shield",
+      text: "Fully insured & licensed",
+      sort_order: 3,
+      active: true,
+    },
+  ],
+};
+
+const HOME_DUMPSTER_SIZES_FALLBACK: HomeDumpsterSizesContent = {
+  enabled: true,
+  eyebrow: "Choose your size",
+  title: "Pick the right dumpster",
+  intro: "Not sure what you need? Call us — we’ll help you choose.",
+  items: [
+    {
+      id: "14-yard",
+      sizeYards: 14,
+      title: "The right size for most jobs",
+      shortDescription: "Great for cleanouts, renovations, yard waste, and roofing debris.",
+      longDescription: "Big enough for a full cleanout or renovation, small enough to fit in most driveways.",
+      checklistItems: [
+        "Home cleanouts",
+        "Yard waste",
+        "Estate cleanouts",
+        "Renovation debris",
+        "Roofing shingles",
+        "Garage & basement",
+      ],
+      dimensions: "14′ × 7.5′ × 4.5′",
+      weightIncluded: "Up to 3 tons",
+      rentalWindowDays: 7,
+      badgeLabel: "",
+      isFeatured: true,
+    },
+  ],
+};
+
+const HOME_SERVICE_AREA_LOOKUP_FALLBACK: HomeServiceAreaLookupContent = {
+  enabled: true,
+  eyebrow: "SERVICE AREA",
+  headline: "Do we serve your area?",
+  description: "Enter your ZIP for instant confirmation and pricing.",
+  zipPlaceholder: "Enter ZIP code",
+  buttonText: "Check ZIP",
+  areasEyebrow: "SOME AREAS WE COVER",
+  areaPills: [
+    "Syracuse",
+    "Oneida",
+    "Utica",
+    "Rome",
+    "Cazenovia",
+    "Chittenango",
+    "Canastota",
+    "Hamilton",
+  ],
+  helperText: "& more — check your ZIP to confirm",
+};
+
+const DEFAULT_CARD_GRID_ICON_KEYS = ["tag", "truck", "home"] satisfies HomeStatsIconKey[];
+const DEFAULT_STEPS_ICON_KEYS = ["calendar", "mapPin", "checkCircle"] satisfies HomeStatsIconKey[];
+
+function getDefaultMarketingIconKey(
+  type: "card_grid" | "steps",
+  index: number,
+): HomeStatsIconKey {
+  const defaults = type === "card_grid" ? DEFAULT_CARD_GRID_ICON_KEYS : DEFAULT_STEPS_ICON_KEYS;
+  return defaults[index] ?? "star";
+}
+
 const HOME_VALUE_PROPS_FALLBACK: HomeValuePropsContent = {
   sectionTitle: "Why choose Tan Can Man?",
   intro: "Simple pricing, reliable delivery, and easy online booking.",
@@ -267,16 +407,19 @@ const HOME_VALUE_PROPS_FALLBACK: HomeValuePropsContent = {
       title: "Upfront pricing",
       headline: "Flat-rate, no surprises",
       body: "Know your total cost up front. No surprise fees or confusing add-ons.",
+      icon: "tag",
     },
     {
       title: "Reliable service",
       headline: "On-time delivery & pickup",
       body: "We show up when we say we will—and make pickup just as easy.",
+      icon: "truck",
     },
     {
       title: "Local & trusted",
       headline: "Proudly Central New York",
       body: "Locally owned and operated, focused on dependable service and straightforward pricing.",
+      icon: "home",
     },
   ],
 };
@@ -289,16 +432,19 @@ const HOME_HOW_IT_WORKS_FALLBACK: HomeHowItWorksContent = {
       stepLabel: "Step 1",
       title: "Pick your delivery date",
       body: "Choose a date that works for your project — we’ll confirm quickly.",
+      icon: "calendar",
     },
     {
       stepLabel: "Step 2",
       title: "We drop it where you want it",
       body: "Driveway placement notes supported — we’ll place it safely and neatly.",
+      icon: "mapPin",
     },
     {
       stepLabel: "Step 3",
       title: "Fill it, then request pickup",
       body: "When you’re ready, request pickup and we’ll haul it away.",
+      icon: "checkCircle",
     },
   ],
   footnote: "Included weight allowances vary by dumpster size. Overages billed only if exceeded.",
@@ -360,10 +506,12 @@ const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
 
 const SUPPORT_MARKETING_FALLBACK: SupportMarketingContent = {
   headline: "Ready to book your dumpster?",
-  body: "Check availability in your area — fast delivery, honest pricing, and friendly local support.",
+  body: "Fast delivery, honest pricing, and friendly local support.",
   primaryContactCtaLabel: null,
   responseTimeCopy: null,
 };
+const SUPPORT_MARKETING_LEGACY_BODY =
+  "Check availability in your area — fast delivery, honest pricing, and friendly local support.";
 
 const PRODUCT_MARKETING_FALLBACK: ProductMarketingContent = {
   badge: "Most Popular",
@@ -499,6 +647,11 @@ function asString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
+function asEditableString(value: unknown, fallback: string) {
+  if (value === undefined || value === null) return fallback;
+  return typeof value === "string" ? value.trim() : fallback;
+}
+
 function asNullableString(value: unknown, fallback: string | null) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
@@ -523,6 +676,33 @@ function asRecordArray(value: unknown) {
   return Array.isArray(value) ? value.map(asObject) : [];
 }
 
+function asBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
+function asNullableNumber(value: unknown, fallback: number | null = null) {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
 export async function getHomeHeroContent(
   options?: TenantContentReadOptions,
 ): Promise<HomeHeroContent> {
@@ -535,6 +715,7 @@ export async function getHomeHeroContent(
     headlineLine1,
     headlineLine2,
     subheadline: asString(raw.subheadline, HOME_HERO_FALLBACK.subheadline),
+    imageUrl: asString(raw.imageUrl, HOME_HERO_FALLBACK.imageUrl),
     imageAlt: asString(raw.imageAlt, HOME_HERO_FALLBACK.imageAlt),
     availabilityHelper: asString(raw.availabilityHelper, HOME_HERO_FALLBACK.availabilityHelper),
     trustItems: asStringArray(raw.trustItems ?? raw.trustBullets, HOME_HERO_FALLBACK.trustItems),
@@ -567,6 +748,114 @@ export async function getHomeServiceAreaContent(
   };
 }
 
+export async function getHomeStatsBarContent(
+  options?: TenantContentReadOptions,
+): Promise<HomeStatsBarContent> {
+  const value = await getTenantContent("content.home.stats_bar", options);
+
+  if (value === undefined) {
+    return HOME_STATS_BAR_FALLBACK;
+  }
+
+  const raw = asObject(value);
+  const items = asRecordArray(raw.items).map((item, index) => ({
+    id: asString(item.id, `stat-${index + 1}`),
+    text: asString(item.text, ""),
+    icon: normalizeHomeStatsIconKey(item.icon),
+    sort_order: asNumber(item.sort_order ?? item.sortOrder, index + 1),
+    active: asBoolean(item.active, true),
+  }));
+
+  return {
+    enabled: asBoolean(raw.enabled, true),
+    items,
+  };
+}
+
+export async function getHomeDumpsterSizesContent(
+  options?: TenantContentReadOptions,
+): Promise<HomeDumpsterSizesContent> {
+  const value = await getTenantContent("content.home.dumpster_sizes", options);
+
+  if (value === undefined) {
+    return HOME_DUMPSTER_SIZES_FALLBACK;
+  }
+
+  const raw = asObject(value);
+  const source = Array.isArray(raw.dumpsterSizes)
+    ? raw.dumpsterSizes
+    : Array.isArray(raw.items)
+      ? raw.items
+      : [];
+  const fallbackItem = HOME_DUMPSTER_SIZES_FALLBACK.items[0];
+  const intro =
+    typeof raw.dumpsterSizesIntro === "string"
+      ? raw.dumpsterSizesIntro.trim()
+      : typeof raw.intro === "string"
+        ? raw.intro.trim()
+        : HOME_DUMPSTER_SIZES_FALLBACK.intro;
+  const items = source
+    .map(asObject)
+    .flatMap<HomeDumpsterSizeContent>((item, index) => {
+      const fallback = HOME_DUMPSTER_SIZES_FALLBACK.items[index] ?? fallbackItem;
+      const sizeYards = asNullableNumber(item.sizeYards ?? item.yards, fallback.sizeYards);
+
+      if (!sizeYards || sizeYards <= 0) return [];
+
+      const checklistItems = asStringArray(item.checklistItems ?? item.commonUses, fallback.checklistItems)
+        .map((checklistItem) => checklistItem.trim())
+        .filter(Boolean);
+
+      return [
+        {
+          id: asString(item.id, `dumpster-size-${index + 1}`),
+          sizeYards,
+          title: asString(item.title, fallback.title),
+          shortDescription: asString(item.shortDescription, fallback.shortDescription),
+          longDescription: asString(item.longDescription, fallback.longDescription),
+          checklistItems,
+          dimensions: asString(item.dimensions, fallback.dimensions),
+          weightIncluded: asString(item.weightIncluded, fallback.weightIncluded),
+          rentalWindowDays: asNullableNumber(item.rentalWindowDays, fallback.rentalWindowDays),
+          badgeLabel: asString(item.badgeLabel, fallback.badgeLabel),
+          isFeatured: asBoolean(item.isFeatured, fallback.isFeatured),
+        },
+      ];
+    });
+
+  return {
+    enabled: asBoolean(raw.showDumpsterSizesSection ?? raw.enabled, HOME_DUMPSTER_SIZES_FALLBACK.enabled),
+    eyebrow: asEditableString(raw.dumpsterSizesEyebrow ?? raw.eyebrow, HOME_DUMPSTER_SIZES_FALLBACK.eyebrow),
+    title: asEditableString(raw.dumpsterSizesTitle ?? raw.title, HOME_DUMPSTER_SIZES_FALLBACK.title),
+    intro,
+    items,
+  };
+}
+
+export async function getHomeServiceAreaLookupContent(
+  options?: TenantContentReadOptions,
+): Promise<HomeServiceAreaLookupContent> {
+  const value = await getTenantContent("content.home.service_area_lookup", options);
+
+  if (value === undefined) {
+    return HOME_SERVICE_AREA_LOOKUP_FALLBACK;
+  }
+
+  const raw = asObject(value);
+
+  return {
+    enabled: asBoolean(raw.enabled, true),
+    eyebrow: asString(raw.eyebrow, HOME_SERVICE_AREA_LOOKUP_FALLBACK.eyebrow),
+    headline: asString(raw.headline, HOME_SERVICE_AREA_LOOKUP_FALLBACK.headline),
+    description: asString(raw.description, HOME_SERVICE_AREA_LOOKUP_FALLBACK.description),
+    zipPlaceholder: asString(raw.zipPlaceholder, HOME_SERVICE_AREA_LOOKUP_FALLBACK.zipPlaceholder),
+    buttonText: asString(raw.buttonText, HOME_SERVICE_AREA_LOOKUP_FALLBACK.buttonText),
+    areasEyebrow: asString(raw.areasEyebrow, HOME_SERVICE_AREA_LOOKUP_FALLBACK.areasEyebrow),
+    areaPills: asStringArray(raw.areaPills ?? raw.areas, HOME_SERVICE_AREA_LOOKUP_FALLBACK.areaPills),
+    helperText: asString(raw.helperText, HOME_SERVICE_AREA_LOOKUP_FALLBACK.helperText),
+  };
+}
+
 export async function getHomeValuePropsContent(
   options?: TenantContentReadOptions,
 ): Promise<HomeValuePropsContent> {
@@ -581,11 +870,12 @@ export async function getHomeValuePropsContent(
         ? items.map((item, index) => {
             const fallback = HOME_VALUE_PROPS_FALLBACK.items[index] ?? HOME_VALUE_PROPS_FALLBACK.items[0];
             const record = asObject(item);
-            return {
-              title: asString(record.title ?? record.label, fallback.title),
-              headline: asString(record.headline, fallback.headline),
-              body: asString(record.body, fallback.body),
-            };
+          return {
+            title: asString(record.title ?? record.label, fallback.title),
+            headline: asString(record.headline, fallback.headline),
+            body: asString(record.body, fallback.body),
+            icon: normalizeHomeStatsIconKey(record.icon ?? fallback.icon),
+          };
           })
         : HOME_VALUE_PROPS_FALLBACK.items,
   };
@@ -620,6 +910,9 @@ function normalizeHomeFlexibleSections(rawValue: unknown): HomeFlexibleSectionCo
                 label: asString(entry.label ?? entry.title, fallback.title),
                 headline: asString(entry.headline, fallback.headline),
                 body: asString(entry.body, fallback.body),
+                icon: normalizeHomeStatsIconKey(
+                  entry.icon ?? fallback.icon ?? getDefaultMarketingIconKey("card_grid", itemIndex),
+                ),
               };
             }),
           },
@@ -642,6 +935,9 @@ function normalizeHomeFlexibleSections(rawValue: unknown): HomeFlexibleSectionCo
                 label: asString(entry.label ?? entry.stepLabel, fallback.stepLabel),
                 title: asString(entry.title, fallback.title),
                 body: asString(entry.body, fallback.body),
+                icon: normalizeHomeStatsIconKey(
+                  entry.icon ?? fallback.icon ?? getDefaultMarketingIconKey("steps", itemIndex),
+                ),
               };
             }),
             footnote: asString(item.footnote, HOME_HOW_IT_WORKS_FALLBACK.footnote),
@@ -679,6 +975,7 @@ export async function getHomeSectionsContent(
         label: item.title,
         headline: item.headline,
         body: item.body,
+        icon: item.icon,
       })),
     },
     {
@@ -691,6 +988,7 @@ export async function getHomeSectionsContent(
         label: item.stepLabel,
         title: item.title,
         body: item.body,
+        icon: item.icon,
       })),
       footnote: howItWorks.footnote,
     },
@@ -715,6 +1013,7 @@ export async function getHomeHowItWorksContent(
               stepLabel: asString(record.stepLabel, fallback.stepLabel),
               title: asString(record.title, fallback.title),
               body: asString(record.body, fallback.body),
+              icon: normalizeHomeStatsIconKey(record.icon ?? fallback.icon),
             };
           })
         : HOME_HOW_IT_WORKS_FALLBACK.items,
@@ -725,12 +1024,19 @@ export async function getHomeHowItWorksContent(
 export async function getHomeFaqContent(
   options?: TenantContentReadOptions,
 ): Promise<HomeFaqContent> {
-  const raw = asObject(await getTenantContent("content.faq.home", options));
+  const value = await getTenantContent("content.faq.home", options);
+  const raw = asObject(value);
   const items = Array.isArray(raw.items) ? raw.items : [];
+  const intro =
+    value === undefined
+      ? HOME_FAQ_FALLBACK.intro
+      : typeof raw.intro === "string"
+        ? raw.intro.trim()
+        : HOME_FAQ_FALLBACK.intro;
 
   return {
     headline: asString(raw.headline, HOME_FAQ_FALLBACK.headline),
-    intro: asString(raw.intro, HOME_FAQ_FALLBACK.intro),
+    intro,
     items:
       items.length > 0
         ? items.map((item, index) => {
@@ -786,10 +1092,11 @@ export async function getSupportMarketingContent(
   options?: TenantContentReadOptions,
 ): Promise<SupportMarketingContent> {
   const raw = asObject(await getTenantContent("content.support.marketing", options));
+  const body = asString(raw.body, SUPPORT_MARKETING_FALLBACK.body);
 
   return {
     headline: asString(raw.headline, SUPPORT_MARKETING_FALLBACK.headline),
-    body: asString(raw.body, SUPPORT_MARKETING_FALLBACK.body),
+    body: body === SUPPORT_MARKETING_LEGACY_BODY ? SUPPORT_MARKETING_FALLBACK.body : body,
     primaryContactCtaLabel: asNullableString(
       raw.primaryContactCtaLabel,
       SUPPORT_MARKETING_FALLBACK.primaryContactCtaLabel,

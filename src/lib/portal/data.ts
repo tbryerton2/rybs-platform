@@ -14,7 +14,8 @@ export type PortalBooking = {
   id: string;
   booking_ref: string | null;
   customer_id: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
   customer_street: string | null;
@@ -105,7 +106,7 @@ async function getPortalBookingSummaries(customerId: string) {
   const { data: bookings, error: bookingsError } = await supabaseAdmin
     .from("bookings")
     .select(
-      "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
+      "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
     )
     .eq("customer_id", customerId)
     .order("delivery_date", { ascending: false, nullsFirst: false })
@@ -195,7 +196,7 @@ export async function getPortalRental(customerId: string, bookingId: string) {
       supabaseAdmin
         .from("bookings")
         .select(
-          "id, booking_ref, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
+          "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
         )
         .eq("id", bookingId)
         .eq("customer_id", customerId)

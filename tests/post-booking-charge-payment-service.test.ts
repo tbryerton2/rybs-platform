@@ -6,6 +6,7 @@ import {
   PostBookingChargePaymentServiceError,
   type PostBookingChargePaymentSupabaseClient,
 } from "../src/lib/payments/post-booking-charge-payment-service.ts";
+import type { QueueBookingEmailInput } from "../src/lib/booking-messages.ts";
 import type { PaymentProviderAdapter, PaymentProviderChargeInput } from "../src/lib/payments/types.ts";
 
 const BUSINESS_ID = "11111111-1111-4111-8111-111111111111";
@@ -53,6 +54,9 @@ function booking(overrides: MockRow = {}): MockRow {
     id: BOOKING_ID,
     customer_id: CUSTOMER_ID,
     booking_ref: "BK-123456",
+    customer_first_name: "Taylor",
+    customer_last_name: "Customer",
+    customer_email: "customer@example.com",
     ...overrides,
   };
 }
@@ -119,6 +123,15 @@ function bookingPayment(overrides: MockRow = {}): MockRow {
   };
 }
 
+function tenantSetting(category: string, key: string, value: unknown): MockRow {
+  return {
+    tenant_id: BUSINESS_ID,
+    category,
+    key,
+    value_json: value,
+  };
+}
+
 function defaultTables(overrides: Partial<MockTables> = {}): MockTables {
   return {
     booking_charges: [bookingCharge()],
@@ -126,6 +139,11 @@ function defaultTables(overrides: Partial<MockTables> = {}): MockTables {
     booking_consents: [cardOnFileConsent()],
     customer_payment_methods: [customerPaymentMethod()],
     booking_payments: [],
+    tenant_settings: [
+      tenantSetting("brand", "name", "Tan Can Man"),
+      tenantSetting("support", "phone", "555-0100"),
+      tenantSetting("support", "email", "support@example.com"),
+    ],
     ...overrides,
   };
 }
@@ -293,9 +311,21 @@ function createAdapter(result: "paid" | "failed" = "paid") {
 async function callService(
   tables: MockTables,
   adapterResult: "paid" | "failed" = "paid",
+  queueResult: "queued" | "failed" = "queued",
 ) {
   const supabase = createMockSupabase(tables);
   const adapter = createAdapter(adapterResult);
+  const queuedEmails: QueueBookingEmailInput[] = [];
+  const logger = {
+    errors: [] as unknown[],
+    warnings: [] as unknown[],
+    error(...args: unknown[]) {
+      this.errors.push(args);
+    },
+    warn(...args: unknown[]) {
+      this.warnings.push(args);
+    },
+  };
 
   const promise = chargePendingBookingChargeWithSavedCard(
     {
@@ -307,10 +337,34 @@ async function callService(
       supabase: supabase.client as unknown as PostBookingChargePaymentSupabaseClient,
       adapter: adapter.adapter,
       now: () => new Date("2026-05-29T12:02:00.000Z"),
+      logger,
+      queueBookingEmail: async (input) => {
+        queuedEmails.push(input);
+        if (queueResult === "failed") {
+          throw new Error("Queue insert failed.");
+        }
+        return {
+          id: "message-1",
+          bookingId: input.bookingId,
+          bookingChargeId: input.bookingChargeId ?? null,
+          channel: "email",
+          direction: "outbound",
+          template: input.template,
+          to: input.to,
+          subject: input.subject,
+          body: input.body,
+          provider: input.provider ?? "resend",
+          providerMessageId: null,
+          status: "queued",
+          error: null,
+          createdAt: "2026-05-29T12:03:00.000Z",
+          sentAt: null,
+        };
+      },
     },
   );
 
-  return { promise, supabase, adapter };
+  return { promise, supabase, adapter, queuedEmails, logger };
 }
 
 test("chargePendingBookingChargeWithSavedCard rejects a missing charge without calling the provider", async () => {
@@ -366,7 +420,7 @@ test("chargePendingBookingChargeWithSavedCard returns an existing paid payment w
 });
 
 test("chargePendingBookingChargeWithSavedCard charges the saved card and marks charge paid", async () => {
-  const { promise, supabase, adapter } = await callService(defaultTables());
+  const { promise, supabase, adapter, queuedEmails } = await callService(defaultTables());
 
   const result = await promise;
 
@@ -387,10 +441,46 @@ test("chargePendingBookingChargeWithSavedCard charges the saved card and marks c
   assert.equal(supabase.tables.booking_charges[0].status, "paid");
   assert.equal(supabase.tables.booking_charges[0].customer_payment_method_id, PAYMENT_METHOD_ID);
   assert.equal(supabase.tables.booking_charges[0].provider_payment_id, "square-payment-1");
+  assert.equal(queuedEmails.length, 1);
+  assert.equal(queuedEmails[0].bookingId, BOOKING_ID);
+  assert.equal(queuedEmails[0].bookingChargeId, BOOKING_CHARGE_ID);
+  assert.equal(queuedEmails[0].template, "post_booking_charge_paid");
+  assert.equal(queuedEmails[0].to, "customer@example.com");
+  assert.match(queuedEmails[0].subject, /additional charge paid/);
+  assert.match(queuedEmails[0].body, /Tan Can Man charged \$25\.00/);
+  assert.match(queuedEmails[0].body, /Booking reference: BK-123456/);
+  assert.match(queuedEmails[0].body, /Card: VISA ending 1111/);
+});
+
+test("chargePendingBookingChargeWithSavedCard skips receipt queue when customer email is missing", async () => {
+  const { promise, supabase, queuedEmails, logger } = await callService(
+    defaultTables({
+      bookings: [booking({ customer_email: null })],
+    }),
+  );
+
+  const result = await promise;
+
+  assert.equal(result.ok, true);
+  assert.equal(supabase.tables.booking_charges[0].status, "paid");
+  assert.equal(queuedEmails.length, 0);
+  assert.equal(logger.warnings.length, 1);
+});
+
+test("chargePendingBookingChargeWithSavedCard keeps paid charge successful when receipt queue fails", async () => {
+  const { promise, supabase, queuedEmails, logger } = await callService(defaultTables(), "paid", "failed");
+
+  const result = await promise;
+
+  assert.equal(result.ok, true);
+  assert.equal(supabase.tables.booking_payments[0].status, "paid");
+  assert.equal(supabase.tables.booking_charges[0].status, "paid");
+  assert.equal(queuedEmails.length, 1);
+  assert.equal(logger.errors.length, 1);
 });
 
 test("chargePendingBookingChargeWithSavedCard marks payment and charge failed when provider fails", async () => {
-  const { promise, supabase, adapter } = await callService(defaultTables(), "failed");
+  const { promise, supabase, adapter, queuedEmails } = await callService(defaultTables(), "failed");
 
   await assert.rejects(
     promise,
@@ -407,4 +497,5 @@ test("chargePendingBookingChargeWithSavedCard marks payment and charge failed wh
   assert.equal(supabase.tables.booking_charges[0].customer_payment_method_id, PAYMENT_METHOD_ID);
   assert.equal(supabase.tables.booking_charges[0].provider, "square");
   assert.equal(supabase.tables.booking_charges[0].provider_environment, "sandbox");
+  assert.equal(queuedEmails.length, 0);
 });

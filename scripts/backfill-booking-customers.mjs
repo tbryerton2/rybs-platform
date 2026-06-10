@@ -71,7 +71,7 @@ async function main() {
   const { data: bookings, error: bookingsError } = await supabase
     .from("bookings")
     .select(
-      "id, customer_id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, notes, created_at",
+      "id, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, notes, created_at",
     )
     .is("customer_id", null)
     .order("created_at", { ascending: true });
@@ -87,7 +87,7 @@ async function main() {
   for (const booking of bookings ?? []) {
     const normalizedEmail = normalizeEmail(booking.customer_email);
     const normalizedPhone = normalizePhone(booking.customer_phone);
-    const fullName = clean(booking.customer_name);
+    const fullName = [clean(booking.customer_first_name), clean(booking.customer_last_name)].filter(Boolean).join(" ") || null;
 
     let customer = null;
 

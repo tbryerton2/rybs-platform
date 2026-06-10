@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { Card } from "./Card";
+import { formatCustomerName } from "@/lib/customer-name";
 
 type OverdueDelivery = {
   id: string;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_city: string | null;
   customer_zip: string | null;
   delivery_date: string;
@@ -62,7 +64,7 @@ export function AttentionIssuesCard(props: {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-slate-900">
-                          {b.customer_name ?? "Unnamed customer"}
+                          {formatCustomerName(b.customer_first_name, b.customer_last_name, "Unnamed customer")}
                         </div>
                         <div className="mt-0.5 text-xs text-slate-600">
                           {b.customer_city ?? "—"} • {b.customer_zip ?? "—"} • Due {b.delivery_date}

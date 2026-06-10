@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export type AddZipFormState = {
@@ -27,6 +28,8 @@ export async function addServiceZipAction(
   _prevState: AddZipFormState,
   formData: FormData,
 ): Promise<AddZipFormState> {
+  await requireAdminOwner();
+
   const zip = normalizeZip(asString(formData.get("zip")));
 
   if (!isValidZip(zip)) {
@@ -81,6 +84,8 @@ export async function addServiceZipAction(
 }
 
 export async function toggleServiceZipAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = Number(asString(formData.get("id")));
 
   if (!id) {
@@ -115,6 +120,8 @@ export async function toggleServiceZipAction(formData: FormData) {
 }
 
 export async function deleteServiceZipAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = Number(asString(formData.get("id")));
 
   if (!id) {

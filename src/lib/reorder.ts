@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isBookingSchemaError } from "@/lib/booking-schema";
+import { combineCustomerNameParts } from "@/lib/customer-name";
 
 export const REORDER_ELIGIBLE_STATUS = "picked_up";
 
@@ -7,6 +8,8 @@ export type ReorderDraft = {
   zip?: string;
   county?: string | null;
   town?: string | null;
+  customerFirstName?: string | null;
+  customerLastName?: string | null;
   customerName?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
@@ -31,7 +34,8 @@ export type ReorderSourceBookingRow = {
   id: string;
   booking_ref?: string | null;
   customer_id: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
   customer_street: string | null;
@@ -61,7 +65,9 @@ export function buildReorderDraft(source: ReorderSourceBookingRow): ReorderDraft
     zip: source.customer_zip ?? undefined,
     county: source.service_county,
     town: source.service_town,
-    customerName: source.customer_name,
+    customerFirstName: source.customer_first_name,
+    customerLastName: source.customer_last_name,
+    customerName: combineCustomerNameParts(source.customer_first_name, source.customer_last_name),
     customerEmail: source.customer_email,
     customerPhone: source.customer_phone,
     customerStreet: source.customer_street,

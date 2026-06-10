@@ -14,6 +14,7 @@ import { BookingResultsSection } from "@/app/admin/financials/booking-results-se
 import { FinancialFiltersCard } from "@/app/admin/financials/financial-filters-card";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
+import { combineCustomerNameParts, formatCustomerName } from "@/lib/customer-name";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type SortKey = "customer" | "zip" | "city" | "delivery" | "pickup" | "status" | "price";
@@ -34,7 +35,8 @@ type BookingStatus =
 
 type BookingRow = {
   id: string;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_zip: string | null;
   customer_city: string | null;
   delivery_date: string | null;
@@ -352,7 +354,8 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
     .from("bookings")
     .select(`
       id,
-      customer_name,
+      customer_first_name,
+      customer_last_name,
       customer_zip,
       customer_city,
       delivery_date,
@@ -423,7 +426,10 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   const sortedTableRows = [...tableRows].sort((left, right) => {
     const comparison =
       sortKey === "customer"
-        ? compareNullableText(left.customer_name, right.customer_name)
+        ? compareNullableText(
+            combineCustomerNameParts(left.customer_first_name, left.customer_last_name),
+            combineCustomerNameParts(right.customer_first_name, right.customer_last_name),
+          )
         : sortKey === "zip"
           ? compareNullableText(left.customer_zip, right.customer_zip)
           : sortKey === "city"
@@ -705,7 +711,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
       <BookingResultsSection
         rows={sortedTableRows.map((row) => ({
           id: row.id,
-          customerName: row.customer_name || "Unnamed customer",
+          customerName: formatCustomerName(row.customer_first_name, row.customer_last_name, "Unnamed customer"),
           customerZip: row.customer_zip || "—",
           customerCity: row.customer_city || "—",
           deliveryDate: formatDate(row.delivery_date),

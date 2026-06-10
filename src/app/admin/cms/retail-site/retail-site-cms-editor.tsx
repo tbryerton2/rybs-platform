@@ -1,24 +1,48 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CmsEntryStatus,
+  HomeDumpsterSizeItem,
+  HomeDumpsterSizesValue,
   HomeFlexibleSection,
   HomeFaqValue,
   HomeHeroValue,
+  HomeServiceAreaLookupValue,
   HomeServiceAreaPopupValue,
+  HomeStatsBarValue,
   PricingProductContentValue,
   RetailSiteCmsState,
 } from "@/lib/admin/cms";
 import { LoadingButton } from "@/components/ui/loading-button";
+import {
+  HOME_STATS_ICON_OPTIONS,
+  HomeStatsIcon,
+  normalizeHomeStatsIconKey,
+  type HomeStatsIconKey,
+} from "@/lib/home-stats-icons";
 
 const HOME_HERO_KEY = "content.home.hero";
+const HOME_STATS_BAR_KEY = "content.home.stats_bar";
 const HOME_SECTIONS_KEY = "content.home.sections";
+const HOME_DUMPSTER_SIZES_KEY = "content.home.dumpster_sizes";
+const HOME_SERVICE_AREA_LOOKUP_KEY = "content.home.service_area_lookup";
 const HOME_SERVICE_AREA_KEY = "content.home.service_area_popup";
 const HOME_FAQ_KEY = "content.faq.home";
 const PRICING_PRODUCT_KEY = "content.pricing.product_content";
+const HERO_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const HERO_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
-const HOME_PAGE_KEYS = [HOME_HERO_KEY, HOME_SECTIONS_KEY, HOME_SERVICE_AREA_KEY, HOME_FAQ_KEY];
+const HOME_PAGE_KEYS = [
+  HOME_HERO_KEY,
+  HOME_STATS_BAR_KEY,
+  HOME_SECTIONS_KEY,
+  HOME_DUMPSTER_SIZES_KEY,
+  HOME_SERVICE_AREA_LOOKUP_KEY,
+  HOME_SERVICE_AREA_KEY,
+  HOME_FAQ_KEY,
+];
 const PRICING_PAGE_KEYS = [PRICING_PRODUCT_KEY];
 
 type CmsPageId = "home" | "pricing";
@@ -33,6 +57,41 @@ function clone<T>(value: T): T {
 
 function createSectionId(type: HomeFlexibleSection["type"]) {
   return `${type}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createStatsItemId() {
+  return `stat_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createDumpsterSizeId() {
+  return `dumpster_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createDefaultDumpsterSizeItem(): HomeDumpsterSizeItem {
+  return {
+    id: createDumpsterSizeId(),
+    sizeYards: null,
+    title: "",
+    shortDescription: "",
+    longDescription: "",
+    checklistItems: [""],
+    dimensions: "",
+    weightIncluded: "",
+    rentalWindowDays: null,
+    badgeLabel: "",
+    isFeatured: false,
+  };
+}
+
+const DEFAULT_CARD_GRID_ICON_KEYS = ["tag", "truck", "home"] satisfies HomeStatsIconKey[];
+const DEFAULT_STEPS_ICON_KEYS = ["calendar", "mapPin", "checkCircle"] satisfies HomeStatsIconKey[];
+
+function getDefaultMarketingIconKey(
+  type: HomeFlexibleSection["type"],
+  index: number,
+): HomeStatsIconKey {
+  const defaults = type === "card_grid" ? DEFAULT_CARD_GRID_ICON_KEYS : DEFAULT_STEPS_ICON_KEYS;
+  return defaults[index] ?? "star";
 }
 
 function formatDateTime(value: string | null) {
@@ -53,6 +112,12 @@ function latestTimestamp(values: Array<string | null | undefined>) {
   return timestamps.reduce((latest, current) =>
     new Date(current).getTime() > new Date(latest).getTime() ? current : latest,
   );
+}
+
+function parseOptionalNumber(value: string) {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function scrollElementIntoComfortableView(element: HTMLElement) {
@@ -102,7 +167,10 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const initialValuesByKey = useMemo(
     () => ({
       [HOME_HERO_KEY]: clone(cms.home.hero.value),
+      [HOME_STATS_BAR_KEY]: clone(cms.home.statsBar.value),
       [HOME_SECTIONS_KEY]: clone(cms.home.sections.value),
+      [HOME_DUMPSTER_SIZES_KEY]: clone(cms.home.dumpsterSizes.value),
+      [HOME_SERVICE_AREA_LOOKUP_KEY]: clone(cms.home.serviceAreaLookup.value),
       [HOME_SERVICE_AREA_KEY]: clone(cms.home.serviceAreaPopup.value),
       [HOME_FAQ_KEY]: clone(cms.home.faq.value),
       [PRICING_PRODUCT_KEY]: clone(cms.pricing.productContent.value),
@@ -117,10 +185,25 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
         draftUpdatedAt: cms.home.hero.draftUpdatedAt,
         publishedUpdatedAt: cms.home.hero.publishedUpdatedAt,
       },
+      [HOME_STATS_BAR_KEY]: {
+        hasDraft: cms.home.statsBar.hasDraft,
+        draftUpdatedAt: cms.home.statsBar.draftUpdatedAt,
+        publishedUpdatedAt: cms.home.statsBar.publishedUpdatedAt,
+      },
       [HOME_SECTIONS_KEY]: {
         hasDraft: cms.home.sections.hasDraft,
         draftUpdatedAt: cms.home.sections.draftUpdatedAt,
         publishedUpdatedAt: cms.home.sections.publishedUpdatedAt,
+      },
+      [HOME_DUMPSTER_SIZES_KEY]: {
+        hasDraft: cms.home.dumpsterSizes.hasDraft,
+        draftUpdatedAt: cms.home.dumpsterSizes.draftUpdatedAt,
+        publishedUpdatedAt: cms.home.dumpsterSizes.publishedUpdatedAt,
+      },
+      [HOME_SERVICE_AREA_LOOKUP_KEY]: {
+        hasDraft: cms.home.serviceAreaLookup.hasDraft,
+        draftUpdatedAt: cms.home.serviceAreaLookup.draftUpdatedAt,
+        publishedUpdatedAt: cms.home.serviceAreaLookup.publishedUpdatedAt,
       },
       [HOME_SERVICE_AREA_KEY]: {
         hasDraft: cms.home.serviceAreaPopup.hasDraft,
@@ -154,11 +237,23 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const [statusByKey, setStatusByKey] = useState<Record<string, CmsEntryStatus>>(initialStatusByKey);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "publishing">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [heroImageUploading, setHeroImageUploading] = useState(false);
+  const [heroImageUploadError, setHeroImageUploadError] = useState<string | null>(null);
+  const [heroImageUploadSuccess, setHeroImageUploadSuccess] = useState<string | null>(null);
   const marketingSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const heroImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const homeHeroValue = (valuesByKey[HOME_HERO_KEY] as HomeHeroValue | undefined) ?? cms.home.hero.value;
+  const homeStatsBarValue =
+    (valuesByKey[HOME_STATS_BAR_KEY] as HomeStatsBarValue | undefined) ?? cms.home.statsBar.value;
   const homeSectionsValue =
     (valuesByKey[HOME_SECTIONS_KEY] as HomeFlexibleSection[] | undefined) ?? cms.home.sections.value;
+  const dumpsterSizesValue =
+    (valuesByKey[HOME_DUMPSTER_SIZES_KEY] as HomeDumpsterSizesValue | undefined) ??
+    cms.home.dumpsterSizes.value;
+  const serviceAreaLookupValue =
+    (valuesByKey[HOME_SERVICE_AREA_LOOKUP_KEY] as HomeServiceAreaLookupValue | undefined) ??
+    cms.home.serviceAreaLookup.value;
   const serviceAreaValue =
     (valuesByKey[HOME_SERVICE_AREA_KEY] as HomeServiceAreaPopupValue | undefined) ??
     cms.home.serviceAreaPopup.value;
@@ -169,7 +264,10 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
 
   const homeSectionOptions = [
     { id: "hero", label: "Hero" },
+    { id: "stats", label: "Stats Bar" },
     { id: "marketing", label: "Marketing" },
+    { id: "dumpster-sizes", label: "Dumpster Sizes" },
+    { id: "service-area-lookup", label: "Service Lookup" },
     { id: "faq", label: "FAQ" },
   ];
 
@@ -253,8 +351,83 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     updateValue(HOME_HERO_KEY, { ...homeHeroValue, ...patch });
   }
 
+  function updateHeroImageUrl(value: string) {
+    updateHero({ imageUrl: value });
+    setHeroImageUploadSuccess(null);
+    setHeroImageUploadError(null);
+  }
+
+  async function handleHeroImageUpload(file: File) {
+    setHeroImageUploadError(null);
+    setHeroImageUploadSuccess(null);
+
+    if (!HERO_IMAGE_ALLOWED_TYPES.has(file.type)) {
+      setHeroImageUploadError("Only JPG, PNG, and WEBP hero images are supported.");
+      if (heroImageInputRef.current) {
+        heroImageInputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (file.size > HERO_IMAGE_MAX_SIZE_BYTES) {
+      setHeroImageUploadError("Hero image must be 5MB or smaller.");
+      if (heroImageInputRef.current) {
+        heroImageInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setHeroImageUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/admin/cms/hero-image/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const json = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        url?: string;
+      };
+
+      if (!response.ok || !json.ok || !json.url) {
+        throw new Error(json.error || "Hero image upload failed.");
+      }
+
+      updateHero({ imageUrl: json.url });
+      setHeroImageUploadSuccess("Hero image uploaded. Save the page to persist this URL.");
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Hero image upload failed.";
+      setHeroImageUploadError(message);
+    } finally {
+      setHeroImageUploading(false);
+      if (heroImageInputRef.current) {
+        heroImageInputRef.current.value = "";
+      }
+    }
+  }
+
+  function updateStatsBar(patch: Partial<HomeStatsBarValue>) {
+    updateValue(HOME_STATS_BAR_KEY, { ...homeStatsBarValue, ...patch });
+  }
+
+  function updateStatsBarItems(items: HomeStatsBarValue["items"]) {
+    updateStatsBar({ items });
+  }
+
+  function updateDumpsterSizes(patch: Partial<HomeDumpsterSizesValue>) {
+    updateValue(HOME_DUMPSTER_SIZES_KEY, { ...dumpsterSizesValue, ...patch });
+  }
+
   function updateServiceArea(patch: Partial<HomeServiceAreaPopupValue>) {
     updateValue(HOME_SERVICE_AREA_KEY, { ...serviceAreaValue, ...patch });
+  }
+
+  function updateServiceAreaLookup(patch: Partial<HomeServiceAreaLookupValue>) {
+    updateValue(HOME_SERVICE_AREA_LOOKUP_KEY, { ...serviceAreaLookupValue, ...patch });
   }
 
   function updateFaq(patch: Partial<HomeFaqValue>) {
@@ -284,7 +457,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             caption: "",
             sectionTitle: "",
             intro: "",
-            items: [{ label: "", headline: "", body: "" }],
+            items: [{ label: "", headline: "", body: "", icon: getDefaultMarketingIconKey(type, 0) }],
           }
         : {
             id: createSectionId(type),
@@ -292,7 +465,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             caption: "",
             sectionTitle: "",
             intro: "",
-            items: [{ label: "", title: "", body: "" }],
+            items: [{ label: "", title: "", body: "", icon: getDefaultMarketingIconKey(type, 0) }],
             footnote: "",
           };
 
@@ -425,6 +598,11 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
       return (
         <div className="space-y-5">
           <Field
+            label="Hero eyebrow"
+            value={homeHeroValue.eyebrow}
+            onChange={(value) => updateHero({ eyebrow: value })}
+          />
+          <Field
             label="Headline line 1"
             value={homeHeroValue.headlineLine1}
             onChange={(value) => updateHero({ headlineLine1: value })}
@@ -442,7 +620,16 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
           <Field
             label="Hero image URL"
             value={homeHeroValue.imageUrl}
-            onChange={(value) => updateHero({ imageUrl: value })}
+            onChange={updateHeroImageUrl}
+          />
+          <HeroImageUploadField
+            imageUrl={homeHeroValue.imageUrl}
+            imageAlt={homeHeroValue.imageAlt}
+            inputRef={heroImageInputRef}
+            uploading={heroImageUploading}
+            success={heroImageUploadSuccess}
+            error={heroImageUploadError}
+            onFileSelected={(file) => void handleHeroImageUpload(file)}
           />
           <Field
             label="Hero image alt text"
@@ -482,6 +669,82 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             value={serviceAreaValue.buttonLabel}
             onChange={(value) => updateServiceArea({ buttonLabel: value })}
           />
+        </div>
+      );
+    }
+
+    if (resolvedHomeSectionId === "stats") {
+      return (
+        <div className="space-y-6">
+          <div className="rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+            <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
+              <div className="text-sm font-semibold text-slate-900">Homepage stats bar</div>
+              <div className="mt-1 text-sm text-slate-500">
+                Control the dark stat strip shown below the Home hero.
+              </div>
+            </div>
+            <div className="space-y-6 bg-slate-50/50 px-5 py-5">
+              <CheckboxField
+                label="Show stats bar"
+                checked={homeStatsBarValue.enabled}
+                onChange={(enabled) => updateStatsBar({ enabled })}
+              />
+
+              <RepeatableItems<HomeStatsBarValue["items"][number]>
+                label="Stat items"
+                items={homeStatsBarValue.items}
+                createItem={() => ({
+                  id: createStatsItemId(),
+                  text: "",
+                  icon: "truck",
+                  sort_order: homeStatsBarValue.items.length + 1,
+                  active: true,
+                })}
+                onChange={updateStatsBarItems}
+                itemsClassName="space-y-5"
+                itemClassName="space-y-4 rounded-2xl border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+                renderItem={(item, onItemChange) => (
+                  <div className="grid gap-4">
+                    <div className="flex items-center gap-3 rounded-xl bg-[#1A1A1A] px-4 py-4 text-white">
+                      <HomeStatsIcon
+                        iconKey={normalizeHomeStatsIconKey(item.icon)}
+                        className="h-7 w-7 shrink-0 text-[#F97316]"
+                      />
+                      <div className="min-w-0 text-base font-extrabold leading-tight">
+                        {item.text || "Stat text preview"}
+                      </div>
+                    </div>
+                    <Field
+                      label="Text"
+                      value={item.text}
+                      onChange={(text) => onItemChange({ ...item, text })}
+                    />
+                    <IconSelectField
+                      label="Icon"
+                      value={normalizeHomeStatsIconKey(item.icon)}
+                      onChange={(icon) => onItemChange({ ...item, icon })}
+                    />
+                    <Field
+                      label="Sort order"
+                      value={String(item.sort_order)}
+                      onChange={(value) => {
+                        const parsed = Number(value);
+                        onItemChange({
+                          ...item,
+                          sort_order: Number.isFinite(parsed) ? parsed : item.sort_order,
+                        });
+                      }}
+                    />
+                    <CheckboxField
+                      label="Active"
+                      checked={item.active}
+                      onChange={(active) => onItemChange({ ...item, active })}
+                    />
+                  </div>
+                )}
+              />
+            </div>
+          </div>
         </div>
       );
     }
@@ -569,10 +832,20 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                           <RepeatableItems<HomeCardGridItem>
                             label="Items"
                             items={section.items}
-                            createItem={() => ({ label: "", headline: "", body: "" })}
+                            createItem={() => ({
+                              label: "",
+                              headline: "",
+                              body: "",
+                              icon: getDefaultMarketingIconKey(section.type, section.items.length),
+                            })}
                             onChange={(items) => updateActiveHomeSection({ ...section, items })}
                             renderItem={(item, onItemChange) => (
                               <div className="grid gap-3">
+                                <IconSelectField
+                                  label="Icon"
+                                  value={normalizeHomeStatsIconKey(item.icon)}
+                                  onChange={(value) => onItemChange({ ...item, icon: value })}
+                                />
                                 <Field
                                   label="Label"
                                   value={String(item.label ?? "")}
@@ -595,10 +868,20 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                           <RepeatableItems<HomeStepsItem>
                             label="Items"
                             items={section.items}
-                            createItem={() => ({ label: "", title: "", body: "" })}
+                            createItem={() => ({
+                              label: "",
+                              title: "",
+                              body: "",
+                              icon: getDefaultMarketingIconKey(section.type, section.items.length),
+                            })}
                             onChange={(items) => updateActiveHomeSection({ ...section, items })}
                             renderItem={(item, onItemChange) => (
                               <div className="grid gap-3">
+                                <IconSelectField
+                                  label="Icon"
+                                  value={normalizeHomeStatsIconKey(item.icon)}
+                                  onChange={(value) => onItemChange({ ...item, icon: value })}
+                                />
                                 <Field
                                   label="Label"
                                   value={String(item.label ?? "")}
@@ -631,6 +914,185 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
               No marketing sections yet. Add one to get started.
             </div>
           ) : null}
+        </div>
+      );
+    }
+
+    if (resolvedHomeSectionId === "dumpster-sizes") {
+      return (
+        <div className="space-y-5">
+          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+            <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
+              <div className="text-sm font-semibold text-slate-900">Dumpster Sizes</div>
+              <div className="mt-1 text-sm text-slate-500">
+                Add the dumpster sizes shown between the marketing sections and service area.
+              </div>
+            </div>
+            <div className="space-y-5 bg-slate-50/50 px-5 py-5">
+              <CheckboxField
+                label="Show dumpster sizes section"
+                checked={dumpsterSizesValue.showDumpsterSizesSection}
+                onChange={(showDumpsterSizesSection) => updateDumpsterSizes({ showDumpsterSizesSection })}
+              />
+              <Field
+                label="Section label"
+                value={dumpsterSizesValue.dumpsterSizesEyebrow}
+                onChange={(dumpsterSizesEyebrow) => updateDumpsterSizes({ dumpsterSizesEyebrow })}
+              />
+              <Field
+                label="Section title"
+                value={dumpsterSizesValue.dumpsterSizesTitle}
+                onChange={(dumpsterSizesTitle) => updateDumpsterSizes({ dumpsterSizesTitle })}
+              />
+              <TextAreaField
+                label="Section intro"
+                value={dumpsterSizesValue.dumpsterSizesIntro}
+                onChange={(dumpsterSizesIntro) => updateDumpsterSizes({ dumpsterSizesIntro })}
+              />
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+            <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
+              <div className="text-sm font-semibold text-slate-900">Dumpster size items</div>
+              <div className="mt-1 text-sm text-slate-500">
+                One size renders as a large feature layout. Multiple sizes render as selectable cards.
+              </div>
+            </div>
+            <div className="bg-slate-50/50 px-5 py-5">
+              <RepeatableItems<HomeDumpsterSizeItem>
+                label="Dumpster sizes"
+                items={dumpsterSizesValue.dumpsterSizes}
+                createItem={createDefaultDumpsterSizeItem}
+                onChange={(dumpsterSizes) => updateDumpsterSizes({ dumpsterSizes })}
+                itemsClassName="space-y-6"
+                itemClassName="space-y-4 rounded-2xl border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+                renderItem={(item, onItemChange) => (
+                  <div className="grid gap-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Field
+                        label="Dumpster size in yards"
+                        value={item.sizeYards === null ? "" : String(item.sizeYards)}
+                        onChange={(value) => onItemChange({ ...item, sizeYards: parseOptionalNumber(value) })}
+                      />
+                      <Field
+                        label="Optional badge"
+                        value={item.badgeLabel}
+                        onChange={(badgeLabel) => onItemChange({ ...item, badgeLabel })}
+                      />
+                    </div>
+                    <Field
+                      label="Display title"
+                      value={item.title}
+                      onChange={(title) => onItemChange({ ...item, title })}
+                    />
+                    <TextAreaField
+                      label="Short description"
+                      value={item.shortDescription}
+                      onChange={(shortDescription) => onItemChange({ ...item, shortDescription })}
+                    />
+                    <TextAreaField
+                      label="Long description"
+                      value={item.longDescription}
+                      onChange={(longDescription) => onItemChange({ ...item, longDescription })}
+                    />
+                    <ArrayField
+                      label="Common uses / checklist"
+                      items={item.checklistItems}
+                      onChange={(checklistItems) => onItemChange({ ...item, checklistItems })}
+                    />
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Field
+                        label="Dumpster dimensions"
+                        value={item.dimensions}
+                        onChange={(dimensions) => onItemChange({ ...item, dimensions })}
+                      />
+                      <Field
+                        label="Weight included"
+                        value={item.weightIncluded}
+                        onChange={(weightIncluded) => onItemChange({ ...item, weightIncluded })}
+                      />
+                      <Field
+                        label="Typical rental window in days"
+                        value={item.rentalWindowDays === null ? "" : String(item.rentalWindowDays)}
+                        onChange={(value) => onItemChange({ ...item, rentalWindowDays: parseOptionalNumber(value) })}
+                      />
+                    </div>
+                    <CheckboxField
+                      label="Featured/default size"
+                      checked={item.isFeatured}
+                      onChange={(isFeatured) => onItemChange({ ...item, isFeatured })}
+                    />
+                    <p className="text-xs text-slate-500">
+                      If multiple sizes are featured, the first featured size is used as the default.
+                    </p>
+                  </div>
+                )}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (resolvedHomeSectionId === "service-area-lookup") {
+      return (
+        <div className="space-y-5">
+          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+            <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
+              <div className="text-sm font-semibold text-slate-900">Service area lookup</div>
+              <div className="mt-1 text-sm text-slate-500">
+                Edit the ZIP lookup section shown above the Home page FAQ.
+              </div>
+            </div>
+            <div className="space-y-5 bg-slate-50/50 px-5 py-5">
+              <CheckboxField
+                label="Show service area lookup"
+                checked={serviceAreaLookupValue.enabled}
+                onChange={(enabled) => updateServiceAreaLookup({ enabled })}
+              />
+              <Field
+                label="Eyebrow"
+                value={serviceAreaLookupValue.eyebrow}
+                onChange={(eyebrow) => updateServiceAreaLookup({ eyebrow })}
+              />
+              <Field
+                label="Headline"
+                value={serviceAreaLookupValue.headline}
+                onChange={(headline) => updateServiceAreaLookup({ headline })}
+              />
+              <TextAreaField
+                label="Description"
+                value={serviceAreaLookupValue.description}
+                onChange={(description) => updateServiceAreaLookup({ description })}
+              />
+              <Field
+                label="ZIP input placeholder"
+                value={serviceAreaLookupValue.zipPlaceholder}
+                onChange={(zipPlaceholder) => updateServiceAreaLookup({ zipPlaceholder })}
+              />
+              <Field
+                label="Button text"
+                value={serviceAreaLookupValue.buttonText}
+                onChange={(buttonText) => updateServiceAreaLookup({ buttonText })}
+              />
+              <Field
+                label="Right-side eyebrow"
+                value={serviceAreaLookupValue.areasEyebrow}
+                onChange={(areasEyebrow) => updateServiceAreaLookup({ areasEyebrow })}
+              />
+              <ArrayField
+                label="Area pill labels"
+                items={serviceAreaLookupValue.areaPills}
+                onChange={(areaPills) => updateServiceAreaLookup({ areaPills })}
+              />
+              <Field
+                label="Helper text under pills"
+                value={serviceAreaLookupValue.helperText}
+                onChange={(helperText) => updateServiceAreaLookup({ helperText })}
+              />
+            </div>
+          </div>
         </div>
       );
     }
@@ -917,6 +1379,78 @@ function Field({
   );
 }
 
+function HeroImageUploadField({
+  imageUrl,
+  imageAlt,
+  inputRef,
+  uploading,
+  success,
+  error,
+  onFileSelected,
+}: {
+  imageUrl: string;
+  imageAlt: string;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  uploading: boolean;
+  success: string | null;
+  error: string | null;
+  onFileSelected: (file: File) => void;
+}) {
+  const trimmedImageUrl = imageUrl.trim();
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-medium text-slate-700">Hero image upload</div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        disabled={uploading}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onFileSelected(file);
+        }}
+        className="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+      />
+      <p className="mt-2 text-sm text-slate-500">
+        Upload a JPG, PNG, or WEBP hero image. Recommended: wide landscape image.
+      </p>
+
+      {uploading ? <p className="mt-3 text-sm text-slate-500">Uploading image...</p> : null}
+      {success ? (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {success}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
+
+      {trimmedImageUrl ? (
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Current hero image
+          </div>
+          <div className="bg-slate-100 p-3">
+            <div className="relative aspect-[16/7] w-full overflow-hidden rounded-xl">
+              <Image
+                src={trimmedImageUrl}
+                alt={imageAlt || "Hero image preview"}
+                fill
+                sizes="(min-width: 1280px) 780px, 100vw"
+                className="object-cover"
+                unoptimized
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function TextAreaField({
   label,
   value,
@@ -930,6 +1464,60 @@ function TextAreaField({
     <label className="block space-y-2">
       <div className="text-sm font-medium text-slate-700">{label}</div>
       <textarea className={textareaClass()} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function CheckboxField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-5 w-5 rounded border-slate-300 accent-[#F97316]"
+      />
+    </label>
+  );
+}
+
+function IconSelectField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: HomeStatsIconKey;
+  onChange: (value: HomeStatsIconKey) => void;
+}) {
+  return (
+    <label className="block space-y-2">
+      <div className="text-sm font-medium text-slate-700">{label}</div>
+      <div className="flex items-center gap-3">
+        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-[#F97316]">
+          <HomeStatsIcon iconKey={value} className="h-6 w-6" />
+        </span>
+        <select
+          className={inputClass()}
+          value={value}
+          onChange={(event) => onChange(normalizeHomeStatsIconKey(event.target.value))}
+        >
+          {HOME_STATS_ICON_OPTIONS.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </label>
   );
 }
@@ -1010,6 +1598,32 @@ function ArrayField({
               onChange(nextItems);
             }}
           />
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              disabled={index === 0}
+              onClick={() => {
+                const nextItems = [...items];
+                [nextItems[index - 1], nextItems[index]] = [nextItems[index], nextItems[index - 1]];
+                onChange(nextItems);
+              }}
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              Up
+            </button>
+            <button
+              type="button"
+              disabled={index === items.length - 1}
+              onClick={() => {
+                const nextItems = [...items];
+                [nextItems[index + 1], nextItems[index]] = [nextItems[index], nextItems[index + 1]];
+                onChange(nextItems);
+              }}
+              className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              Down
+            </button>
+          </div>
           {items.length > 1 ? (
             <button
               type="button"

@@ -12,7 +12,9 @@ import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placem
 import { attachReorderReference } from "@/lib/reorder";
 
 type Payload = {
-  customer_name: string;
+  customer_first_name?: string | null;
+  customer_last_name?: string | null;
+  customer_name?: string;
   customer_street: string;
   customer_city?: string;
   customer_state?: string;
@@ -64,8 +66,13 @@ export async function POST(req: Request) {
     });
 
     // Minimal required fields for v1 draft
-    if (!body.customer_name?.trim()) {
-      return NextResponse.json({ ok: false, error: "Missing customer_name" }, { status: 400 });
+    const hasCustomerName =
+      Boolean(body.customer_first_name?.trim()) ||
+      Boolean(body.customer_last_name?.trim()) ||
+      Boolean(body.customer_name?.trim());
+
+    if (!hasCustomerName) {
+      return NextResponse.json({ ok: false, error: "Missing customer name" }, { status: 400 });
     }
     if (!body.customer_street?.trim()) {
       return NextResponse.json({ ok: false, error: "Missing customer_street" }, { status: 400 });
@@ -169,7 +176,9 @@ export async function POST(req: Request) {
           dumpster_product_id: selectedDumpster.dumpsterProductId,
         },
         identity: {
-          customerName: body.customer_name.trim(),
+          customerFirstName: body.customer_first_name,
+          customerLastName: body.customer_last_name,
+          customerName: body.customer_name,
           customerEmail: body.customer_email?.trim() ?? null,
           customerPhone: customerPhone,
           customerStreet: body.customer_street.trim(),

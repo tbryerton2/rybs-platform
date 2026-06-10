@@ -1,15 +1,17 @@
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
+import { formatCustomerName } from "@/lib/customer-name";
 
 type BookingListRowProps = {
   booking: {
     id: string;
     booking_ref: string | null;
     created_at: string | null;
-    booking_contact_name: string | null;
-    booking_contact_email: string | null;
-    booking_contact_phone: string | null;
+    customer_first_name: string | null;
+    customer_last_name: string | null;
+    customer_email: string | null;
+    customer_phone: string | null;
     customer_street: string | null;
     customer_city: string | null;
     customer_zip: string | null;
@@ -94,9 +96,11 @@ export function BookingListRow({ booking }: BookingListRowProps) {
         </div>
 
         <div className="space-y-1.5">
-          <div className="text-sm font-semibold text-slate-900">{booking.booking_contact_name || "No customer name"}</div>
-          <div className="text-sm text-slate-600">{booking.booking_contact_email || "No email on file"}</div>
-          <div className="text-sm text-slate-600">{formatPhoneNumber(booking.booking_contact_phone) || "No phone on file"}</div>
+          <div className="text-sm font-semibold text-slate-900">
+            {formatCustomerName(booking.customer_first_name, booking.customer_last_name, "No customer name")}
+          </div>
+          <div className="text-sm text-slate-600">{booking.customer_email || "No email on file"}</div>
+          <div className="text-sm text-slate-600">{formatPhoneNumber(booking.customer_phone) || "No phone on file"}</div>
         </div>
 
         <div className="min-w-0">

@@ -1,3 +1,9 @@
+import { queueBookingEmail } from "../booking-messages.ts";
+import {
+  buildPostBookingChargePaidEmail,
+  type PostBookingChargeType,
+} from "../messages/post-booking-charge-receipt.ts";
+import { combineCustomerNameParts } from "../customer-name.ts";
 import type {
   CurrencyCode,
   PaymentProvider,
@@ -17,7 +23,9 @@ const BOOKING_CHARGE_SELECT =
 const BOOKING_PAYMENT_SELECT =
   "id, business_id, booking_hold_id, booking_id, booking_charge_id, provider, provider_environment, status, amount_cents, currency, provider_payment_id, provider_order_id, provider_location_id, idempotency_key, failure_code, failure_message, raw_provider_response, paid_at, failed_at, created_at, updated_at";
 
-const BOOKING_SELECT = "id, customer_id, booking_ref";
+const BOOKING_SELECT = "id, customer_id, booking_ref, customer_first_name, customer_last_name, customer_email";
+
+const TENANT_SETTING_SELECT = "value_json";
 
 const CUSTOMER_PAYMENT_METHOD_SELECT =
   "id, business_id, customer_id, customer_provider_account_id, provider, provider_environment, provider_customer_id, provider_payment_method_id, card_brand, card_last_4, card_exp_month, card_exp_year, status, consent_text, consent_accepted_at, created_at, updated_at";
@@ -108,6 +116,9 @@ type BookingRow = {
   id: string;
   customer_id: string | null;
   booking_ref: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
+  customer_email: string | null;
 };
 
 type CustomerPaymentMethodRow = {
@@ -162,6 +173,8 @@ type ChargePendingBookingChargeOptions = {
   supabase?: PostBookingChargePaymentSupabaseClient;
   adapter?: PaymentProviderAdapter;
   now?: () => Date;
+  queueBookingEmail?: typeof queueBookingEmail;
+  logger?: Pick<Console, "error" | "warn">;
 };
 
 export class PostBookingChargePaymentServiceError extends Error {
@@ -638,6 +651,136 @@ function buildChargeDescription(input: {
   return `${bookingReference}: ${description}`.slice(0, 45);
 }
 
+function isPostBookingChargeType(value: string): value is PostBookingChargeType {
+  return (
+    value === "weight_overage" ||
+    value === "damage" ||
+    value === "extra_day" ||
+    value === "trip_fee" ||
+    value === "prohibited_material" ||
+    value === "manual_adjustment"
+  );
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" ? value.trim() || null : null;
+}
+
+async function loadTenantSetting(input: {
+  supabase: PostBookingChargePaymentSupabaseClient;
+  businessId: string;
+  category: string;
+  key: string;
+}) {
+  const { data, error } = await input.supabase
+    .from("tenant_settings")
+    .select(TENANT_SETTING_SELECT)
+    .eq("tenant_id", input.businessId)
+    .eq("category", input.category)
+    .eq("key", input.key)
+    .maybeSingle<{ value_json: unknown }>();
+
+  if (error) {
+    throw new PostBookingChargePaymentServiceError(error.message, "DATABASE_ERROR", undefined, error);
+  }
+
+  return asString(data?.value_json);
+}
+
+async function loadReceiptBusinessContact(input: {
+  supabase: PostBookingChargePaymentSupabaseClient;
+  businessId: string;
+}) {
+  const [businessName, businessPhone, businessEmail] = await Promise.all([
+    loadTenantSetting({
+      supabase: input.supabase,
+      businessId: input.businessId,
+      category: "brand",
+      key: "name",
+    }),
+    loadTenantSetting({
+      supabase: input.supabase,
+      businessId: input.businessId,
+      category: "support",
+      key: "phone",
+    }),
+    loadTenantSetting({
+      supabase: input.supabase,
+      businessId: input.businessId,
+      category: "support",
+      key: "email",
+    }),
+  ]);
+
+  return {
+    businessName: businessName ?? "Our team",
+    businessPhone,
+    businessEmail,
+  };
+}
+
+async function queuePostBookingChargePaidReceipt(input: {
+  supabase: PostBookingChargePaymentSupabaseClient;
+  enqueue: typeof queueBookingEmail;
+  logger: Pick<Console, "error" | "warn">;
+  businessId: string;
+  booking: BookingRow;
+  charge: BookingChargeRow;
+  paymentMethod: StoredCustomerPaymentMethod;
+}) {
+  const customerEmail = clean(input.booking.customer_email);
+  if (!customerEmail) {
+    input.logger.warn("[post-booking-charge-payment] receipt email skipped: missing customer email", {
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+    });
+    return;
+  }
+
+  if (!isPostBookingChargeType(input.charge.charge_type)) {
+    input.logger.warn("[post-booking-charge-payment] receipt email skipped: unsupported charge type", {
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+      chargeType: input.charge.charge_type,
+    });
+    return;
+  }
+
+  try {
+    const contact = await loadReceiptBusinessContact({
+      supabase: input.supabase,
+      businessId: input.businessId,
+    });
+    const email = buildPostBookingChargePaidEmail({
+      ...contact,
+      customerName: combineCustomerNameParts(input.booking.customer_first_name, input.booking.customer_last_name),
+      bookingReference: input.booking.booking_ref,
+      chargeType: input.charge.charge_type,
+      chargeDescription: input.charge.description ?? "Additional rental charge",
+      amountCents: input.charge.amount_cents,
+      currency: input.charge.currency,
+      paidAt: input.charge.paid_at ?? new Date().toISOString(),
+      cardBrand: input.paymentMethod.cardBrand,
+      cardLast4: input.paymentMethod.cardLast4,
+    });
+
+    await input.enqueue({
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+      template: "post_booking_charge_paid",
+      to: customerEmail,
+      subject: email.subject,
+      body: email.body,
+    });
+  } catch (error) {
+    input.logger.error("[post-booking-charge-payment] receipt email queue failed", {
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+      error,
+    });
+  }
+}
+
 export async function chargePendingBookingChargeWithSavedCard(
   input: ChargePendingBookingChargeWithSavedCardInput,
   options: ChargePendingBookingChargeOptions = {},
@@ -657,6 +800,8 @@ export async function chargePendingBookingChargeWithSavedCard(
   const supabase = options.supabase ?? (await getSupabaseClient());
   const paymentProvider = DEFAULT_PAYMENT_PROVIDER;
   const adapter = options.adapter ?? (await getAdapter(paymentProvider));
+  const enqueueBookingEmail = options.queueBookingEmail ?? queueBookingEmail;
+  const logger = options.logger ?? console;
 
   if (adapter.provider !== paymentProvider) {
     throw new PostBookingChargePaymentServiceError(
@@ -853,6 +998,16 @@ export async function chargePendingBookingChargeWithSavedCard(
     charge,
     paymentMethod,
     payment: updatedPayment,
+  });
+
+  await queuePostBookingChargePaidReceipt({
+    supabase,
+    enqueue: enqueueBookingEmail,
+    logger,
+    businessId,
+    booking,
+    charge: paidCharge,
+    paymentMethod,
   });
 
   return toPaymentResult({

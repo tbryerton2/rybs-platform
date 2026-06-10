@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getAssignableDumpstersForBooking } from "@/lib/admin/dumpster-assignment";
 import { bookingPlacementSchemaMessage, isBookingSchemaError } from "@/lib/booking-schema";
 import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
@@ -163,6 +164,8 @@ function operationalFieldChanged(fieldName: OperationalFieldName, currentValue: 
 }
 
 export async function updateNotesAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const notes = emptyToNull(asString(formData.get("notes")));
 
@@ -184,6 +187,8 @@ export async function updateNotesAction(formData: FormData) {
 }
 
 export async function createDraftBookingChargeAction(formData: FormData) {
+  await requireAdminOwner();
+
   const bookingId = asString(formData.get("bookingId"));
   const chargeType = normalizeBookingChargeType(asString(formData.get("chargeType")));
   const amountCents = parseAmountCents(
@@ -201,7 +206,7 @@ export async function createDraftBookingChargeAction(formData: FormData) {
     redirectWithChargeError(bookingId, "Enter an amount greater than $0.00.");
   }
   if (!description) {
-    redirectWithChargeError(bookingId, "Add a short description for this draft charge.");
+    redirectWithChargeError(bookingId, "Add a short description for this charge.");
   }
 
   const tenant = await getCurrentTenant();
@@ -242,6 +247,8 @@ export async function createDraftBookingChargeAction(formData: FormData) {
 }
 
 export async function markBookingChargeReadyAction(formData: FormData) {
+  await requireAdminOwner();
+
   const bookingId = asString(formData.get("bookingId"));
   const chargeId = asString(formData.get("chargeId"));
 
@@ -305,7 +312,109 @@ export async function markBookingChargeReadyAction(formData: FormData) {
   redirect(`/admin/bookings/${bookingId}?saved=charge-ready#charges-adjustments`);
 }
 
+export async function approveAndChargeBookingChargeAction(formData: FormData) {
+  await requireAdminOwner();
+
+  const bookingId = asString(formData.get("bookingId"));
+  const bookingChargeId = asString(formData.get("bookingChargeId"));
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!bookingChargeId) {
+    redirectWithChargeError(bookingId, "Missing charge id.");
+  }
+
+  const tenant = await getCurrentTenant();
+  const charge = await supabaseAdmin
+    .from("booking_charges")
+    .select("id, booking_id, business_id, status, amount_cents, description")
+    .eq("id", bookingChargeId)
+    .eq("booking_id", bookingId)
+    .eq("business_id", tenant.id)
+    .maybeSingle<{
+      id: string;
+      booking_id: string;
+      business_id: string;
+      status: string;
+      amount_cents: number;
+      description: string | null;
+    }>();
+
+  if (charge.error) {
+    redirectWithChargeError(bookingId, charge.error.message);
+  }
+
+  if (!charge.data) {
+    redirectWithChargeError(bookingId, "Charge was not found for this booking.");
+  }
+
+  if (charge.data.status !== "draft") {
+    redirectWithChargeError(bookingId, "Only charges needing approval can be approved and charged.");
+  }
+
+  if (!Number.isFinite(charge.data.amount_cents) || charge.data.amount_cents <= 0) {
+    redirectWithChargeError(bookingId, "Charge amount must be greater than $0.00 before it can be approved.");
+  }
+
+  if (!charge.data.description?.trim()) {
+    redirectWithChargeError(bookingId, "Charge description is required before it can be approved.");
+  }
+
+  const statusUpdate = await supabaseAdmin
+    .from("booking_charges")
+    .update({ status: "pending" })
+    .eq("id", bookingChargeId)
+    .eq("booking_id", bookingId)
+    .eq("business_id", tenant.id)
+    .eq("status", "draft");
+
+  if (statusUpdate.error) {
+    redirectWithChargeError(bookingId, statusUpdate.error.message);
+  }
+
+  try {
+    await chargePendingBookingChargeWithSavedCard({
+      businessId: tenant.id,
+      bookingId,
+      bookingChargeId,
+    });
+  } catch (error) {
+    const shouldRestoreNeedsApproval =
+      error instanceof PostBookingChargePaymentServiceError &&
+      [
+        "CARD_ON_FILE_CONSENT_MISSING",
+        "SAVED_CARD_MISSING",
+        "SAVED_CARD_INVALID",
+        "PAYMENT_ALREADY_EXISTS",
+        "PAYMENT_ALREADY_PENDING",
+      ].includes(error.code);
+
+    if (shouldRestoreNeedsApproval) {
+      const restore = await supabaseAdmin
+        .from("booking_charges")
+        .update({ status: "draft" })
+        .eq("id", bookingChargeId)
+        .eq("booking_id", bookingId)
+        .eq("business_id", tenant.id)
+        .eq("status", "pending");
+
+      if (restore.error) {
+        console.error("[admin-booking-charge] failed to restore charge approval status", restore.error);
+      }
+    }
+
+    redirectWithChargeError(bookingId, getSavedCardChargeErrorMessage(error));
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=charge-paid#charges-adjustments`);
+}
+
 export async function chargeBookingChargeSavedCardAction(formData: FormData) {
+  await requireAdminOwner();
+
   const bookingId = asString(formData.get("bookingId"));
   const bookingChargeId = asString(formData.get("bookingChargeId"));
 
@@ -334,6 +443,8 @@ export async function chargeBookingChargeSavedCardAction(formData: FormData) {
 }
 
 export async function updateBookingStatusAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const status = asString(formData.get("status")) as BookingStatus;
 
@@ -379,6 +490,8 @@ export async function updateBookingStatusAction(formData: FormData) {
 }
 
 export async function updateDeliveryDateAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const delivery_date = emptyToNull(asString(formData.get("delivery_date")));
 
@@ -420,6 +533,8 @@ export async function updateDeliveryDateAction(formData: FormData) {
 }
 
 export async function updatePickupDetailsAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const pickup_mode = asString(formData.get("pickup_mode"));
   const pickup_date = emptyToNull(asString(formData.get("pickup_date")));
@@ -468,6 +583,8 @@ export async function updatePickupDetailsAction(formData: FormData) {
 }
 
 export async function updatePlacementDetailsAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
 
   if (!id) throw new Error("Missing booking id");
@@ -521,6 +638,8 @@ export async function updatePlacementDetailsAction(formData: FormData) {
 }
 
 export async function updateOperationalControlsAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const status = asString(formData.get("status")) as BookingStatus;
   const delivery_date = emptyToNull(asString(formData.get("delivery_date")));
@@ -652,6 +771,8 @@ export async function updateOperationalControlsAction(formData: FormData) {
 }
 
 export async function updateAssignedDumpsterAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   const dumpsterId = emptyToNull(asString(formData.get("dumpster_id")));
 
@@ -731,6 +852,8 @@ export async function updateAssignedDumpsterAction(formData: FormData) {
 
 
 export async function quickMarkDeliveredAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   if (!id) throw new Error("Missing booking id");
 
@@ -770,6 +893,8 @@ export async function quickMarkDeliveredAction(formData: FormData) {
 }
 
 export async function quickMarkPickedUpAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   if (!id) throw new Error("Missing booking id");
 
@@ -809,6 +934,8 @@ export async function quickMarkPickedUpAction(formData: FormData) {
 }
 
 export async function quickCancelBookingAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = asString(formData.get("id"));
   if (!id) throw new Error("Missing booking id");
 

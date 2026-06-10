@@ -14,6 +14,7 @@ import { ClickableTableRow } from "@/app/admin/analytics/zip-heatmap/clickable-t
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { combineCustomerNameParts } from "@/lib/customer-name";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type CustomerListView = "all" | "new" | "repeat";
@@ -34,9 +35,10 @@ type BookingSummaryRow = {
   id: string;
   booking_ref: string | null;
   customer_id: string | null;
-  booking_contact_name: string | null;
-  booking_contact_email: string | null;
-  booking_contact_phone: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -115,7 +117,7 @@ export default async function AdminCustomersPage({
         .order("updated_at", { ascending: false }),
       supabaseAdmin
         .from("bookings")
-        .select("id, booking_ref, customer_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_street, customer_city, customer_zip, delivery_date, created_at, status, total_price_cents")
+        .select("id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, created_at, status, total_price_cents")
         .not("customer_id", "is", null),
     ]);
 
@@ -184,9 +186,9 @@ export default async function AdminCustomersPage({
         [
           booking.id,
           booking.booking_ref,
-          booking.booking_contact_name,
-          booking.booking_contact_email,
-          booking.booking_contact_phone,
+          combineCustomerNameParts(booking.customer_first_name, booking.customer_last_name),
+          booking.customer_email,
+          booking.customer_phone,
           booking.customer_street,
           booking.customer_city,
           booking.customer_zip,

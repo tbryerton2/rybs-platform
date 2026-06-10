@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(req: Request) {
+  const adminAuth = await requireAdminOwnerForApi();
+  if (!adminAuth.ok) return adminAuth.response;
+
   const { id, type, date } = await req.json();
 
   if (!id || !type || !date) {

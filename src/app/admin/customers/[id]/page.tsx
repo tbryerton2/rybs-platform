@@ -30,9 +30,10 @@ type BookingRow = {
   id: string;
   booking_ref: string | null;
   customer_id: string | null;
-  booking_contact_name: string | null;
-  booking_contact_email: string | null;
-  booking_contact_phone: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -153,7 +154,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         .maybeSingle(),
       supabaseAdmin
         .from("bookings")
-        .select("id, booking_ref, customer_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_date, status, total_price_cents, created_at")
+        .select("id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_date, status, total_price_cents, created_at")
         .eq("customer_id", id)
         .order("created_at", { ascending: false }),
       supabaseAdmin

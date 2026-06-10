@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import {
   FLEET_EQUIPMENT_SERVICE_DATE_SELECT,
   mapFleetEquipmentServiceDateRowToRecord,
@@ -17,6 +18,9 @@ export async function PATCH(
   { params }: { params: Promise<{ serviceDateId: string }> },
 ) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { serviceDateId } = await params;
     const body = (await req.json().catch(() => ({}))) as UpdateServiceDateBody;
     const serviceDate = body.serviceDate;
@@ -62,6 +66,9 @@ export async function DELETE(
   { params }: { params: Promise<{ serviceDateId: string }> },
 ) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { serviceDateId } = await params;
 
     const { error } = await supabaseAdmin

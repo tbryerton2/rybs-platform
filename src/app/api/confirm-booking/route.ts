@@ -457,6 +457,8 @@ export async function POST(req: Request) {
           payment_provider_payment_id: checkoutPayment?.providerPaymentId ?? null,
         },
         identity: {
+          customerFirstName,
+          customerLastName,
           customerName,
           customerEmail,
           customerPhone,

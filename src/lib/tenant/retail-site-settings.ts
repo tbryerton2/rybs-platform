@@ -4,6 +4,8 @@ import { getBrandSettings, getCurrentTenant, getSupportSettings, getTenantSettin
 export type RetailHeaderSettings = {
   showCallTextButton: boolean;
   phoneNumber: string;
+  showEmailInHeader: boolean;
+  emailAddress: string;
   showLogoInHeader: boolean;
   logoUrl: string;
   logoAlt: string;
@@ -52,6 +54,10 @@ function asBoolean(value: unknown, fallback: boolean) {
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function asNumber(value: unknown, fallback: number) {
@@ -136,6 +142,8 @@ export function sanitizeRetailSiteSettings(input: unknown): RetailSiteSettings {
     header: {
       showCallTextButton: asBoolean(header.showCallTextButton, true),
       phoneNumber: asString(header.phoneNumber),
+      showEmailInHeader: asBoolean(header.showEmailInHeader, false),
+      emailAddress: asString(header.emailAddress),
       showLogoInHeader: asBoolean(header.showLogoInHeader, false),
       logoUrl: asString(header.logoUrl),
       logoAlt: asString(header.logoAlt),
@@ -174,6 +182,8 @@ export async function getRetailSiteSettings(): Promise<RetailSiteSettings> {
     header: {
       showCallTextButton: settings.get(`${SETTINGS_CATEGORY_HEADER}.showCallTextButton`) ?? true,
       phoneNumber: settings.get(`${SETTINGS_CATEGORY_HEADER}.phoneNumber`) ?? defaultPhoneNumber,
+      showEmailInHeader: settings.get(`${SETTINGS_CATEGORY_HEADER}.showEmailInHeader`) ?? false,
+      emailAddress: settings.get(`${SETTINGS_CATEGORY_HEADER}.emailAddress`) ?? "",
       showLogoInHeader: settings.get(`${SETTINGS_CATEGORY_HEADER}.showLogoInHeader`) ?? false,
       logoUrl: settings.get(`${SETTINGS_CATEGORY_HEADER}.logoUrl`) ?? "",
       logoAlt: settings.get(`${SETTINGS_CATEGORY_HEADER}.logoAlt`) ?? "",
@@ -203,6 +213,10 @@ export async function saveRetailSiteSettings(input: unknown): Promise<RetailSite
     throw new Error("Phone number is required when the Call/Text button is enabled.");
   }
 
+  if (settings.header.showEmailInHeader && !isValidEmail(settings.header.emailAddress)) {
+    throw new Error("A valid email address is required when header email is enabled.");
+  }
+
   const { error } = await supabaseAdmin.from("tenant_settings").upsert(
     [
       {
@@ -216,6 +230,18 @@ export async function saveRetailSiteSettings(input: unknown): Promise<RetailSite
         category: SETTINGS_CATEGORY_HEADER,
         key: "phoneNumber",
         value_json: settings.header.phoneNumber,
+      },
+      {
+        tenant_id: tenant.id,
+        category: SETTINGS_CATEGORY_HEADER,
+        key: "showEmailInHeader",
+        value_json: settings.header.showEmailInHeader,
+      },
+      {
+        tenant_id: tenant.id,
+        category: SETTINGS_CATEGORY_HEADER,
+        key: "emailAddress",
+        value_json: settings.header.emailAddress,
       },
       {
         tenant_id: tenant.id,

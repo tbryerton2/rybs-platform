@@ -16,11 +16,14 @@ import {
   getPlacementDispatchSummary,
   sanitizePlacementDetails,
 } from "@/lib/placement";
+import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
+import { formatCustomerName } from "@/lib/customer-name";
 
 type BookingRow = {
   id: string;
   booking_ref: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -251,7 +254,7 @@ function QuickViewDialog({
               </span>
             </div>
             <h2 id="schedule-stop-quick-view-title" className="mt-4 text-xl font-semibold text-slate-900">
-              {job.customer_name || "Unnamed customer"}
+              {formatCustomerName(job.customer_first_name, job.customer_last_name, "Unnamed customer")}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {variant === "delivery" ? "Delivery" : "Pickup"} quick view
@@ -331,23 +334,23 @@ function QuickViewDialog({
               <form action="/api/admin/mark-delivered" method="POST">
                 <input type="hidden" name="id" value={job.id} />
                 <input type="hidden" name="redirectTo" value="/admin/schedule" />
-                <button
-                  type="submit"
+                <FormSubmitButton
+                  loadingLabel="Marking..."
                   className="inline-flex h-10 items-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-4 focus-visible:ring-[#F97316]/20"
                 >
                   Mark delivered
-                </button>
+                </FormSubmitButton>
               </form>
             ) : (
               <form action="/api/admin/mark-picked-up" method="POST">
                 <input type="hidden" name="id" value={job.id} />
                 <input type="hidden" name="redirectTo" value="/admin/schedule" />
-                <button
-                  type="submit"
+                <FormSubmitButton
+                  loadingLabel="Marking..."
                   className="inline-flex h-10 items-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-200"
                 >
                   Mark picked up
-                </button>
+                </FormSubmitButton>
               </form>
             )}
           </div>
@@ -482,7 +485,9 @@ function StopCard({
             <Icon className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-900">{job.customer_name || "Unnamed customer"}</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {formatCustomerName(job.customer_first_name, job.customer_last_name, "Unnamed customer")}
+            </div>
             <div className="mt-1 text-xs font-medium text-slate-700">{stopDescriptor(job)}</div>
           </div>
         </div>

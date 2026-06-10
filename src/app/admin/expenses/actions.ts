@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import {
   archiveExpenseForCurrentBusiness,
   createExpenseForCurrentBusiness,
@@ -10,6 +11,8 @@ import {
 import type { ExpenseMutationInput } from "@/lib/admin/expenses";
 
 export async function createExpenseAction(input: ExpenseMutationInput): Promise<ExpenseMutationResult> {
+  await requireAdminOwner();
+
   const result = await createExpenseForCurrentBusiness(input);
 
   if (result.ok) {
@@ -23,6 +26,8 @@ export async function updateExpenseAction(
   id: string,
   input: ExpenseMutationInput,
 ): Promise<ExpenseMutationResult> {
+  await requireAdminOwner();
+
   const result = await updateExpenseForCurrentBusiness(id, input);
 
   if (result.ok) {
@@ -33,6 +38,8 @@ export async function updateExpenseAction(
 }
 
 export async function archiveExpenseAction(id: string): Promise<ExpenseMutationResult> {
+  await requireAdminOwner();
+
   const result = await archiveExpenseForCurrentBusiness(id);
 
   if (result.ok) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import {
   buildDumpsterInsert,
   mapDumpsterRowToRecord,
@@ -17,6 +18,9 @@ type CreateDumpsterBody = {
 
 export async function POST(req: Request) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const body = (await req.json().catch(() => ({}))) as CreateDumpsterBody;
     const dumpster = body.dumpster;
 

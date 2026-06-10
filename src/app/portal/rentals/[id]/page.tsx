@@ -18,6 +18,7 @@ import {
   getCustomerVisibleStatusTone,
 } from "@/lib/rental-action-requests";
 import { canReorderBooking } from "@/lib/reorder";
+import { combineCustomerNameParts, formatCustomerName } from "@/lib/customer-name";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { getPortalRental, getPortalRequestSummary } from "@/lib/portal/data";
 import { getPortalRentalLabel } from "@/lib/portal/rental-number";
@@ -271,8 +272,9 @@ export default async function PortalRentalDetailPage({
   const { booking, requests, pickupEligibility, extensionEligibility, issueReportEligibility } = rental;
   const submissionMessage = getSubmissionMessage(resolvedSearchParams);
   const reorderEligible = canReorderBooking(booking.status);
+  const bookingCustomerName = combineCustomerNameParts(booking.customer_first_name, booking.customer_last_name);
   const bookingContactDiffers =
-    normalizeText(booking.customer_name) !== normalizeText(customer.name) ||
+    normalizeText(bookingCustomerName) !== normalizeText(customer.name) ||
     normalizeText(booking.customer_email) !== normalizeText(customer.email) ||
     normalizePhone(booking.customer_phone) !== normalizePhone(customer.phone);
 
@@ -391,7 +393,7 @@ export default async function PortalRentalDetailPage({
                 "Address pending",
               )}
             />
-            <InfoItem label="Customer name" value={booking.customer_name || customer.name || "—"} />
+            <InfoItem label="Customer name" value={bookingCustomerName || customer.name || "—"} />
             <InfoItem label="Service area" value={formatServiceArea(booking.service_town, booking.service_county) || "—"} />
           </InfoCard>
 
@@ -427,7 +429,10 @@ export default async function PortalRentalDetailPage({
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <InfoItem label="Name" value={booking.customer_name || "—"} />
+                  <InfoItem
+                    label="Name"
+                    value={formatCustomerName(booking.customer_first_name, booking.customer_last_name)}
+                  />
                   <InfoItem label="Email" value={booking.customer_email || "—"} />
                   <InfoItem label="Phone" value={booking.customer_phone || "—"} />
                 </div>

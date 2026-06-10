@@ -3,8 +3,11 @@ import { isBookingSchemaError } from "@/lib/booking-schema";
 import { recordEntityHistory } from "@/lib/entity-history";
 import { isValidEmail } from "@/lib/identity";
 import { findOrCreateCustomerRecord, normalizePhone } from "@/lib/customers";
+import { resolveCustomerName } from "@/lib/customer-name";
 
 type BookingIdentityInput = {
+  customerFirstName?: string | null;
+  customerLastName?: string | null;
   customerName?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
@@ -70,6 +73,11 @@ type CreateBookingRecordInput = {
   };
 };
 
+function clean(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 export async function createBookingRecord({
   supabase,
   booking,
@@ -82,9 +90,10 @@ export async function createBookingRecord({
   }
 
   const normalizedPhone = normalizePhone(identity.customerPhone);
+  const { customerFirstName, customerLastName, customerFullName } = resolveCustomerName(identity);
   const customerId = await findOrCreateCustomerRecord(
     {
-      fullName: identity.customerName,
+      fullName: customerFullName,
       email: identity.customerEmail,
       phone: normalizedPhone,
       street: identity.customerStreet,
@@ -106,16 +115,14 @@ export async function createBookingRecord({
     service_town: booking.service_town ?? null,
     notes: booking.notes ?? null,
     customer_id: customerId,
-    customer_name: identity.customerName?.trim() || null,
-    customer_email: identity.customerEmail?.trim() || null,
+    customer_email: clean(identity.customerEmail),
     customer_phone: normalizedPhone,
-    customer_street: identity.customerStreet?.trim() || null,
-    customer_city: identity.customerCity?.trim() || null,
-    customer_state: identity.customerState?.trim().toUpperCase() || null,
-    customer_zip: identity.customerZip?.trim() || null,
-    booking_contact_name: identity.customerName?.trim() || null,
-    booking_contact_email: identity.customerEmail?.trim() || null,
-    booking_contact_phone: normalizedPhone,
+    customer_street: clean(identity.customerStreet),
+    customer_city: clean(identity.customerCity),
+    customer_state: clean(identity.customerState)?.toUpperCase() || null,
+    customer_zip: clean(identity.customerZip),
+    customer_first_name: customerFirstName,
+    customer_last_name: customerLastName,
   };
 
   const baseInsertRow = {

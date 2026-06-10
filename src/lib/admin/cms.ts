@@ -5,6 +5,7 @@ import {
   getTenantContentDraftFirst,
   getTenantContentRowByStatus,
 } from "@/lib/tenant/server";
+import { normalizeHomeStatsIconKey, type HomeStatsIconKey } from "@/lib/home-stats-icons";
 
 export type CmsPageId = "home" | "pricing";
 export type HomeSectionType = "card_grid" | "steps";
@@ -21,6 +22,7 @@ export type CmsEntry<TValue> = CmsEntryStatus & {
 };
 
 export type HomeHeroValue = {
+  eyebrow: string;
   headlineLine1: string;
   headlineLine2: string;
   subheadline: string;
@@ -39,6 +41,7 @@ export type HomeCardGridSection = {
     label: string;
     headline: string;
     body: string;
+    icon: HomeStatsIconKey;
   }>;
 };
 
@@ -52,11 +55,57 @@ export type HomeStepsSection = {
     label: string;
     title: string;
     body: string;
+    icon: HomeStatsIconKey;
   }>;
   footnote: string;
 };
 
 export type HomeFlexibleSection = HomeCardGridSection | HomeStepsSection;
+
+export type HomeStatsBarValue = {
+  enabled: boolean;
+  items: Array<{
+    id: string;
+    text: string;
+    icon: HomeStatsIconKey;
+    sort_order: number;
+    active: boolean;
+  }>;
+};
+
+export type HomeDumpsterSizeItem = {
+  id: string;
+  sizeYards: number | null;
+  title: string;
+  shortDescription: string;
+  longDescription: string;
+  checklistItems: string[];
+  dimensions: string;
+  weightIncluded: string;
+  rentalWindowDays: number | null;
+  badgeLabel: string;
+  isFeatured: boolean;
+};
+
+export type HomeDumpsterSizesValue = {
+  showDumpsterSizesSection: boolean;
+  dumpsterSizesEyebrow: string;
+  dumpsterSizesTitle: string;
+  dumpsterSizesIntro: string;
+  dumpsterSizes: HomeDumpsterSizeItem[];
+};
+
+export type HomeServiceAreaLookupValue = {
+  enabled: boolean;
+  eyebrow: string;
+  headline: string;
+  description: string;
+  zipPlaceholder: string;
+  buttonText: string;
+  areasEyebrow: string;
+  areaPills: string[];
+  helperText: string;
+};
 
 export type HomeServiceAreaPopupValue = {
   title: string;
@@ -87,7 +136,10 @@ export type PricingProductContentValue = {
 export type RetailSiteCmsState = {
   home: {
     hero: CmsEntry<HomeHeroValue>;
+    statsBar: CmsEntry<HomeStatsBarValue>;
     sections: CmsEntry<HomeFlexibleSection[]>;
+    dumpsterSizes: CmsEntry<HomeDumpsterSizesValue>;
+    serviceAreaLookup: CmsEntry<HomeServiceAreaLookupValue>;
     serviceAreaPopup: CmsEntry<HomeServiceAreaPopupValue>;
     faq: CmsEntry<HomeFaqValue>;
   };
@@ -103,11 +155,102 @@ export const CMS_PAGE_TABS: Array<{ id: CmsPageId; label: string }> = [
 
 export const RETAIL_SITE_CMS_CONTENT_KEYS = [
   "content.home.hero",
+  "content.home.stats_bar",
   "content.home.sections",
+  "content.home.dumpster_sizes",
+  "content.home.service_area_lookup",
   "content.home.service_area_popup",
   "content.faq.home",
   "content.pricing.product_content",
 ] as const;
+
+const HOME_STATS_BAR_DEFAULT: HomeStatsBarValue = {
+  enabled: true,
+  items: [
+    {
+      id: "next-day-delivery",
+      icon: "truck",
+      text: "Next-day delivery available",
+      sort_order: 1,
+      active: true,
+    },
+    {
+      id: "family-owned",
+      icon: "home",
+      text: "Family owned & operated",
+      sort_order: 2,
+      active: true,
+    },
+    {
+      id: "insured-licensed",
+      icon: "shield",
+      text: "Fully insured & licensed",
+      sort_order: 3,
+      active: true,
+    },
+  ],
+};
+
+const HOME_DUMPSTER_SIZES_DEFAULT: HomeDumpsterSizesValue = {
+  showDumpsterSizesSection: true,
+  dumpsterSizesEyebrow: "Choose your size",
+  dumpsterSizesTitle: "Pick the right dumpster",
+  dumpsterSizesIntro: "Not sure what you need? Call us — we’ll help you choose.",
+  dumpsterSizes: [
+    {
+      id: "14-yard",
+      sizeYards: 14,
+      title: "The right size for most jobs",
+      shortDescription: "Great for cleanouts, renovations, yard waste, and roofing debris.",
+      longDescription: "Big enough for a full cleanout or renovation, small enough to fit in most driveways.",
+      checklistItems: [
+        "Home cleanouts",
+        "Yard waste",
+        "Estate cleanouts",
+        "Renovation debris",
+        "Roofing shingles",
+        "Garage & basement",
+      ],
+      dimensions: "14′ × 7.5′ × 4.5′",
+      weightIncluded: "Up to 3 tons",
+      rentalWindowDays: 7,
+      badgeLabel: "",
+      isFeatured: true,
+    },
+  ],
+};
+
+const HOME_SERVICE_AREA_LOOKUP_DEFAULT: HomeServiceAreaLookupValue = {
+  enabled: true,
+  eyebrow: "SERVICE AREA",
+  headline: "Do we serve your area?",
+  description: "Enter your ZIP for instant confirmation and pricing.",
+  zipPlaceholder: "Enter ZIP code",
+  buttonText: "Check ZIP",
+  areasEyebrow: "SOME AREAS WE COVER",
+  areaPills: [
+    "Syracuse",
+    "Oneida",
+    "Utica",
+    "Rome",
+    "Cazenovia",
+    "Chittenango",
+    "Canastota",
+    "Hamilton",
+  ],
+  helperText: "& more — check your ZIP to confirm",
+};
+
+const DEFAULT_CARD_GRID_ICON_KEYS = ["tag", "truck", "home"] satisfies HomeStatsIconKey[];
+const DEFAULT_STEPS_ICON_KEYS = ["calendar", "mapPin", "checkCircle"] satisfies HomeStatsIconKey[];
+
+function getDefaultMarketingIconKey(
+  type: HomeSectionType,
+  index: number,
+): HomeStatsIconKey {
+  const defaults = type === "card_grid" ? DEFAULT_CARD_GRID_ICON_KEYS : DEFAULT_STEPS_ICON_KEYS;
+  return defaults[index] ?? "star";
+}
 
 function asObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -131,6 +274,33 @@ function asRecordArray(value: unknown) {
   return Array.isArray(value) ? value.map(asObject) : [];
 }
 
+function asBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
+function asNullableNumber(value: unknown, fallback: number | null = null) {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallback;
+}
+
 function latestTimestamp(...values: Array<string | null | undefined>) {
   const timestamps = values.filter((value): value is string => Boolean(value));
   if (!timestamps.length) return null;
@@ -149,6 +319,7 @@ function normalizeHero(rawValue: unknown): HomeHeroValue {
   }
 
   return {
+    eyebrow: asString(raw.eyebrow, "Serving Central New York"),
     headlineLine1: asString(raw.headlineLine1 ?? raw.headline),
     headlineLine2: asString(raw.headlineLine2),
     subheadline: asString(raw.subheadline),
@@ -167,10 +338,11 @@ function normalizeCardGridSection(rawValue: unknown, fallbackId: string): HomeCa
     caption: asString(raw.caption),
     sectionTitle: asString(raw.sectionTitle),
     intro: asString(raw.intro),
-    items: asRecordArray(raw.items).map((item) => ({
+    items: asRecordArray(raw.items).map((item, index) => ({
       label: asString(item.label ?? item.title),
       headline: asString(item.headline),
       body: asString(item.body),
+      icon: normalizeHomeStatsIconKey(item.icon ?? getDefaultMarketingIconKey("card_grid", index)),
     })),
   };
 }
@@ -184,10 +356,11 @@ function normalizeStepsSection(rawValue: unknown, fallbackId: string): HomeSteps
     caption: asString(raw.caption),
     sectionTitle: asString(raw.sectionTitle),
     intro: asString(raw.intro),
-    items: asRecordArray(raw.items).map((item) => ({
+    items: asRecordArray(raw.items).map((item, index) => ({
       label: asString(item.label ?? item.stepLabel),
       title: asString(item.title),
       body: asString(item.body),
+      icon: normalizeHomeStatsIconKey(item.icon ?? getDefaultMarketingIconKey("steps", index)),
     })),
     footnote: asString(raw.footnote),
   };
@@ -215,6 +388,105 @@ function normalizeFlexibleSections(rawValue: unknown): HomeFlexibleSection[] {
 
       return [];
     });
+}
+
+function normalizeStatsBar(rawValue: unknown): HomeStatsBarValue {
+  if (rawValue === undefined) {
+    return HOME_STATS_BAR_DEFAULT;
+  }
+
+  const raw = asObject(rawValue);
+  const items = asRecordArray(raw.items).map((item, index) => ({
+    id: asString(item.id, `stat-${index + 1}`),
+    text: asString(item.text),
+    icon: normalizeHomeStatsIconKey(item.icon),
+    sort_order: asNumber(item.sort_order ?? item.sortOrder, index + 1),
+    active: asBoolean(item.active, true),
+  }));
+
+  return {
+    enabled: asBoolean(raw.enabled, true),
+    items,
+  };
+}
+
+function normalizeDumpsterSizes(rawValue: unknown): HomeDumpsterSizesValue {
+  if (rawValue === undefined) {
+    return {
+      ...HOME_DUMPSTER_SIZES_DEFAULT,
+      dumpsterSizes: HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizes.map((item) => ({
+        ...item,
+        checklistItems: [...item.checklistItems],
+      })),
+    };
+  }
+
+  const raw = asObject(rawValue);
+  const source = Array.isArray(raw.dumpsterSizes)
+    ? raw.dumpsterSizes
+    : Array.isArray(raw.items)
+      ? raw.items
+      : [];
+  const fallbackItem = HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizes[0];
+
+  return {
+    showDumpsterSizesSection: asBoolean(
+      raw.showDumpsterSizesSection ?? raw.enabled,
+      HOME_DUMPSTER_SIZES_DEFAULT.showDumpsterSizesSection,
+    ),
+    dumpsterSizesEyebrow: asString(
+      raw.dumpsterSizesEyebrow ?? raw.eyebrow,
+      HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizesEyebrow,
+    ),
+    dumpsterSizesTitle: asString(
+      raw.dumpsterSizesTitle ?? raw.title,
+      HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizesTitle,
+    ),
+    dumpsterSizesIntro: asString(
+      raw.dumpsterSizesIntro ?? raw.intro,
+      HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizesIntro,
+    ),
+    dumpsterSizes: (source.length ? source : HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizes).map((item, index) => {
+      const record = asObject(item);
+      const fallback = HOME_DUMPSTER_SIZES_DEFAULT.dumpsterSizes[index] ?? fallbackItem;
+      const checklistItems = asStringArray(record.checklistItems ?? record.commonUses, fallback.checklistItems.length);
+
+      return {
+        id: asString(record.id, `dumpster-size-${index + 1}`),
+        sizeYards: asNullableNumber(record.sizeYards ?? record.yards, fallback.sizeYards),
+        title: asString(record.title, fallback.title),
+        shortDescription: asString(record.shortDescription, fallback.shortDescription),
+        longDescription: asString(record.longDescription, fallback.longDescription),
+        checklistItems: checklistItems.length ? checklistItems : [...fallback.checklistItems],
+        dimensions: asString(record.dimensions, fallback.dimensions),
+        weightIncluded: asString(record.weightIncluded, fallback.weightIncluded),
+        rentalWindowDays: asNullableNumber(record.rentalWindowDays, fallback.rentalWindowDays),
+        badgeLabel: asString(record.badgeLabel, fallback.badgeLabel),
+        isFeatured: asBoolean(record.isFeatured, fallback.isFeatured),
+      };
+    }),
+  };
+}
+
+function normalizeServiceAreaLookup(rawValue: unknown): HomeServiceAreaLookupValue {
+  if (rawValue === undefined) {
+    return HOME_SERVICE_AREA_LOOKUP_DEFAULT;
+  }
+
+  const raw = asObject(rawValue);
+  const areaPills = asStringArray(raw.areaPills ?? raw.areas, 1);
+
+  return {
+    enabled: asBoolean(raw.enabled, true),
+    eyebrow: asString(raw.eyebrow, HOME_SERVICE_AREA_LOOKUP_DEFAULT.eyebrow),
+    headline: asString(raw.headline, HOME_SERVICE_AREA_LOOKUP_DEFAULT.headline),
+    description: asString(raw.description, HOME_SERVICE_AREA_LOOKUP_DEFAULT.description),
+    zipPlaceholder: asString(raw.zipPlaceholder, HOME_SERVICE_AREA_LOOKUP_DEFAULT.zipPlaceholder),
+    buttonText: asString(raw.buttonText, HOME_SERVICE_AREA_LOOKUP_DEFAULT.buttonText),
+    areasEyebrow: asString(raw.areasEyebrow, HOME_SERVICE_AREA_LOOKUP_DEFAULT.areasEyebrow),
+    areaPills: areaPills.length ? areaPills : [""],
+    helperText: asString(raw.helperText, HOME_SERVICE_AREA_LOOKUP_DEFAULT.helperText),
+  };
 }
 
 function normalizeServiceAreaPopup(rawValue: unknown): HomeServiceAreaPopupValue {
@@ -333,6 +605,38 @@ async function getHomeHeroEntry(): Promise<CmsEntry<HomeHeroValue>> {
   };
 }
 
+async function getHomeStatsBarEntry(): Promise<CmsEntry<HomeStatsBarValue>> {
+  const [draftRow, publishedRow, value] = await Promise.all([
+    getTenantContentRowByStatus("content.home.stats_bar", "draft"),
+    getTenantContentRowByStatus("content.home.stats_bar", "published"),
+    getTenantContentDraftFirst("content.home.stats_bar"),
+  ]);
+
+  return {
+    contentKey: "content.home.stats_bar",
+    hasDraft: Boolean(draftRow),
+    draftUpdatedAt: draftRow?.updated_at ?? null,
+    publishedUpdatedAt: publishedRow?.updated_at ?? null,
+    value: normalizeStatsBar(value),
+  };
+}
+
+async function getHomeDumpsterSizesEntry(): Promise<CmsEntry<HomeDumpsterSizesValue>> {
+  const [draftRow, publishedRow, value] = await Promise.all([
+    getTenantContentRowByStatus("content.home.dumpster_sizes", "draft"),
+    getTenantContentRowByStatus("content.home.dumpster_sizes", "published"),
+    getTenantContentDraftFirst("content.home.dumpster_sizes"),
+  ]);
+
+  return {
+    contentKey: "content.home.dumpster_sizes",
+    hasDraft: Boolean(draftRow),
+    draftUpdatedAt: draftRow?.updated_at ?? null,
+    publishedUpdatedAt: publishedRow?.updated_at ?? null,
+    value: normalizeDumpsterSizes(value),
+  };
+}
+
 async function getServiceAreaPopupEntry(): Promise<CmsEntry<HomeServiceAreaPopupValue>> {
   const [draftRow, publishedRow, value, legacyDraftRow, legacyPublishedRow, legacyValue] = await Promise.all([
     getTenantContentRowByStatus("content.home.service_area_popup", "draft"),
@@ -351,6 +655,22 @@ async function getServiceAreaPopupEntry(): Promise<CmsEntry<HomeServiceAreaPopup
     value: normalizeServiceAreaPopup(
       value ?? legacyValue,
     ),
+  };
+}
+
+async function getServiceAreaLookupEntry(): Promise<CmsEntry<HomeServiceAreaLookupValue>> {
+  const [draftRow, publishedRow, value] = await Promise.all([
+    getTenantContentRowByStatus("content.home.service_area_lookup", "draft"),
+    getTenantContentRowByStatus("content.home.service_area_lookup", "published"),
+    getTenantContentDraftFirst("content.home.service_area_lookup"),
+  ]);
+
+  return {
+    contentKey: "content.home.service_area_lookup",
+    hasDraft: Boolean(draftRow),
+    draftUpdatedAt: draftRow?.updated_at ?? null,
+    publishedUpdatedAt: publishedRow?.updated_at ?? null,
+    value: normalizeServiceAreaLookup(value),
   };
 }
 
@@ -392,9 +712,21 @@ async function getPricingProductContentEntry(): Promise<CmsEntry<PricingProductC
 }
 
 export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState> {
-  const [hero, sections, serviceAreaPopup, faq, productContent] = await Promise.all([
+  const [
+    hero,
+    statsBar,
+    sections,
+    dumpsterSizes,
+    serviceAreaLookup,
+    serviceAreaPopup,
+    faq,
+    productContent,
+  ] = await Promise.all([
     getHomeHeroEntry(),
+    getHomeStatsBarEntry(),
     getHomeSectionsEntry(),
+    getHomeDumpsterSizesEntry(),
+    getServiceAreaLookupEntry(),
     getServiceAreaPopupEntry(),
     getHomeFaqEntry(),
     getPricingProductContentEntry(),
@@ -403,7 +735,10 @@ export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState
   return {
     home: {
       hero,
+      statsBar,
       sections,
+      dumpsterSizes,
+      serviceAreaLookup,
       serviceAreaPopup,
       faq,
     },

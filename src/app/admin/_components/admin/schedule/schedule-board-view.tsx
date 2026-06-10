@@ -13,7 +13,8 @@ import ScheduleBoard from "./schedule-board";
 type BookingRow = {
   id: string;
   booking_ref: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;

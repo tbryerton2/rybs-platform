@@ -29,6 +29,7 @@ import {
 import { buildPickupPlanningModel } from "@/lib/pickup-planning";
 import { getActiveDumpsterFilterOptions } from "@/lib/admin/dumpster-inventory";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { combineCustomerNameParts } from "@/lib/customer-name";
 import type { ComponentType, SVGProps } from "react";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -37,14 +38,12 @@ type BookingRow = {
   id: string;
   booking_ref: string | null;
   created_at: string | null;
-  updated_at: string | null;
+  updated_at?: string | null;
   status: string | null;
   customer_id: string | null;
   reordered_from_booking_id: string | null;
-  booking_contact_name: string | null;
-  booking_contact_email: string | null;
-  booking_contact_phone: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
   customer_street: string | null;
@@ -198,13 +197,11 @@ type QuickViewPresetKey = Filters["quickView"];
 const BOOKING_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
 
-const BOOKING_LIST_SELECT = `id, booking_ref, created_at, updated_at, status, customer_id, reordered_from_booking_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id), ${BOOKING_PLACEMENT_SELECT}`;
+const BOOKING_LIST_SELECT = `id, booking_ref, created_at, status, customer_id, reordered_from_booking_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id), ${BOOKING_PLACEMENT_SELECT}`;
 const BOOKING_LIST_SELECT_WITH_REORDER_ONLY =
-  "id, booking_ref, created_at, updated_at, status, customer_id, reordered_from_booking_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id)";
+  "id, booking_ref, created_at, status, customer_id, reordered_from_booking_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id)";
 const BASE_BOOKING_LIST_SELECT =
-  "id, booking_ref, created_at, updated_at, status, customer_id, booking_contact_name, booking_contact_email, booking_contact_phone, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id)";
-const LEGACY_BOOKING_LIST_SELECT =
-  "id, booking_ref, created_at, status, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date";
+  "id, booking_ref, created_at, status, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, dumpster_id, dumpster_size, assigned_dumpster:dumpster_id(display_name, equipment_id)";
 
 const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
   { value: "updated_desc", label: "Most recently updated" },
@@ -288,7 +285,9 @@ function logAdminBookingsError(context: string, error: unknown) {
     const errorObject = error as Record<string, unknown>;
     console.error(`ADMIN BOOKINGS ERROR [${context}]:`, {
       message: typeof errorObject.message === "string" ? errorObject.message : null,
-      details: errorObject,
+      details: errorObject.details ?? null,
+      hint: errorObject.hint ?? null,
+      code: errorObject.code ?? null,
     });
     return;
   }
@@ -417,50 +416,6 @@ function withEmptyPlacementFields(
   })) as BookingRow[];
 }
 
-function withLegacyBookingFields(
-  rows: Array<{
-    id: string;
-    booking_ref?: string | null;
-    created_at?: string | null;
-    status?: string | null;
-    customer_name?: string | null;
-    customer_email?: string | null;
-    customer_phone?: string | null;
-    customer_street?: string | null;
-    customer_city?: string | null;
-    customer_zip?: string | null;
-    delivery_date?: string | null;
-    pickup_mode?: string | null;
-    pickup_date?: string | null;
-  }>,
-) {
-  return rows.map((row) => ({
-    id: row.id,
-    booking_ref: row.booking_ref ?? null,
-    created_at: row.created_at ?? null,
-    updated_at: row.created_at ?? null,
-    status: row.status ?? null,
-    customer_id: null,
-    reordered_from_booking_id: null,
-    booking_contact_name: row.customer_name ?? null,
-    booking_contact_email: row.customer_email ?? null,
-    booking_contact_phone: row.customer_phone ?? null,
-    customer_name: row.customer_name ?? null,
-    customer_email: row.customer_email ?? null,
-    customer_phone: row.customer_phone ?? null,
-    customer_street: row.customer_street ?? null,
-    customer_city: row.customer_city ?? null,
-    customer_zip: row.customer_zip ?? null,
-    delivery_date: row.delivery_date ?? null,
-    pickup_mode: row.pickup_mode ?? null,
-    pickup_date: row.pickup_date ?? null,
-    dumpster_id: null,
-    dumpster_size: null,
-    assigned_dumpster: null,
-    ...EMPTY_BOOKING_PLACEMENT_FIELDS,
-  })) satisfies BookingRow[];
-}
-
 async function runBookingQuery(
   build: (selectClause: string) => PromiseLike<{
     data: unknown[] | null;
@@ -482,32 +437,6 @@ async function runBookingQuery(
       if (!fallback.error) {
         return withEmptyPlacementFields(
           (fallback.data ?? []) as unknown as Omit<BookingRow, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>[],
-        );
-      }
-
-      if (isBookingSchemaError(fallback.error)) {
-        const legacyFallback = await build(LEGACY_BOOKING_LIST_SELECT);
-        if (legacyFallback.error) {
-          logAdminBookingsError("legacy-fallback", legacyFallback.error);
-          return [];
-        }
-
-        return withLegacyBookingFields(
-          (legacyFallback.data ?? []) as Array<{
-            id: string;
-            booking_ref?: string | null;
-            created_at?: string | null;
-            status?: string | null;
-            customer_name?: string | null;
-            customer_email?: string | null;
-            customer_phone?: string | null;
-            customer_street?: string | null;
-            customer_city?: string | null;
-            customer_zip?: string | null;
-            delivery_date?: string | null;
-            pickup_mode?: string | null;
-            pickup_date?: string | null;
-          }>,
         );
       }
 
@@ -664,9 +593,8 @@ async function getSearchSupplementalBookings(query: string) {
         .or(
           [
             `booking_ref.ilike.%${term}%`,
-            `booking_contact_name.ilike.%${term}%`,
-            `booking_contact_email.ilike.%${term}%`,
-            `customer_name.ilike.%${term}%`,
+            `customer_first_name.ilike.%${term}%`,
+            `customer_last_name.ilike.%${term}%`,
             `customer_email.ilike.%${term}%`,
             `customer_street.ilike.%${term}%`,
             `customer_city.ilike.%${term}%`,
@@ -879,9 +807,9 @@ function getPickupDateCell(vm: Pick<BookingViewModel, "booking" | "pickupPlannin
 }
 
 function buildViewModel(row: BookingRow, linkedCustomer: LinkedCustomer | null, futureDeliveryDates: string[]) {
-  const bookedWithName = row.booking_contact_name ?? row.customer_name ?? null;
-  const bookedWithEmail = row.booking_contact_email ?? row.customer_email ?? null;
-  const bookedWithPhone = row.booking_contact_phone ?? row.customer_phone ?? null;
+  const bookedWithName = combineCustomerNameParts(row.customer_first_name, row.customer_last_name);
+  const bookedWithEmail = row.customer_email ?? null;
+  const bookedWithPhone = row.customer_phone ?? null;
 
   const currentAccountName = linkedCustomer?.name ?? null;
   const currentAccountEmail = linkedCustomer?.email ?? null;

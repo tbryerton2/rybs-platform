@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import {
   createEmployeeForCurrentBusiness,
   deactivateEmployeeForCurrentBusiness,
@@ -11,6 +12,8 @@ import {
 import type { EmployeeMutationInput } from "@/lib/admin/employees";
 
 export async function createEmployeeAction(input: EmployeeMutationInput): Promise<EmployeeMutationResult> {
+  await requireAdminOwner();
+
   const result = await createEmployeeForCurrentBusiness(input);
 
   if (result.ok) {
@@ -26,6 +29,8 @@ export async function updateEmployeeAction(
   id: string,
   input: EmployeeMutationInput,
 ): Promise<EmployeeMutationResult> {
+  await requireAdminOwner();
+
   const result = await updateEmployeeForCurrentBusiness(id, input);
 
   if (result.ok) {
@@ -37,6 +42,8 @@ export async function updateEmployeeAction(
 }
 
 export async function deactivateEmployeeAction(id: string): Promise<EmployeeMutationResult> {
+  await requireAdminOwner();
+
   const result = await deactivateEmployeeForCurrentBusiness(id);
 
   if (result.ok) {
@@ -48,6 +55,8 @@ export async function deactivateEmployeeAction(id: string): Promise<EmployeeMuta
 }
 
 export async function reactivateEmployeeAction(id: string): Promise<EmployeeMutationResult> {
+  await requireAdminOwner();
+
   const result = await reactivateEmployeeForCurrentBusiness(id);
 
   if (result.ok) {

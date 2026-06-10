@@ -1,5 +1,6 @@
 // src/app/api/admin/bookings/[id]/route.ts
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function isUuid(v: string) {
@@ -12,6 +13,9 @@ type RouteContext = { params?: Promise<{ id?: string }> | { id?: string } };
 
 export async function PATCH(req: Request, ctx: RouteContext) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     // ✅ Robust params handling
     const p = await Promise.resolve(ctx?.params ?? {});
     const id = p?.id;
@@ -21,15 +25,6 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     }
     if (!isUuid(id)) {
       return NextResponse.json({ ok: false, error: `Invalid booking id: ${id}` }, { status: 400 });
-    }
-
-    // ✅ Optional token gate
-    const expected = process.env.ADMIN_TOKEN;
-    if (expected) {
-      const got = req.headers.get("x-admin-token");
-      if (got !== expected) {
-        return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-      }
     }
 
     const body = await req.json().catch(() => ({}));

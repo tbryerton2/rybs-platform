@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import { EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
 import { getRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
 import { getBrandSettings, getRuntimeSettings, getSupportSettings } from "@/lib/tenant/server";
 import "./globals.css";
@@ -14,17 +15,47 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-function buildPrimaryCtaHref(type: "tel" | "mailto" | "url", value: string | null) {
-  if (!value) return null;
+const playfairDisplay = Playfair_Display({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["600", "700", "800", "900"],
+  style: ["normal", "italic"],
+  fallback: ["Iowan Old Style", "Georgia", "serif"],
+  display: "swap",
+});
 
-  switch (type) {
-    case "mailto":
-      return `mailto:${value}`;
-    case "url":
-      return value;
-    default:
-      return `tel:${value}`;
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function buildMailtoHref(value: string) {
+  const email = value.trim();
+  return isValidEmail(email) ? `mailto:${email}` : null;
+}
+
+function buildTelHref(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return null;
+
+  return `tel:${trimmed.startsWith("+") ? `+${digits}` : digits}`;
+}
+
+function formatPhoneDisplay(value: string) {
+  const trimmed = value.trim();
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   }
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+
+  return trimmed;
 }
 
 function getBusinessNameTextClass(size: "small" | "medium" | "large") {
@@ -84,9 +115,11 @@ export default async function RootLayout({
     getRuntimeSettings(),
     getRetailSiteSettings(),
   ]);
-  const primaryCtaHref = retailSiteSettings.header.showCallTextButton
-    ? buildPrimaryCtaHref("tel", retailSiteSettings.header.phoneNumber || support.phone)
-    : null;
+  const headerPhoneNumber = retailSiteSettings.header.phoneNumber || support.phone || "";
+  const phoneHref = retailSiteSettings.header.showCallTextButton ? buildTelHref(headerPhoneNumber) : null;
+  const phoneDisplay = phoneHref ? formatPhoneDisplay(headerPhoneNumber) : null;
+  const emailAddress = retailSiteSettings.header.emailAddress;
+  const emailHref = retailSiteSettings.header.showEmailInHeader ? buildMailtoHref(emailAddress) : null;
   const showHeaderLogo =
     retailSiteSettings.header.showLogoInHeader && !!retailSiteSettings.header.logoUrl;
   const logoAlt = retailSiteSettings.header.logoAlt || `${brand.name} logo`;
@@ -95,10 +128,10 @@ export default async function RootLayout({
 
   return (
     <html lang="en" data-tenant-storage-namespace={runtime.storageNamespace}>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}>
         <div className="min-h-screen bg-[#F8FAFC]">
           {/* Global Header */}
-          <header className="sticky top-0 z-50 bg-[#f5f4f0]/95 backdrop-blur">
+          <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-[#f5f4f0]/95 backdrop-blur">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 {showHeaderLogo ? (
@@ -113,14 +146,27 @@ export default async function RootLayout({
                   {brand.name}
                 </div>
               </div>
-              {primaryCtaHref ? (
-                <a
-                  className="rounded-2xl border px-4 py-2 text-sm text-[#0F172A] hover:bg-white"
-                  style={{ borderColor: "#c0b9ae" }}
-                  href={primaryCtaHref}
-                >
-                  {brand.headerPrimaryCtaLabel || "Call/Text"}
-                </a>
+              {emailHref || (phoneHref && phoneDisplay) ? (
+                <div className="ml-4 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm font-medium text-slate-700">
+                  {emailHref ? (
+                    <a
+                      className="inline-flex min-w-0 max-w-[180px] items-center gap-1.5 transition hover:text-slate-950 sm:max-w-[240px]"
+                      href={emailHref}
+                    >
+                      <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{emailAddress}</span>
+                    </a>
+                  ) : null}
+                  {phoneHref && phoneDisplay ? (
+                    <a
+                      className="inline-flex shrink-0 items-center gap-1.5 transition hover:text-slate-950"
+                      href={phoneHref}
+                    >
+                      <PhoneIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>{phoneDisplay}</span>
+                    </a>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </header>

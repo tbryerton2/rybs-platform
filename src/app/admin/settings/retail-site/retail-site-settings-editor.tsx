@@ -66,6 +66,7 @@ function TextInput({
   placeholder,
   error,
   helperText,
+  type = "text",
 }: {
   label: string;
   value: string;
@@ -73,11 +74,13 @@ function TextInput({
   placeholder?: string;
   error?: string | null;
   helperText?: string;
+  type?: "email" | "number" | "text" | "tel";
 }) {
   return (
     <label className="block">
       <div className="mb-2 text-sm font-medium text-slate-800">{label}</div>
       <input
+        type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -176,6 +179,11 @@ export function RetailSiteSettingsEditor({
   const phoneError =
     settings.header.showCallTextButton && !settings.header.phoneNumber.trim()
       ? "Phone number is required when the Call/Text button is enabled."
+      : null;
+  const emailTrimmed = settings.header.emailAddress.trim();
+  const emailError =
+    settings.header.showEmailInHeader && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)
+      ? "A valid email address is required when header email is enabled."
       : null;
 
   const blockedDateError = settings.calendarClosures.blockedDates.find(
@@ -312,6 +320,11 @@ export function RetailSiteSettingsEditor({
       return;
     }
 
+    if (emailError) {
+      setError(emailError);
+      return;
+    }
+
     if (blockedDateError) {
       setError(blockedDateError);
       return;
@@ -410,36 +423,68 @@ export function RetailSiteSettingsEditor({
       {activeTab === "header" ? (
         <SectionCard
           title="Header"
-          description="Control whether the retail site shows the Call/Text action and which phone number it uses."
+          description="Control the contact links, logo, and business name shown in the retail site header."
         >
           <div className="space-y-4">
-            <ToggleRow
-              label="Show Call/Text button"
-              description="Hide this if the retail site should not show the header contact button."
-              checked={settings.header.showCallTextButton}
-              onChange={(checked) =>
-                updateSettings((current) => {
-                  current.header.showCallTextButton = checked;
-                  return current;
-                })
-              }
-            />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ToggleRow
+                label="Show phone in header"
+                description="Display the business phone number in the retail site header."
+                checked={settings.header.showCallTextButton}
+                onChange={(checked) =>
+                  updateSettings((current) => {
+                    current.header.showCallTextButton = checked;
+                    return current;
+                  })
+                }
+              />
+
+              <ToggleRow
+                label="Show email in header"
+                description="Display the business email address in the retail site header."
+                checked={settings.header.showEmailInHeader}
+                onChange={(checked) =>
+                  updateSettings((current) => {
+                    current.header.showEmailInHeader = checked;
+                    return current;
+                  })
+                }
+              />
+            </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <div className="space-y-5">
-                <TextInput
-                  label="Phone number"
-                  value={settings.header.phoneNumber}
-                  onChange={(value) =>
-                    updateSettings((current) => {
-                      current.header.phoneNumber = value;
-                      return current;
-                    })
-                  }
-                  placeholder="+1-315-555-0123"
-                  error={phoneError}
-                  helperText="Stored even when the button is hidden, so it can be turned back on later without re-entering it."
-                />
+                <div className="grid gap-5 md:grid-cols-2">
+                  <TextInput
+                    label="Phone number"
+                    type="tel"
+                    value={settings.header.phoneNumber}
+                    onChange={(value) =>
+                      updateSettings((current) => {
+                        current.header.phoneNumber = value;
+                        return current;
+                      })
+                    }
+                    placeholder="+1-315-555-0123"
+                    error={phoneError}
+                    helperText="Used for the clickable phone link in the retail site header."
+                  />
+
+                  <TextInput
+                    label="Header email address"
+                    type="email"
+                    value={settings.header.emailAddress}
+                    onChange={(value) =>
+                      updateSettings((current) => {
+                        current.header.emailAddress = value;
+                        return current;
+                      })
+                    }
+                    placeholder="info@example.com"
+                    error={emailError}
+                    helperText="This email is used for the clickable email link in the retail site header."
+                  />
+                </div>
 
                 <ToggleRow
                   label="Show logo in header"

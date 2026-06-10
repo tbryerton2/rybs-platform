@@ -2,6 +2,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getDumpsterSizeCapacity } from "@/lib/booking-product";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
@@ -64,6 +65,8 @@ export async function updateZipLocationAction(
   prevState: ZipFormState,
   formData: FormData
 ): Promise<ZipFormState> {
+  await requireAdminOwner();
+
   const id = parseId(formData.get("id"));
   const town = normalizeText(asString(formData.get("town")));
   const county = normalizeText(asString(formData.get("county")));
@@ -133,6 +136,8 @@ export async function toggleZipActiveAction(
   _prevState: ZipToggleState,
   formData: FormData,
 ): Promise<ZipToggleState> {
+  await requireAdminOwner();
+
   const id = parseId(formData.get("id"));
   const nextActive = asString(formData.get("nextActive")) === "true";
 
@@ -203,6 +208,8 @@ export async function updateZipPricingAction(
   _prevState: ZipFormState,
   formData: FormData
 ): Promise<ZipFormState> {
+  await requireAdminOwner();
+
   const id = parseId(formData.get("id"));
   const overrides: ZipPricingOverrideInput[] = [];
 

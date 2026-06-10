@@ -22,6 +22,7 @@ import { listEmployeesForCurrentBusiness } from "@/lib/admin/employees.server";
 import { listExpensesForCurrentBusiness } from "@/lib/admin/expenses.server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
+import { formatCustomerName } from "@/lib/customer-name";
 import {
   ANALYTICS_DATA_MODE,
   buildConversionAnalytics,
@@ -35,7 +36,8 @@ type DashboardBookingRow = {
   id: string;
   booking_ref: string | null;
   customer_id: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_city: string | null;
   customer_zip: string | null;
   delivery_date: string | null;
@@ -57,7 +59,7 @@ type RentalActionRequestRow = {
 const ACTIVE_BOOKING_STATUSES = new Set<BookingStatus>(["confirmed", "scheduled", "delivered"]);
 const OPEN_REQUEST_STATUSES = new Set<RentalActionRequestRow["status"]>(["submitted", "under_review", "approved"]);
 const BOOKING_SELECT =
-  "id, booking_ref, customer_id, customer_name, customer_city, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, created_at";
+  "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_city, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, created_at";
 
 function number(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -841,7 +843,13 @@ export default async function AdminDashboardPage() {
                               <div className="flex items-start justify-between gap-6">
                                 <div className="min-w-0 flex-1">
                                   <div className="min-w-0 text-base font-semibold tracking-tight text-slate-900">
-                                    <span>{booking.customer_name ?? "Unnamed customer"}</span>
+                                    <span>
+                                      {formatCustomerName(
+                                        booking.customer_first_name,
+                                        booking.customer_last_name,
+                                        "Unnamed customer",
+                                      )}
+                                    </span>
                                     <span className="ml-1.5 text-xs font-normal text-slate-500">
                                       &middot; {booking.booking_ref ?? `Booking ${booking.id.slice(0, 8)}`}
                                     </span>

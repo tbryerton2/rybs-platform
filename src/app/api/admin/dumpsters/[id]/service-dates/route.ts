@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import {
   buildDumpsterServiceDateInsert,
   DUMPSTER_SERVICE_DATE_SELECT,
@@ -18,6 +19,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { id } = await params;
     const { data, error } = await supabaseAdmin
       .from("dumpster_service_dates")
@@ -47,6 +51,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { id } = await params;
     const body = (await req.json().catch(() => ({}))) as CreateServiceDateBody;
     const serviceDate = body.serviceDate;

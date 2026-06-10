@@ -24,6 +24,7 @@ import {
 import { getPortalRequestDetail } from "@/lib/admin/portal-requests";
 import { updatePortalRequestAction } from "./actions";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { formatCustomerName } from "@/lib/customer-name";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -132,10 +133,17 @@ export default async function AdminPortalRequestDetailPage({
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <DetailBlock label="Submitted" value={formatDateTime(request.submitted_at)} />
               <DetailBlock label="Priority" value={getRequestPriorityLabel(request.priority)} />
-              <DetailBlock
-                label="Customer"
-                value={request.customer?.name || request.booking?.customer_name || "Unknown customer"}
-              />
+	              <DetailBlock
+	                label="Customer"
+	                value={
+	                  request.customer?.name ||
+	                  formatCustomerName(
+	                    request.booking?.customer_first_name,
+	                    request.booking?.customer_last_name,
+	                    "Unknown customer",
+	                  )
+	                }
+	              />
               <DetailBlock label="Customer email" value={request.customer?.email || "—"} />
               <DetailBlock label="Customer phone" value={request.customer?.phone || "—"} />
               <DetailBlock label="Rental status" value={request.booking?.status || "—"} />

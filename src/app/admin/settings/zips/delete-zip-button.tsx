@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
 
 type DeleteZipButtonProps = {
   zip: string;
@@ -42,12 +43,12 @@ export function DeleteZipButton({ zip, className }: DeleteZipButtonProps) {
                 Cancel
               </button>
 
-              <button
-                type="submit"
+              <FormSubmitButton
+                loadingLabel="Deleting..."
                 className="inline-flex h-11 items-center justify-center rounded-2xl bg-red-600 px-4 text-sm font-medium text-white transition hover:bg-red-700"
               >
                 Delete ZIP
-              </button>
+              </FormSubmitButton>
             </div>
           </div>
         </div>

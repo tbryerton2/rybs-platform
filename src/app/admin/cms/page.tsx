@@ -3,6 +3,8 @@ import { InteractiveInfoPopover } from "@/app/admin/customers/[id]/interactive-i
 import { getRetailSiteCmsInitialState } from "@/lib/admin/cms";
 import RetailSiteCmsEditor from "./retail-site/retail-site-cms-editor";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminCmsPage() {
   const cms = await getRetailSiteCmsInitialState();
 

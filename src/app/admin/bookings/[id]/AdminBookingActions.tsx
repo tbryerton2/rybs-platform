@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Props = {
@@ -11,6 +11,7 @@ type Props = {
 export default function AdminBookingActions({ bookingId, currentStatus }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState<null | string>(null);
+  const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -18,10 +19,12 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
   const [note, setNote] = useState("");
 
   async function setStatus(status: string) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+
     try {
       if (!bookingId || typeof bookingId !== "string") {
         setError("Missing booking ID");
-        setSaving(null);
         return;
       }
 
@@ -38,9 +41,6 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          ...(process.env.NEXT_PUBLIC_ADMIN_TOKEN
-            ? { "x-admin-token": process.env.NEXT_PUBLIC_ADMIN_TOKEN }
-            : {}),
         },
         // ✅ NEW: send note too
         body: JSON.stringify({ status, note: note.trim() || null }),
@@ -50,7 +50,6 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
 
       if (!res.ok || !json?.ok) {
         setError(json?.error || "Update failed");
-        setSaving(null);
         return;
       }
       /*if (!res.ok || !json?.ok) {
@@ -64,13 +63,14 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
       router.refresh();
     //setSuccess(JSON.stringify(json));
       setSuccess("Saved ✅");
-      setSaving(null);
 
       // ✅ NEW: clear note after save
       setNote("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
       setSaving(null);
+      savingRef.current = false;
     }
   }
 

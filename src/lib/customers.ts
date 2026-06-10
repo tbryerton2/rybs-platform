@@ -3,6 +3,7 @@ import { recordEntityHistory } from "@/lib/entity-history";
 import { isValidEmail, normalizeEmail } from "@/lib/identity";
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseServer } from "@/lib/supabase/server";
+import { combineCustomerNameParts } from "@/lib/customer-name";
 
 type CustomerContactInput = {
   fullName?: string | null;
@@ -424,7 +425,7 @@ export async function ensureCustomerForEmail(
   const { data: bookings, error: bookingError } = await supabase
     .from("bookings")
     .select(
-      "id, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, notes",
+      "id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, notes",
     )
     .ilike("customer_email", normalizedEmail)
     .order("created_at", { ascending: false });
@@ -436,7 +437,7 @@ export async function ensureCustomerForEmail(
   const latest = rows[0];
   const customerId = await findOrCreateCustomerRecord(
     {
-      fullName: latest.customer_name,
+      fullName: combineCustomerNameParts(latest.customer_first_name, latest.customer_last_name),
       email: latest.customer_email,
       phone: latest.customer_phone,
       street: latest.customer_street,

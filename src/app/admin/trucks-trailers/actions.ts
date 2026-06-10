@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import {
   createFleetEquipment,
   updateFleetEquipment,
@@ -13,6 +14,8 @@ import type {
 export async function createFleetEquipmentAction(
   input: FleetEquipmentMutationInput,
 ): Promise<FleetEquipmentMutationResult> {
+  await requireAdminOwner();
+
   const result = await createFleetEquipment(input);
 
   if (result.ok) {
@@ -26,6 +29,8 @@ export async function updateFleetEquipmentAction(
   id: string,
   input: FleetEquipmentMutationInput,
 ): Promise<FleetEquipmentMutationResult> {
+  await requireAdminOwner();
+
   const result = await updateFleetEquipment(id, input);
 
   if (result.ok) {

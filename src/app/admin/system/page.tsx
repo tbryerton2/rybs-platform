@@ -5,6 +5,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatCustomerName } from "@/lib/customer-name";
 
 type BookingStatus =
   | "confirmed"
@@ -16,7 +17,8 @@ type BookingStatus =
 type BookingRow = {
   id: string;
   created_at: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_zip: string | null;
   delivery_date: string | null;
   status: BookingStatus | null;
@@ -350,7 +352,7 @@ export default async function AdminSystemPage() {
 
     supabaseAdmin
       .from("bookings")
-      .select("id, created_at, customer_name, customer_zip, delivery_date, status")
+      .select("id, created_at, customer_first_name, customer_last_name, customer_zip, delivery_date, status")
       .order("created_at", { ascending: false })
       .limit(10),
 
@@ -370,7 +372,7 @@ export default async function AdminSystemPage() {
       .from("bookings")
       .select("id", { count: "exact", head: true })
       .neq("status", "cancelled")
-      .or("customer_name.is.null,customer_zip.is.null,delivery_date.is.null"),
+      .or("and(customer_first_name.is.null,customer_last_name.is.null),customer_zip.is.null,delivery_date.is.null"),
   ]);
 
   const queryErrors = [
@@ -403,7 +405,7 @@ export default async function AdminSystemPage() {
     type: "booking",
     id: row.id,
     created_at: row.created_at,
-    title: row.customer_name?.trim() || "Unnamed booking",
+    title: formatCustomerName(row.customer_first_name, row.customer_last_name, "Unnamed booking"),
     subtitle: [
       row.customer_zip ? `ZIP ${row.customer_zip}` : "ZIP missing",
       row.delivery_date ? `Delivery ${formatDate(row.delivery_date)}` : "Delivery date missing",

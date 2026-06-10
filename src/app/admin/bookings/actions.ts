@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function deleteBookingAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = String(formData.get("id") || "");
   if (!id) return;
 
@@ -17,6 +20,8 @@ export async function deleteBookingAction(formData: FormData) {
 }
 
 export async function deleteHoldAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = String(formData.get("id") || "");
   if (!id) return;
 

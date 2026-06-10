@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
 import { updatePickupDetailsAction } from "./actions";
 
 type Props = {
@@ -69,12 +70,12 @@ export default function PickupDetailsForm({
         </label>
       </div>
 
-      <button
-        type="submit"
+      <FormSubmitButton
+        loadingLabel="Saving pickup details..."
         className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
       >
         Save pickup details
-      </button>
+      </FormSubmitButton>
     </form>
   );
 }

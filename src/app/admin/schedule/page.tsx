@@ -18,6 +18,7 @@ import {
   buildPickupPlanningModel,
   getAvailabilityRiskClasses,
 } from "@/lib/pickup-planning";
+import { formatCustomerName } from "@/lib/customer-name";
 import ScheduleBoardView from "../_components/admin/schedule/schedule-board-view";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -25,7 +26,8 @@ type SearchParams = Record<string, string | string[] | undefined>;
 type BookingRow = {
   id: string;
   booking_ref: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -367,7 +369,7 @@ function PickupRequestPanel({
                     {bookingReference(job)}
                   </div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
-                    {job.customer_name || "Unnamed customer"}
+                    {formatCustomerName(job.customer_first_name, job.customer_last_name, "Unnamed customer")}
                   </div>
                   <div className="mt-1 text-sm text-slate-600">{formatAddress(job)}</div>
                 </div>
@@ -527,7 +529,7 @@ function AttentionDumpstersPanel({
                     {bookingReference(job)}
                   </div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
-                    {job.customer_name || "Unnamed customer"}
+                    {formatCustomerName(job.customer_first_name, job.customer_last_name, "Unnamed customer")}
                   </div>
                   <div className="mt-1 text-sm text-slate-600">{formatAddress(job)}</div>
                 </div>
@@ -610,7 +612,7 @@ function OverduePickupsPanel({
                   {bookingReference(job)}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-slate-900">
-                  {job.customer_name || "Unnamed customer"}
+                  {formatCustomerName(job.customer_first_name, job.customer_last_name, "Unnamed customer")}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">{formatAddress(job)}</div>
               </div>

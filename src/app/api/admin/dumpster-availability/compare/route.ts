@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { compareLegacyRpcToPooledDumpsterAvailability } from "@/lib/admin/dumpster-availability-comparison";
 
 export async function GET(req: Request) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { searchParams } = new URL(req.url);
     const dumpsterSize = (searchParams.get("dumpsterSize") || searchParams.get("size") || "").trim();
     const dumpsterProductId = (searchParams.get("dumpsterProductId") || searchParams.get("productId") || "").trim();

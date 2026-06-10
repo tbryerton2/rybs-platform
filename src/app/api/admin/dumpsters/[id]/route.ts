@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import {
   buildDumpsterInsert,
   mapDumpsterRowToRecord,
@@ -20,6 +21,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { id } = await params;
     const body = (await req.json().catch(() => ({}))) as UpdateDumpsterBody;
 
@@ -89,6 +93,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const adminAuth = await requireAdminOwnerForApi();
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { id } = await params;
 
     const { count, error: bookingError } = await supabaseAdmin

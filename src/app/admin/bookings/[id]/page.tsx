@@ -32,9 +32,9 @@ import {
   type PlacementPreference,
 } from "@/lib/placement";
 import {
+  approveAndChargeBookingChargeAction,
   chargeBookingChargeSavedCardAction,
   createDraftBookingChargeAction,
-  markBookingChargeReadyAction,
   quickCancelBookingAction,
   quickMarkDeliveredAction,
   quickMarkPickedUpAction,
@@ -44,6 +44,8 @@ import {
 } from "./actions";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
+import { combineCustomerNameParts, formatCustomerName } from "@/lib/customer-name";
 
 import {
   PhoneIcon,
@@ -78,7 +80,8 @@ type Booking = {
   customer_id: string | null;
   reordered_from_booking_id: string | null;
   created_at: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
   customer_street: string | null;
@@ -124,7 +127,8 @@ type Booking = {
 type BookingRelationshipSummary = {
   id: string;
   booking_ref: string | null;
-  customer_name: string | null;
+  customer_first_name: string | null;
+  customer_last_name: string | null;
   customer_street: string | null;
   customer_city: string | null;
   customer_zip: string | null;
@@ -576,7 +580,7 @@ function chargeStatusClasses(status: string | null | undefined) {
 function getBookingChargeStatusLabel(status: string | null | undefined) {
   switch (status) {
     case "draft":
-      return "Draft — not charged yet";
+      return "Needs approval";
     case "pending":
       return "Ready to charge";
     case "paid":
@@ -649,14 +653,21 @@ function getSavedMessage(saved: string | undefined) {
     case "assigned-dumpster":
       return "Planned dumpster saved.";
     case "charge":
-      return "Draft charge saved.";
+      return "Charge saved for approval.";
     case "charge-ready":
-      return "Draft charge marked ready to charge.";
+      return "Charge marked ready to charge.";
     case "charge-paid":
-      return "Saved card charged.";
+      return "Payment request submitted to Square.";
     default:
       return null;
   }
+}
+
+function getChargeSuccessMessage(saved: string | undefined) {
+  if (saved === "charge-paid") return "Payment request submitted to Square.";
+  if (saved === "charge") return "Charge saved for approval.";
+  if (saved === "charge-ready") return "Charge marked ready to charge.";
+  return null;
 }
 
 export default async function AdminBookingDetailPage({
@@ -675,7 +686,8 @@ export default async function AdminBookingDetailPage({
       customer_id,
       reordered_from_booking_id,
       created_at,
-      customer_name,
+      customer_first_name,
+      customer_last_name,
       customer_email,
       customer_phone,
       customer_street,
@@ -722,7 +734,8 @@ export default async function AdminBookingDetailPage({
       customer_id,
       reordered_from_booking_id,
       created_at,
-      customer_name,
+      customer_first_name,
+      customer_last_name,
       customer_email,
       customer_phone,
       customer_street,
@@ -754,41 +767,6 @@ export default async function AdminBookingDetailPage({
       notes
     `;
 
-    const legacyBookingSelect = `
-      id,
-      booking_ref,
-      created_at,
-      customer_name,
-      customer_email,
-      customer_phone,
-      customer_street,
-      customer_city,
-      customer_zip,
-      delivery_date,
-      pickup_mode,
-      pickup_date,
-      status,
-      total_price_cents,
-      payment_status,
-      paid_at,
-      payment_provider,
-      payment_provider_payment_id,
-      base_rental_price_cents,
-      included_rental_days,
-      rental_duration_days,
-      extra_days,
-      daily_overage_price_cents,
-      extra_days_charge_cents,
-      subtotal_cents,
-      taxable_subtotal_cents,
-      tax_cents,
-      max_rental_days_snapshot,
-      allow_extended_rental_at_booking_snapshot,
-      service_county,
-      service_town,
-      notes
-    `;
-
   let placementSchemaAvailable = true;
 
   let { data: booking, error } = await supabaseAdmin
@@ -805,39 +783,13 @@ export default async function AdminBookingDetailPage({
       .eq("id", id)
       .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS>>();
 
-    if (fallback.error && isBookingSchemaError(fallback.error)) {
-      const legacyFallback = await supabaseAdmin
-        .from("bookings")
-        .select(legacyBookingSelect)
-        .eq("id", id)
-        .single<Omit<Booking, keyof typeof EMPTY_BOOKING_PLACEMENT_FIELDS | "customer_id" | "reordered_from_booking_id" | "booking_ref">>();
-
-      if (legacyFallback.data) {
-        const { dumpster_id, dumpster_size, dumpster_product_id, ...legacyBookingData } = legacyFallback.data;
-
-        booking = {
-          customer_id: null,
-          reordered_from_booking_id: null,
-          booking_ref: null,
-          ...legacyBookingData,
-          dumpster_id: dumpster_id ?? null,
-          dumpster_size: dumpster_size ?? null,
-          dumpster_product_id: dumpster_product_id ?? null,
+    booking = fallback.data
+      ? ({
+          ...fallback.data,
           ...EMPTY_BOOKING_PLACEMENT_FIELDS,
-        } as Booking;
-      } else {
-        booking = null;
-      }
-      error = legacyFallback.error;
-    } else {
-      booking = fallback.data
-        ? ({
-            ...fallback.data,
-            ...EMPTY_BOOKING_PLACEMENT_FIELDS,
-          } as Booking)
-        : null;
-      error = fallback.error;
-    }
+        } as Booking)
+      : null;
+    error = fallback.error;
   }
 
   if (error) {
@@ -864,12 +816,12 @@ export default async function AdminBookingDetailPage({
     bookingConsentsResult,
     customerPaymentMethodsResult,
   ] = await Promise.all([
-    booking.reordered_from_booking_id
-      ? supabaseAdmin
-          .from("bookings")
-          .select("id, booking_ref, customer_name, customer_street, customer_city, customer_zip, delivery_date, created_at")
-          .eq("id", booking.reordered_from_booking_id)
-          .maybeSingle<BookingRelationshipSummary>()
+	    booking.reordered_from_booking_id
+	      ? supabaseAdmin
+	          .from("bookings")
+	          .select("id, booking_ref, customer_first_name, customer_last_name, customer_street, customer_city, customer_zip, delivery_date, created_at")
+	          .eq("id", booking.reordered_from_booking_id)
+	          .maybeSingle<BookingRelationshipSummary>()
       : Promise.resolve({ data: null, error: null }),
     booking.customer_id
       ? supabaseAdmin
@@ -887,10 +839,10 @@ export default async function AdminBookingDetailPage({
           .eq("customer_zip", booking.customer_zip)
           .neq("id", booking.id)
       : Promise.resolve({ count: null, error: null }),
-    supabaseAdmin
-      .from("bookings")
-      .select("id, booking_ref, customer_name, delivery_date, created_at", { count: "exact" })
-      .eq("reordered_from_booking_id", booking.id)
+	    supabaseAdmin
+	      .from("bookings")
+	      .select("id, booking_ref, customer_first_name, customer_last_name, delivery_date, created_at", { count: "exact" })
+	      .eq("reordered_from_booking_id", booking.id)
       .order("created_at", { ascending: false })
       .limit(1),
     supabaseAdmin
@@ -1001,12 +953,15 @@ export default async function AdminBookingDetailPage({
   const derivedFromThisBookingCount = isBookingSchemaError(derivedFromThisBookingResult.error)
     ? 0
     : Number(derivedFromThisBookingResult.count ?? 0);
-  const latestDerivedBooking = isBookingSchemaError(derivedFromThisBookingResult.error)
-    ? null
-    : ((derivedFromThisBookingResult.data ?? [])[0] as
-        | Pick<BookingRelationshipSummary, "id" | "booking_ref" | "customer_name" | "delivery_date" | "created_at">
-        | undefined
-        | null);
+	  const latestDerivedBooking = isBookingSchemaError(derivedFromThisBookingResult.error)
+	    ? null
+	    : ((derivedFromThisBookingResult.data ?? [])[0] as
+	        | Pick<
+	            BookingRelationshipSummary,
+	            "id" | "booking_ref" | "customer_first_name" | "customer_last_name" | "delivery_date" | "created_at"
+	          >
+	        | undefined
+	        | null);
   const bookingHistory = isBookingSchemaError(historyResult.error) ? [] : (historyResult.data ?? []);
   const linkedCustomer = isBookingSchemaError(linkedCustomerResult.error)
     ? null
@@ -1037,6 +992,7 @@ export default async function AdminBookingDetailPage({
       latestChargePaymentByChargeId.set(payment.booking_charge_id, payment);
     }
   }
+  const paymentMethodById = new Map(customerPaymentMethods.map((method) => [method.id, method]));
   const rentalTermsConsent = getLatestConsent(bookingConsents, "rental_terms");
   const cardOnFileConsent = getLatestConsent(bookingConsents, "card_on_file");
   const savedPaymentMethod = getSavedPaymentMethod(customerPaymentMethods);
@@ -1057,10 +1013,10 @@ export default async function AdminBookingDetailPage({
     !!linkedCustomer?.email &&
     !!booking.customer_email &&
     linkedCustomer.email.trim().toLowerCase() !== booking.customer_email.trim().toLowerCase();
-  const accountNameDiffers =
-    !!linkedCustomer?.name &&
-    !!booking.customer_name &&
-    linkedCustomer.name.trim() !== booking.customer_name.trim();
+	  const accountNameDiffers =
+	    !!linkedCustomer?.name &&
+	    !!combineCustomerNameParts(booking.customer_first_name, booking.customer_last_name) &&
+	    linkedCustomer.name.trim() !== combineCustomerNameParts(booking.customer_first_name, booking.customer_last_name);
   const accountPhoneDiffers =
     !!linkedCustomer?.phone &&
     !!booking.customer_phone &&
@@ -1147,6 +1103,7 @@ export default async function AdminBookingDetailPage({
   const hasDeliveryPhoto = Boolean(placement.placementPhotoUrl);
   const hasSpecialInstructions = Boolean(placement.specialDeliveryInstructions?.trim());
   const savedMessage = getSavedMessage(saved);
+  const chargeSuccessMessage = getChargeSuccessMessage(saved);
   const currentOperationalState = onSite
     ? pickupPlanning.pickupStatus === "scheduled" && pickupPlanning.scheduledPickupDate
       ? `On site • pickup scheduled ${formatDate(pickupPlanning.scheduledPickupDate)}`
@@ -1181,7 +1138,10 @@ export default async function AdminBookingDetailPage({
     pickupPlanning,
     todayYmd: todayISO(),
   });
-  const bookingCreatorName = booking.customer_name?.trim() || booking.customer_email?.trim() || "The customer who created this booking";
+	  const bookingCreatorName =
+	    combineCustomerNameParts(booking.customer_first_name, booking.customer_last_name) ||
+	    booking.customer_email?.trim() ||
+	    "The customer who created this booking";
   const timelineMilestones = [
     {
       key: "created",
@@ -1336,12 +1296,12 @@ export default async function AdminBookingDetailPage({
               {canMarkDelivered ? (
                 <form action={quickMarkDeliveredAction}>
                   <input type="hidden" name="id" value={booking.id} />
-                  <button
-                    type="submit"
+                  <FormSubmitButton
+                    loadingLabel="Marking delivered..."
                     className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
                   >
                     Mark delivered
-                  </button>
+                  </FormSubmitButton>
                 </form>
               ) : null}
 
@@ -1357,24 +1317,24 @@ export default async function AdminBookingDetailPage({
               {canMarkPickedUp ? (
                 <form action={quickMarkPickedUpAction}>
                   <input type="hidden" name="id" value={booking.id} />
-                  <button
-                    type="submit"
+                  <FormSubmitButton
+                    loadingLabel="Marking picked up..."
                     className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
                   >
                     Mark picked up
-                  </button>
+                  </FormSubmitButton>
                 </form>
               ) : null}
 
               {canCancel ? (
                 <form action={quickCancelBookingAction}>
                   <input type="hidden" name="id" value={booking.id} />
-                  <button
-                    type="submit"
+                  <FormSubmitButton
+                    loadingLabel="Cancelling..."
                     className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-100"
                   >
                     Cancel booking
-                  </button>
+                  </FormSubmitButton>
                 </form>
               ) : null}
             </div>
@@ -1409,7 +1369,10 @@ export default async function AdminBookingDetailPage({
                   ) : null}
                 </div>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  <Field label="Name" value={booking.customer_name || "—"} />
+	                  <Field
+	                    label="Name"
+	                    value={formatCustomerName(booking.customer_first_name, booking.customer_last_name)}
+	                  />
                   <Field
                     label="Email"
                     value={
@@ -1650,12 +1613,12 @@ export default async function AdminBookingDetailPage({
                   ) : null}
 
                   <div className="mt-4 flex justify-end">
-                    <button
-                      type="submit"
+                    <FormSubmitButton
+                      loadingLabel="Saving plan..."
                       className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
                     >
                       Save plan
-                    </button>
+                    </FormSubmitButton>
                   </div>
                 </div>
               </div>
@@ -1886,11 +1849,17 @@ export default async function AdminBookingDetailPage({
 
       <div id="charges-adjustments">
         <Section
-          title="Charges & Adjustments"
-          description="Additional charges documented after booking, such as overage, damage, or extra rental days."
+          title="Charges & Payments"
+          description="Original booking payment and any documented post-booking charges."
           icon={<CurrencyDollarIcon className="h-4 w-4" />}
         >
           <div className="space-y-5">
+            {chargeSuccessMessage ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                {chargeSuccessMessage}
+              </div>
+            ) : null}
+
             {chargeError ? (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
                 {chargeError}
@@ -1898,137 +1867,206 @@ export default async function AdminBookingDetailPage({
             ) : null}
 
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              {bookingCharges.length === 0 ? (
-                <div className="px-5 py-6 text-sm text-slate-500">No additional charges yet.</div>
-              ) : (
-                <div className="divide-y divide-slate-200">
-                  {bookingCharges.map((charge) => {
-                    const chargePayment = latestChargePaymentByChargeId.get(charge.id) ?? null;
-                    const paidAt = charge.paid_at ?? chargePayment?.paid_at ?? null;
-                    const failedAt = charge.failed_at ?? chargePayment?.failed_at ?? null;
-                    const providerPaymentId =
-                      charge.provider_payment_id ?? chargePayment?.provider_payment_id ?? null;
+              <div className="divide-y divide-slate-200">
+                <div className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-slate-900">Initial booking payment</div>
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${paymentStatusClasses(
+                          latestBookingPayment?.status ?? booking.payment_status,
+                        )}`}
+                      >
+                        {formatTitleLabel(latestBookingPayment?.status ?? booking.payment_status)}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-700">
+                      Full booking amount charged at checkout.
+                    </div>
+                    {successfulPaymentRecorded ? (
+                      <div className="mt-2 text-sm font-medium text-emerald-700">
+                        Paid{paidAt ? ` on ${formatDateTime(paidAt)}` : ""}.
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-sm text-slate-500">No successful initial payment recorded.</div>
+                    )}
+                    {latestBookingPayment ? (
+                      <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                          Technical details
+                        </summary>
+                        <div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+                          <Field label="Provider" value={formatPlainLabel(latestBookingPayment.provider)} />
+                          <Field
+                            label="Provider environment"
+                            value={formatPlainLabel(latestBookingPayment.provider_environment)}
+                          />
+                          <Field
+                            label="Provider payment ID"
+                            value={
+                              latestBookingPayment.provider_payment_id ? (
+                                <span className="font-mono text-xs break-all">
+                                  {latestBookingPayment.provider_payment_id}
+                                </span>
+                              ) : (
+                                "—"
+                              )
+                            }
+                          />
+                          <Field label="Payment attempt" value={formatTitleLabel(latestBookingPayment.status)} />
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                  <div className="text-left text-lg font-semibold text-slate-900 lg:text-right">
+                    {formatUsdFromCents(paidAmountCents)} {latestBookingPayment?.currency ?? "USD"}
+                  </div>
+                </div>
 
-                    return (
-                      <div key={charge.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-sm font-semibold text-slate-900">
-                              {getBookingChargeTypeLabel(charge.charge_type)}
-                            </div>
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${chargeStatusClasses(
-                                charge.status,
-                              )}`}
-                            >
-                              {getBookingChargeStatusLabel(charge.status)}
-                            </span>
+                {bookingCharges.length === 0 ? (
+                  <div className="px-5 py-6 text-sm text-slate-500">No additional charges yet.</div>
+                ) : null}
+
+                {bookingCharges.map((charge) => {
+                  const chargePayment = latestChargePaymentByChargeId.get(charge.id) ?? null;
+                  const chargePaymentMethod = charge.customer_payment_method_id
+                    ? paymentMethodById.get(charge.customer_payment_method_id) ?? savedPaymentMethod
+                    : savedPaymentMethod;
+                  const paidAt = charge.paid_at ?? chargePayment?.paid_at ?? null;
+                  const failedAt = charge.failed_at ?? chargePayment?.failed_at ?? null;
+                  const providerPaymentId = charge.provider_payment_id ?? chargePayment?.provider_payment_id ?? null;
+
+                  return (
+                    <div key={charge.id} className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm font-semibold text-slate-900">
+                            {getBookingChargeTypeLabel(charge.charge_type)}
                           </div>
-                          <div className="mt-1 text-sm text-slate-700">
-                            {charge.description || "No description provided."}
-                          </div>
-                          {charge.status === "paid" ? (
-                            <div className="mt-2 text-sm font-medium text-emerald-700">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${chargeStatusClasses(
+                              charge.status,
+                            )}`}
+                          >
+                            {getBookingChargeStatusLabel(charge.status)}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-sm text-slate-700">
+                          {charge.description || "No description provided."}
+                        </div>
+                        {charge.status === "paid" ? (
+                          <div className="mt-2 space-y-1 text-sm">
+                            <div className="font-medium text-emerald-700">
                               Paid{paidAt ? ` on ${formatDateTime(paidAt)}` : ""}.
                             </div>
-                          ) : null}
-                          {charge.status === "failed" ? (
-                            <div className="mt-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                              Failed{failedAt ? ` on ${formatDateTime(failedAt)}` : ""}.
-                              {chargePayment?.failure_message ? ` ${chargePayment.failure_message}` : ""}
+                            <div className="text-slate-600">
+                              Charged to saved card
+                              {chargePaymentMethod ? ` (${formatSavedCardLabel(chargePaymentMethod)})` : ""}.
                             </div>
-                          ) : null}
-                          {charge.evidence_notes ? (
-                            <div className="mt-2 text-sm text-slate-500">
-                              <span className="font-medium text-slate-600">Evidence/internal notes:</span>{" "}
-                              {charge.evidence_notes}
-                            </div>
-                          ) : null}
-                          <div className="mt-2 text-xs text-slate-400">
-                            Created {formatDateTime(charge.created_at)}
                           </div>
-                          {charge.status === "draft" ? (
-                            <form action={markBookingChargeReadyAction} className="mt-4">
+                        ) : null}
+                        {charge.status === "failed" ? (
+                          <div className="mt-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                            Failed{failedAt ? ` on ${formatDateTime(failedAt)}` : ""}.
+                            {chargePayment?.failure_message ? ` ${chargePayment.failure_message}` : ""}
+                          </div>
+                        ) : null}
+                        {chargePayment && charge.status !== "paid" && charge.status !== "failed" ? (
+                          <div className="mt-2 text-sm text-slate-500">
+                            Payment attempt: {formatTitleLabel(chargePayment.status)}
+                            {chargePayment.created_at ? ` on ${formatDateTime(chargePayment.created_at)}` : ""}.
+                          </div>
+                        ) : null}
+                        {charge.evidence_notes ? (
+                          <div className="mt-2 text-sm text-slate-500">
+                            <span className="font-medium text-slate-600">Evidence/internal notes:</span>{" "}
+                            {charge.evidence_notes}
+                          </div>
+                        ) : null}
+                        <div className="mt-2 text-xs text-slate-400">
+                          Created {formatDateTime(charge.created_at)}
+                        </div>
+                        {charge.status === "draft" ? (
+                          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <p className="text-sm text-amber-900">
+                              This will charge the customer&apos;s saved card immediately.
+                            </p>
+                            <form action={approveAndChargeBookingChargeAction} className="mt-3">
                               <input type="hidden" name="bookingId" value={booking.id} />
-                              <input type="hidden" name="chargeId" value={charge.id} />
-                              <button
-                                type="submit"
-                                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                              <input type="hidden" name="bookingChargeId" value={charge.id} />
+                              <FormSubmitButton
+                                loadingLabel="Sending to Square..."
+                                className="inline-flex items-center justify-center rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700"
                               >
-                                Mark ready to charge
-                              </button>
+                                Approve &amp; charge saved card
+                              </FormSubmitButton>
                             </form>
-                          ) : null}
-                          {charge.status === "pending" ? (
-                            <details className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                              <summary className="cursor-pointer text-sm font-semibold text-amber-900">
+                          </div>
+                        ) : null}
+                        {charge.status === "pending" ? (
+                          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <p className="text-sm text-amber-900">
+                              This will charge the customer&apos;s saved card immediately.
+                            </p>
+                            <form action={chargeBookingChargeSavedCardAction} className="mt-3">
+                              <input type="hidden" name="bookingId" value={booking.id} />
+                              <input type="hidden" name="bookingChargeId" value={charge.id} />
+                              <FormSubmitButton
+                                loadingLabel="Sending to Square..."
+                                className="inline-flex items-center justify-center rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700"
+                              >
                                 Charge saved card
-                              </summary>
-                              <div className="mt-3 space-y-3">
-                                <p className="text-sm text-amber-900">
-                                  This will charge the customer&apos;s saved card immediately.
-                                </p>
-                                <form action={chargeBookingChargeSavedCardAction}>
-                                  <input type="hidden" name="bookingId" value={booking.id} />
-                                  <input type="hidden" name="bookingChargeId" value={charge.id} />
-                                  <button
-                                    type="submit"
-                                    className="inline-flex items-center justify-center rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-                                  >
-                                    Yes, charge saved card
-                                  </button>
-                                </form>
-                              </div>
-                            </details>
-                          ) : null}
-                          {providerPaymentId || charge.provider_environment || chargePayment?.failure_code ? (
-                            <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                              <summary className="cursor-pointer text-sm font-semibold text-slate-700">
-                                Technical details
-                              </summary>
-                              <div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                                <Field
-                                  label="Provider"
-                                  value={formatPlainLabel(charge.provider ?? chargePayment?.provider)}
-                                />
-                                <Field
-                                  label="Provider environment"
-                                  value={formatPlainLabel(
-                                    charge.provider_environment ?? chargePayment?.provider_environment,
-                                  )}
-                                />
-                                <Field
-                                  label="Provider payment ID"
-                                  value={
-                                    providerPaymentId ? (
-                                      <span className="font-mono text-xs break-all">{providerPaymentId}</span>
-                                    ) : (
-                                      "—"
-                                    )
-                                  }
-                                />
-                                <Field label="Latest payment attempt" value={formatTitleLabel(chargePayment?.status)} />
-                                <Field label="Failure code" value={chargePayment?.failure_code ?? "—"} />
-                              </div>
-                            </details>
-                          ) : null}
-                        </div>
-                        <div className="text-left text-lg font-semibold text-slate-900 lg:text-right">
-                          {formatUsdFromCents(charge.amount_cents)} {charge.currency}
-                        </div>
+                              </FormSubmitButton>
+                            </form>
+                          </div>
+                        ) : null}
+                        {providerPaymentId || charge.provider_environment || chargePayment?.failure_code ? (
+                          <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+                              Technical details
+                            </summary>
+                            <div className="mt-3 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+                              <Field
+                                label="Provider"
+                                value={formatPlainLabel(charge.provider ?? chargePayment?.provider)}
+                              />
+                              <Field
+                                label="Provider environment"
+                                value={formatPlainLabel(
+                                  charge.provider_environment ?? chargePayment?.provider_environment,
+                                )}
+                              />
+                              <Field
+                                label="Provider payment ID"
+                                value={
+                                  providerPaymentId ? (
+                                    <span className="font-mono text-xs break-all">{providerPaymentId}</span>
+                                  ) : (
+                                    "—"
+                                  )
+                                }
+                              />
+                              <Field label="Linked payment" value={formatTitleLabel(chargePayment?.status)} />
+                              <Field label="Failure code" value={chargePayment?.failure_code ?? "—"} />
+                            </div>
+                          </details>
+                        ) : null}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <div className="text-left text-lg font-semibold text-slate-900 lg:text-right">
+                        {formatUsdFromCents(charge.amount_cents)} {charge.currency}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <form action={createDraftBookingChargeAction} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
               <input type="hidden" name="bookingId" value={booking.id} />
               <div className="mb-4">
-                <div className="text-sm font-semibold text-slate-900">Add draft charge</div>
+                <div className="text-sm font-semibold text-slate-900">Add charge for approval</div>
                 <div className="mt-1 text-sm text-slate-500">
-                  Draft charges are documentation only. No customer card will be charged.
+                  Document an additional charge. The customer will not be charged until it is approved.
                 </div>
               </div>
 
@@ -2081,12 +2119,12 @@ export default async function AdminBookingDetailPage({
               </label>
 
               <div className="mt-4 flex justify-end">
-                <button
-                  type="submit"
+                <FormSubmitButton
+                  loadingLabel="Saving charge..."
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
                 >
-                  Save draft charge
-                </button>
+                  Save charge for approval
+                </FormSubmitButton>
               </div>
             </form>
           </div>
@@ -2562,12 +2600,12 @@ export default async function AdminBookingDetailPage({
             </div>
 
             <div className="flex justify-end">
-              <button
-                type="submit"
+              <FormSubmitButton
+                loadingLabel="Saving changes..."
                 className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 Save changes
-              </button>
+              </FormSubmitButton>
             </div>
           </form>
         </Section>
@@ -2605,7 +2643,11 @@ export default async function AdminBookingDetailPage({
                       </Link>
                     </div>
                     <div className="mt-1 text-sm text-slate-600">
-                      {sourceBooking.customer_name || "Customer"}
+	                      {formatCustomerName(
+	                        sourceBooking.customer_first_name,
+	                        sourceBooking.customer_last_name,
+	                        "Customer",
+	                      )}
                       {sourceBooking.delivery_date ? ` • Delivered ${formatDate(sourceBooking.delivery_date)}` : ""}
                     </div>
                     <div className="mt-1 text-sm text-slate-500">
@@ -2718,12 +2760,12 @@ export default async function AdminBookingDetailPage({
                 className="w-full resize-y rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
               />
 
-              <button
-                type="submit"
+              <FormSubmitButton
+                loadingLabel="Saving notes..."
                 className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
               >
                 Save notes
-              </button>
+              </FormSubmitButton>
             </form>
           </Section>
         </div>

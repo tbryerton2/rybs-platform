@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { recordEntityHistory, type EntityHistoryEntry } from "@/lib/entity-history";
 import { isValidEmail } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -12,6 +13,8 @@ function getValue(formData: FormData, key: string) {
 }
 
 export async function updateCustomerIdentityAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = getValue(formData, "id");
   const email = getValue(formData, "email");
   const name = getValue(formData, "name");
@@ -86,6 +89,8 @@ export async function updateCustomerIdentityAction(formData: FormData) {
 }
 
 export async function setCustomerPortalStatusAction(formData: FormData) {
+  await requireAdminOwner();
+
   const id = getValue(formData, "id");
   const portalStatus = getValue(formData, "portal_status");
 

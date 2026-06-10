@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant, getRuntimeSettings } from "@/lib/tenant/server";
 
@@ -53,6 +54,9 @@ function fileExtension(contentType: string) {
 }
 
 export async function POST(req: Request) {
+  const adminAuth = await requireAdminOwnerForApi();
+  if (!adminAuth.ok) return adminAuth.response;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file");
@@ -108,6 +112,9 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const adminAuth = await requireAdminOwnerForApi();
+  if (!adminAuth.ok) return adminAuth.response;
+
   try {
     const url = new URL(req.url);
     const path = (url.searchParams.get("path") || "").trim();

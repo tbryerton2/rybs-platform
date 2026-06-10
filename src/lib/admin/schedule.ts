@@ -7,7 +7,8 @@ const SCHEDULE_PLACEMENT_SELECT =
 const SCHEDULE_JOB_SELECT = `
         id,
         booking_ref,
-        customer_name,
+        customer_first_name,
+        customer_last_name,
         customer_street,
         customer_city,
         customer_zip,
@@ -26,7 +27,8 @@ const SCHEDULE_JOB_SELECT = `
 const BASE_SCHEDULE_JOB_SELECT = `
         id,
         booking_ref,
-        customer_name,
+        customer_first_name,
+        customer_last_name,
         customer_street,
         customer_city,
         customer_zip,

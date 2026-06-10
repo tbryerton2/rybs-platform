@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     const { data, error } = await supabaseAdmin
       .from("bookings")
       .select(
-        "id, status, total_price_cents, customer_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county",
+        "id, status, total_price_cents, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county",
       )
       .eq("id", bookingId)
       .single();
@@ -64,6 +64,8 @@ export async function POST(req: Request) {
 
     const {
       customer_name,
+      customer_first_name,
+      customer_last_name,
       customer_email, // ✅ add
       customer_phone,
       customer_street,
@@ -96,7 +98,12 @@ export async function POST(req: Request) {
     });
 
     // Minimal required fields for v1
-    if (!customer_name || !customer_street || !customer_city || !customer_zip || !delivery_date) {
+    const hasCustomerName =
+      Boolean(String(customer_first_name ?? "").trim()) ||
+      Boolean(String(customer_last_name ?? "").trim()) ||
+      Boolean(String(customer_name ?? "").trim());
+
+    if (!hasCustomerName || !customer_street || !customer_city || !customer_zip || !delivery_date) {
       return NextResponse.json(
         { ok: false, error: "Missing required fields" },
         { status: 400 }
@@ -197,6 +204,8 @@ export async function POST(req: Request) {
           dumpster_product_id: selectedDumpster.dumpsterProductId,
         },
         identity: {
+          customerFirstName: customer_first_name,
+          customerLastName: customer_last_name,
           customerName: customer_name,
           customerEmail: customer_email,
           customerPhone: normalizedCustomerPhone,
