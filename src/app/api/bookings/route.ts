@@ -9,7 +9,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isValidEmail } from "@/lib/identity";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
-import { attachReorderReference } from "@/lib/reorder";
+import { attachReorderReference } from "@/lib/reorder.server";
 import { getCurrentTenant } from "@/lib/tenant/server";
 
 function withOtherConcernDetails(

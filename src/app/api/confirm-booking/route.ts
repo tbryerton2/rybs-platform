@@ -12,7 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { normalizePhone } from "@/lib/customers";
 import { getDumpsterPriceForZip } from "@/lib/pricing";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
-import { attachReorderReference } from "@/lib/reorder";
+import { attachReorderReference } from "@/lib/reorder.server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { createCheckoutPayment, linkCheckoutPaymentToBooking } from "@/lib/payments/payment-service";
 import { saveCustomerPaymentMethod } from "@/lib/payments/customer-payment-method-service";

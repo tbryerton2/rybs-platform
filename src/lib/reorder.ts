@@ -1,6 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { isBookingSchemaError } from "@/lib/booking-schema";
-import { getCurrentTenant } from "@/lib/tenant/server";
 import { combineCustomerNameParts } from "@/lib/customer-name";
 
 export const REORDER_ELIGIBLE_STATUS = "picked_up";
@@ -93,53 +90,4 @@ export function getReorderNotice(sourceBookingRef: string | null | undefined) {
   return sourceBookingRef
     ? `Based on ${sourceBookingRef}, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.`
     : "Based on your previous rental, we prefilled this booking for you. Review and update anything you need before confirming. Current pricing, serviceability, and scheduling still apply.";
-}
-
-export async function attachReorderReference(
-  supabase: SupabaseClient,
-  bookingId: string,
-  reorderedFromBookingId: string | null | undefined,
-  businessId?: string,
-) {
-  const sourceBookingId = String(reorderedFromBookingId ?? "").trim();
-  if (!sourceBookingId) {
-    return {
-      attempted: false,
-      skipped: false,
-      bookingId,
-      sourceBookingId: null,
-      persistedValue: null,
-    };
-  }
-  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
-
-  const { data, error } = await supabase
-    .from("bookings")
-    .update({ reordered_from_booking_id: sourceBookingId })
-    .eq("id", bookingId)
-    .eq("business_id", resolvedBusinessId)
-    .select("id, reordered_from_booking_id")
-    .maybeSingle();
-
-  if (!error) {
-    return {
-      attempted: true,
-      skipped: false,
-      bookingId,
-      sourceBookingId,
-      persistedValue: data?.reordered_from_booking_id ?? null,
-    };
-  }
-  if (isBookingSchemaError(error)) {
-    console.warn("reorder reference column unavailable on bookings; skipping reordered_from_booking_id write");
-    return {
-      attempted: true,
-      skipped: true,
-      bookingId,
-      sourceBookingId,
-      persistedValue: null,
-    };
-  }
-
-  throw new Error(error.message);
 }

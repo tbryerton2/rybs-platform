@@ -9,7 +9,7 @@ import { isValidEmail } from "@/lib/identity";
 import { supabaseServer } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
-import { attachReorderReference } from "@/lib/reorder";
+import { attachReorderReference } from "@/lib/reorder.server";
 import { getCurrentTenant } from "@/lib/tenant/server";
 
 type Payload = {
