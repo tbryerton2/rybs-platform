@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type BookingRouteContext = {
   params: Promise<{
@@ -10,6 +11,7 @@ type BookingRouteContext = {
 export async function GET(_req: NextRequest, context: BookingRouteContext) {
   try {
     const { id } = await context.params;
+    const tenant = await getCurrentTenant();
 
     if (!id) {
       return NextResponse.json(
@@ -22,6 +24,7 @@ export async function GET(_req: NextRequest, context: BookingRouteContext) {
       .from("bookings")
       .select("*")
       .eq("id", id)
+      .eq("business_id", tenant.id)
       .single();
 
     if (error || !data) {

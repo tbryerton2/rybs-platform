@@ -1,6 +1,7 @@
 import { addDaysYmd, isYmd } from "@/lib/booking-pricing";
 import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type AssignableDumpsterOption = {
   id: string;
@@ -84,6 +85,7 @@ export async function getAssignableDumpstersForBooking(input: {
   includedRentalDays: number | null;
   currentDumpsterId?: string | null;
 }) {
+  const tenant = await getCurrentTenant();
   const dumpsterSize = String(input.dumpsterSize ?? "").trim();
   if (!dumpsterSize || !isYmd(input.deliveryDate)) {
     return {
@@ -152,6 +154,7 @@ export async function getAssignableDumpstersForBooking(input: {
   const { data: assignedBookings, error: assignedBookingsError } = await supabaseAdmin
     .from("bookings")
     .select("id, dumpster_id, delivery_date, pickup_date, included_rental_days, status")
+    .eq("business_id", tenant.id)
     .in("dumpster_id", Array.from(candidateDumpsterIds))
     .neq("id", input.bookingId)
     .not("delivery_date", "is", null)

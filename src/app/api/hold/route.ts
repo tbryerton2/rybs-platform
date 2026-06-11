@@ -10,7 +10,7 @@ import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
 } from "@/lib/tenant/retail-site-settings";
-import { getServerTenantStorageKey } from "@/lib/tenant/server";
+import { getCurrentTenant, getServerTenantStorageKey } from "@/lib/tenant/server";
 import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import { getHoldMinutes } from "@/lib/config";
 
@@ -51,6 +51,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const tenant = await getCurrentTenant();
     const body = await req.json().catch(() => ({}));
     const deliveryDate = (body?.deliveryDate || "").trim();
     const rentalDaysRaw = body?.rentalDays;
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
     const existingHold = await supabase
       .from("booking_holds")
       .select("id, delivery_date, pickup_date, expires_at, zip, dumpster_size, dumpster_product_id")
+      .eq("business_id", tenant.id)
       .eq("client_id", clientId)
       .eq("delivery_date", deliveryDate)
       .eq("pickup_date", requestedPickupDate)
@@ -142,6 +144,7 @@ export async function POST(req: Request) {
     const activeClientHold = await supabase
       .from("booking_holds")
       .select("id")
+      .eq("business_id", tenant.id)
       .eq("client_id", clientId)
       .eq("status", "active")
       .gt("expires_at", nowIso)
@@ -161,6 +164,7 @@ export async function POST(req: Request) {
       const recentHold = await supabase
         .from("booking_holds")
         .select("id")
+        .eq("business_id", tenant.id)
         .eq("client_id", clientId)
         .gte("created_at", tenSecondsAgoIso)
         .limit(1);
@@ -182,9 +186,12 @@ export async function POST(req: Request) {
 
 
     // 1) Expire any OTHER active holds for this client (so one client can't hold many dates)
-    const expireRes = await supabase.rpc("expire_active_holds_for_client", {
-      p_client_id: clientId,
-    });
+    const expireRes = await supabase
+      .from("booking_holds")
+      .update({ status: "expired" })
+      .eq("business_id", tenant.id)
+      .eq("client_id", clientId)
+      .eq("status", "active");
 
     if (expireRes.error) {
       return NextResponse.json(
@@ -234,6 +241,7 @@ export async function POST(req: Request) {
     const insert = await supabase
       .from("booking_holds")
       .insert({
+        business_id: tenant.id,
         delivery_date: deliveryDate,
         pickup_date: requestedPickupDate,
         status: "active",

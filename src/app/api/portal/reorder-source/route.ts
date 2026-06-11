@@ -6,6 +6,7 @@ import {
   canReorderBooking,
   type ReorderSourceBookingRow,
 } from "@/lib/reorder";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export async function GET(req: Request) {
   try {
@@ -14,6 +15,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "Portal login required." }, { status: 401 });
     }
 
+    const tenant = await getCurrentTenant();
     const { searchParams } = new URL(req.url);
     const bookingId = String(searchParams.get("bookingId") ?? "").trim();
 
@@ -27,6 +29,7 @@ export async function GET(req: Request) {
         "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, service_county, service_town, status, placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions",
       )
       .eq("id", bookingId)
+      .eq("business_id", tenant.id)
       .eq("customer_id", customer.id)
       .maybeSingle();
 

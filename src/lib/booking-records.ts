@@ -4,6 +4,7 @@ import { recordEntityHistory } from "@/lib/entity-history";
 import { isValidEmail } from "@/lib/identity";
 import { findOrCreateCustomerRecord, normalizePhone } from "@/lib/customers";
 import { resolveCustomerName } from "@/lib/customer-name";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type BookingIdentityInput = {
   customerFirstName?: string | null;
@@ -40,6 +41,7 @@ type BookingPaymentStatus =
 
 type CreateBookingRecordInput = {
   supabase: SupabaseClient;
+  businessId?: string;
   booking: {
     delivery_date?: string | null;
     pickup_mode?: string | null;
@@ -80,6 +82,7 @@ function clean(value: string | null | undefined) {
 
 export async function createBookingRecord({
   supabase,
+  businessId,
   booking,
   identity,
   placement,
@@ -91,6 +94,7 @@ export async function createBookingRecord({
 
   const normalizedPhone = normalizePhone(identity.customerPhone);
   const { customerFirstName, customerLastName, customerFullName } = resolveCustomerName(identity);
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const customerId = await findOrCreateCustomerRecord(
     {
       fullName: customerFullName,
@@ -103,9 +107,11 @@ export async function createBookingRecord({
       deliveryNotes: identity.notes,
     },
     supabase,
+    resolvedBusinessId,
   );
 
   const legacyBaseInsertRow = {
+    business_id: resolvedBusinessId,
     delivery_date: booking.delivery_date ?? null,
     pickup_mode: booking.pickup_mode ?? null,
     pickup_date: booking.pickup_date ?? null,

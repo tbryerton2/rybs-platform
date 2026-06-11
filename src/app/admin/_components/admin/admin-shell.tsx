@@ -28,7 +28,9 @@ function MobileNav({ pathname }: { pathname: string }) {
               <p className="text-base font-semibold text-slate-900">Admin</p>
               <a
                 href="/admin/logout"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
+                target="_self"
+                data-no-prefetch
+                className="relative z-10 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
               >
                 <ArrowRightOnRectangleIcon className="h-4 w-4" />
                 Sign out
@@ -127,7 +129,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   </div>
                   <a
                     href="/admin/logout"
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+                    target="_self"
+                    data-no-prefetch
+                    className="relative z-10 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
                   >
                     <ArrowRightOnRectangleIcon className="h-4 w-4" />
                     Sign out

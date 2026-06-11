@@ -2,6 +2,7 @@ import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { DumpsterDerivedOperationalStatus, DumpsterRecord } from "@/lib/admin/equipment";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type DumpsterBookingStatusRow = {
   dumpster_id: string | null;
@@ -56,6 +57,7 @@ export function deriveDumpsterOperationalStatus(
 
 export async function decorateDumpstersWithOperationalStatus(records: DumpsterRecord[]) {
   if (records.length === 0) return records;
+  const tenant = await getCurrentTenant();
 
   const dumpsterIds = Array.from(new Set(records.map((record) => record.id).filter(Boolean)));
   if (dumpsterIds.length === 0) return records;
@@ -63,6 +65,7 @@ export async function decorateDumpstersWithOperationalStatus(records: DumpsterRe
   const { data, error } = await supabaseAdmin
     .from("bookings")
     .select("dumpster_id, delivery_date, status")
+    .eq("business_id", tenant.id)
     .in("dumpster_id", dumpsterIds)
     .not("dumpster_id", "is", null)
     .order("delivery_date", { ascending: false });

@@ -40,6 +40,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       .from("bookings")
       .select("id,status,booking_ref,customer_email,customer_phone")
       .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id)
       .single();
 
     if (getErr || !existing) {
@@ -55,7 +56,8 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     const { error: updErr } = await supabaseAdmin
       .from("bookings")
       .update({ status: nextStatus })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id);
 
     if (updErr) {
       return NextResponse.json({ ok: false, error: updErr.message }, { status: 400 });

@@ -10,6 +10,7 @@ import { isValidEmail } from "@/lib/identity";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 function withOtherConcernDetails(
   specialDeliveryInstructions: string | null | undefined,
@@ -25,6 +26,7 @@ function withOtherConcernDetails(
 
 export async function GET(req: Request) {
   try {
+    const tenant = await getCurrentTenant();
     const { searchParams } = new URL(req.url);
 
     const bookingId = searchParams.get("bookingId") || searchParams.get("id");
@@ -39,6 +41,7 @@ export async function GET(req: Request) {
         "id, status, total_price_cents, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county",
       )
       .eq("id", bookingId)
+      .eq("business_id", tenant.id)
       .single();
 
     if (error || !data) {
@@ -60,6 +63,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const tenant = await getCurrentTenant();
     const body = await req.json();
 
     const {
@@ -145,6 +149,7 @@ export async function POST(req: Request) {
               dumpsterSize: selectedDumpster.dumpsterSize,
               dumpsterProductId: selectedDumpster.dumpsterProductId,
               pickupDate: rentalPeriod.effectivePickupDate,
+              businessId: tenant.id,
               logContext: "api/bookings",
             }),
         });
@@ -192,6 +197,7 @@ export async function POST(req: Request) {
     try {
       createdBooking = await createBookingRecord({
         supabase: supabaseAdmin,
+        businessId: tenant.id,
         booking: {
           delivery_date,
           pickup_mode: pickup_mode ?? "request",
@@ -240,6 +246,7 @@ export async function POST(req: Request) {
         supabaseAdmin,
         createdBooking.bookingId,
         reordered_from_booking_id,
+        tenant.id,
       );
       reorderReferenceSkipped = reorderReferenceResult.skipped;
     } catch (reorderReferenceError) {

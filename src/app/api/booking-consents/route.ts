@@ -68,10 +68,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Invalid acceptance timestamp." }, { status: 400 });
     }
 
+    const tenant = await getCurrentTenant();
     const hold = await supabaseAdmin
       .from("booking_holds")
       .select("id, status, expires_at")
       .eq("id", bookingHoldId)
+      .eq("business_id", tenant.id)
       .maybeSingle();
 
     if (hold.error) {
@@ -88,7 +90,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const tenant = await getCurrentTenant();
     const consent = await recordBookingConsent({
       businessId: tenant.id,
       bookingHoldId,

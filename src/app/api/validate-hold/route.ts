@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,6 +8,7 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
+  const tenant = await getCurrentTenant();
   const { holdId } = await req.json();
 
   if (!holdId) {
@@ -17,6 +19,7 @@ export async function POST(req: Request) {
     .from("booking_holds")
     .select("id, expires_at, status")
     .eq("id", holdId)
+    .eq("business_id", tenant.id)
     .single();
 
   if (error || !data) {

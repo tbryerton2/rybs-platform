@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { recordEntityHistory } from "@/lib/entity-history";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getServerTenantStorageKey } from "@/lib/tenant/server";
+import { getCurrentTenant, getServerTenantStorageKey } from "@/lib/tenant/server";
 import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import { normalizeEmail } from "@/lib/customers";
 import { isPortalSchemaError } from "./schema";
@@ -48,10 +48,11 @@ export async function getPortalRefreshTokenCookieName() {
   return getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalRefreshToken);
 }
 
-async function lookupPortalCustomerByAuthUserId(userId: string) {
+async function lookupPortalCustomerByAuthUserId(userId: string, businessId: string) {
   let lookup = await supabaseAdmin
     .from("customers")
     .select(PORTAL_CUSTOMER_SELECT)
+    .eq("business_id", businessId)
     .eq("auth_user_id", userId)
     .maybeSingle();
 
@@ -59,6 +60,7 @@ async function lookupPortalCustomerByAuthUserId(userId: string) {
     lookup = await supabaseAdmin
       .from("customers")
       .select(PORTAL_CUSTOMER_FALLBACK_SELECT)
+      .eq("business_id", businessId)
       .eq("auth_user_id", userId)
       .maybeSingle();
   }
@@ -70,10 +72,11 @@ async function lookupPortalCustomerByAuthUserId(userId: string) {
   return (lookup.data as PortalCustomerRow | null) ?? null;
 }
 
-async function lookupPortalCustomerByEmail(normalizedEmail: string) {
+async function lookupPortalCustomerByEmail(normalizedEmail: string, businessId: string) {
   let lookup = await supabaseAdmin
     .from("customers")
     .select(PORTAL_CUSTOMER_SELECT)
+    .eq("business_id", businessId)
     .eq("normalized_email", normalizedEmail)
     .maybeSingle();
 
@@ -81,6 +84,7 @@ async function lookupPortalCustomerByEmail(normalizedEmail: string) {
     lookup = await supabaseAdmin
       .from("customers")
       .select(PORTAL_CUSTOMER_FALLBACK_SELECT)
+      .eq("business_id", businessId)
       .ilike("email", normalizedEmail)
       .maybeSingle();
   }
@@ -92,11 +96,12 @@ async function lookupPortalCustomerByEmail(normalizedEmail: string) {
   return (lookup.data as PortalCustomerRow | null) ?? null;
 }
 
-async function verifyPortalCustomerRecord(customerId: string) {
+async function verifyPortalCustomerRecord(customerId: string, businessId: string) {
   let lookup = await supabaseAdmin
     .from("customers")
     .select(PORTAL_CUSTOMER_ID_ONLY_SELECT)
     .eq("id", customerId)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (lookup.error && isPortalSchemaError(lookup.error)) {
@@ -104,6 +109,7 @@ async function verifyPortalCustomerRecord(customerId: string) {
       .from("customers")
       .select("id")
       .eq("id", customerId)
+      .eq("business_id", businessId)
       .maybeSingle();
   }
 
@@ -141,11 +147,13 @@ export function devPortalLog(event: string, details: Record<string, unknown>) {
 
 export async function attachPortalAuthUserToCustomer(customerId: string, userId: string) {
   const now = new Date().toISOString();
+  const tenant = await getCurrentTenant();
 
   const targetLookup = await supabaseAdmin
     .from("customers")
     .select("id, auth_user_id")
     .eq("id", customerId)
+    .eq("business_id", tenant.id)
     .maybeSingle();
 
   if (targetLookup.error && !isPortalSchemaError(targetLookup.error)) {
@@ -160,6 +168,7 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
   const existingLinkLookup = await supabaseAdmin
     .from("customers")
     .select("id, auth_user_id")
+    .eq("business_id", tenant.id)
     .eq("auth_user_id", userId)
     .maybeSingle();
 
@@ -173,7 +182,8 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
     const { error: clearError } = await supabaseAdmin
       .from("customers")
       .update({ auth_user_id: null })
-      .eq("id", existingLinkedCustomer.id);
+      .eq("id", existingLinkedCustomer.id)
+      .eq("business_id", tenant.id);
 
     if (clearError && !isPortalSchemaError(clearError)) {
       throw new Error(clearError.message);
@@ -187,7 +197,8 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
         portal_status: "active",
         last_login_at: now,
       })
-      .eq("id", customerId);
+      .eq("id", customerId)
+      .eq("business_id", tenant.id);
 
     if (refreshError && !isPortalSchemaError(refreshError)) {
       throw new Error(refreshError.message);
@@ -203,7 +214,8 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
       portal_status: "active",
       last_login_at: now,
     })
-    .eq("id", customerId);
+    .eq("id", customerId)
+    .eq("business_id", tenant.id);
 
   if (attachError && !isPortalSchemaError(attachError)) {
     throw new Error(attachError.message);
@@ -273,13 +285,14 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
 
   const user = data.user;
   const normalizedUserEmail = normalizeEmail(user.email);
+  const tenant = await getCurrentTenant();
 
   let customer: PortalCustomerRow | null = null;
 
-  customer = await lookupPortalCustomerByAuthUserId(user.id);
+  customer = await lookupPortalCustomerByAuthUserId(user.id, tenant.id);
 
   if (!customer && normalizedUserEmail) {
-    customer = await lookupPortalCustomerByEmail(normalizedUserEmail);
+    customer = await lookupPortalCustomerByEmail(normalizedUserEmail, tenant.id);
 
     if (customer?.id && !customer.auth_user_id) {
       await attachPortalAuthUserToCustomer(customer.id, user.id);
@@ -292,7 +305,7 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
   if (!customer) return null;
   if ((customer.portal_status ?? "active") === "deactivated") return null;
 
-  const verifiedCustomerId = await verifyPortalCustomerRecord(customer.id);
+  const verifiedCustomerId = await verifyPortalCustomerRecord(customer.id, tenant.id);
   devPortalLog("portal_customer_resolved", {
     authUserId: user.id,
     customerId: verifiedCustomerId,
@@ -321,6 +334,7 @@ export async function deactivatePortalAccess(
   reason = "Customer requested portal deactivation",
 ) {
   const now = new Date().toISOString();
+  const tenant = await getCurrentTenant();
   const { error } = await supabaseAdmin
     .from("customers")
     .update({
@@ -328,7 +342,8 @@ export async function deactivatePortalAccess(
       deactivated_at: now,
       deactivation_reason: reason,
     })
-    .eq("id", customerId);
+    .eq("id", customerId)
+    .eq("business_id", tenant.id);
 
   if (error) throw new Error(error.message);
 

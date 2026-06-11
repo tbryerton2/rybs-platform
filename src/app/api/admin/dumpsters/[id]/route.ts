@@ -101,6 +101,7 @@ export async function DELETE(
     const { count, error: bookingError } = await supabaseAdmin
       .from("bookings")
       .select("id", { count: "exact", head: true })
+      .eq("business_id", adminAuth.session.business.id)
       .eq("dumpster_id", id);
 
     if (bookingError) {

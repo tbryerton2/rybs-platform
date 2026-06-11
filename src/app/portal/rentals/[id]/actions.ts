@@ -16,6 +16,7 @@ import {
 } from "@/lib/rental-action-requests";
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
@@ -33,17 +34,20 @@ function toSearchParams(input: Record<string, string>) {
 }
 
 async function loadOwnedBookingWithRequests(customerId: string, bookingId: string) {
+  const tenant = await getCurrentTenant();
   const [{ data: booking, error: bookingError }, { data: requests, error: requestsError }] =
     await Promise.all([
       supabaseAdmin
         .from("bookings")
-        .select("id, customer_id, status, pickup_mode, customer_street, customer_city, customer_zip")
+        .select("id, business_id, customer_id, status, pickup_mode, customer_street, customer_city, customer_zip")
         .eq("id", bookingId)
+        .eq("business_id", tenant.id)
         .eq("customer_id", customerId)
         .maybeSingle(),
       supabaseAdmin
         .from("rental_action_requests")
         .select("id, action_type, status")
+        .eq("business_id", tenant.id)
         .eq("booking_id", bookingId),
     ]);
 
@@ -104,6 +108,7 @@ export async function submitPortalPickupRequestAction(formData: FormData) {
   }
 
   const { error: insertError } = await supabaseAdmin.from("rental_action_requests").insert({
+    business_id: booking.business_id,
     booking_id: booking.id,
     customer_id: customer.id,
     action_type: "pickup_request",
@@ -190,6 +195,7 @@ export async function submitPortalExtensionRequestAction(formData: FormData) {
   }
 
   const { error: insertError } = await supabaseAdmin.from("rental_action_requests").insert({
+    business_id: booking.business_id,
     booking_id: booking.id,
     customer_id: customer.id,
     action_type: "extension_request",
@@ -276,6 +282,7 @@ export async function submitPortalIssueReportAction(formData: FormData) {
   }
 
   const { error: insertError } = await supabaseAdmin.from("rental_action_requests").insert({
+    business_id: booking.business_id,
     booking_id: booking.id,
     customer_id: customer.id,
     action_type: "issue_report",

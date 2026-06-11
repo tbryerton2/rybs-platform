@@ -11,6 +11,7 @@ export async function GET() {
     .select(
       "id, created_at, status, customer_first_name, customer_last_name, customer_street, customer_city, customer_zip, delivery_date, pickup_mode, pickup_date, service_town, service_county, total_price_cents"
     )
+    .eq("business_id", adminAuth.session.business.id)
     .order("created_at", { ascending: false })
     .limit(50);
 

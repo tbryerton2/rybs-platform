@@ -1,6 +1,7 @@
 import { normalizePhone } from "@/lib/customers";
 import { getActiveServiceAreaZip, sanitizeServiceAreaZip } from "@/lib/service-area";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export const SERVICE_LOCATION_LABEL_MAX_LENGTH = 80;
 export const SERVICE_LOCATION_STREET_MAX_LENGTH = 160;
@@ -167,11 +168,13 @@ export async function validateSavedServiceLocationForSave(
 }
 
 export async function listSavedServiceLocations(customerId: string) {
+  const tenant = await getCurrentTenant();
   const { data, error } = await supabaseAdmin
     .from("customer_locations")
     .select(
       "id, customer_id, label, street, city, state, zip, delivery_notes, access_notes, onsite_contact_name, onsite_contact_phone, is_default, created_at, updated_at",
     )
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId)
     .order("is_default", { ascending: false })
     .order("updated_at", { ascending: false });
@@ -182,7 +185,12 @@ export async function listSavedServiceLocations(customerId: string) {
 }
 
 async function clearDefaultLocation(customerId: string, exceptId?: string) {
-  let query = supabaseAdmin.from("customer_locations").update({ is_default: false }).eq("customer_id", customerId);
+  const tenant = await getCurrentTenant();
+  let query = supabaseAdmin
+    .from("customer_locations")
+    .update({ is_default: false })
+    .eq("business_id", tenant.id)
+    .eq("customer_id", customerId);
   if (exceptId) {
     query = query.neq("id", exceptId);
   }
@@ -192,9 +200,11 @@ async function clearDefaultLocation(customerId: string, exceptId?: string) {
 }
 
 async function maybePromoteFallbackDefault(customerId: string, exceptId?: string) {
+  const tenant = await getCurrentTenant();
   let query = supabaseAdmin
     .from("customer_locations")
     .select("id")
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId)
     .order("updated_at", { ascending: false })
     .limit(1);
@@ -212,6 +222,7 @@ async function maybePromoteFallbackDefault(customerId: string, exceptId?: string
     .from("customer_locations")
     .update({ is_default: true })
     .eq("id", data.id)
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId);
 
   if (updateError) throw new Error(updateError.message);
@@ -230,9 +241,11 @@ export async function createSavedServiceLocation(customerId: string, input: Save
     await clearDefaultLocation(customerId);
   }
 
+  const tenant = await getCurrentTenant();
   const { data, error } = await supabaseAdmin
     .from("customer_locations")
     .insert({
+      business_id: tenant.id,
       customer_id: customerId,
       label: input.label,
       street: input.street,
@@ -264,6 +277,7 @@ export async function updateSavedServiceLocation(
   locationId: string,
   input: SavedServiceLocationInput,
 ) {
+  const tenant = await getCurrentTenant();
   debugServiceLocationEvent("update_attempt", {
     customerId,
     locationId,
@@ -288,6 +302,7 @@ export async function updateSavedServiceLocation(
       is_default: input.isDefault,
     })
     .eq("id", locationId)
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId)
     .select(
       "id, customer_id, label, street, city, state, zip, delivery_notes, access_notes, onsite_contact_name, onsite_contact_phone, is_default, created_at, updated_at",
@@ -310,6 +325,7 @@ export async function updateSavedServiceLocation(
 }
 
 export async function deleteSavedServiceLocation(customerId: string, locationId: string) {
+  const tenant = await getCurrentTenant();
   debugServiceLocationEvent("delete_attempt", {
     customerId,
     locationId,
@@ -318,6 +334,7 @@ export async function deleteSavedServiceLocation(customerId: string, locationId:
     .from("customer_locations")
     .delete()
     .eq("id", locationId)
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId)
     .select("id, is_default")
     .maybeSingle();
@@ -337,6 +354,7 @@ export async function deleteSavedServiceLocation(customerId: string, locationId:
 }
 
 export async function setDefaultSavedServiceLocation(customerId: string, locationId: string) {
+  const tenant = await getCurrentTenant();
   debugServiceLocationEvent("set_default_attempt", {
     customerId,
     locationId,
@@ -347,6 +365,7 @@ export async function setDefaultSavedServiceLocation(customerId: string, locatio
     .from("customer_locations")
     .update({ is_default: true })
     .eq("id", locationId)
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId)
     .select(
       "id, customer_id, label, street, city, state, zip, delivery_notes, access_notes, onsite_contact_name, onsite_contact_phone, is_default, created_at, updated_at",

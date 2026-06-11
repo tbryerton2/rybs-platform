@@ -9,6 +9,7 @@ import {
 } from "@/lib/rental-action-requests";
 import { isPortalSchemaError } from "./schema";
 import { getNextPortalAction, getPortalStage, type PortalStage } from "./status";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type PortalBooking = {
   id: string;
@@ -103,11 +104,13 @@ function withPortalRequestSummary(
 }
 
 async function getPortalBookingSummaries(customerId: string) {
+  const tenant = await getCurrentTenant();
   const { data: bookings, error: bookingsError } = await supabaseAdmin
     .from("bookings")
     .select(
       "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
     )
+    .eq("business_id", tenant.id)
     .eq("customer_id", customerId)
     .order("delivery_date", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
@@ -123,6 +126,7 @@ async function getPortalBookingSummaries(customerId: string) {
       .select(
         "id, booking_id, action_type, status, customer_visible_status, details_json, customer_update, submitted_at",
       )
+      .eq("business_id", tenant.id)
       .in(
         "booking_id",
         bookingRowsRaw.map((booking) => booking.id),
@@ -151,6 +155,7 @@ async function getPortalBookingSummaries(customerId: string) {
 }
 
 export async function getPortalDashboardData(customerId: string) {
+  const tenant = await getCurrentTenant();
   const [{ data: locations, error: locationsError }, bookingRows] =
     await Promise.all([
       supabaseAdmin
@@ -158,6 +163,7 @@ export async function getPortalDashboardData(customerId: string) {
         .select(
           "id, label, street, city, state, zip, delivery_notes, access_notes, onsite_contact_name, onsite_contact_phone, is_default",
         )
+        .eq("business_id", tenant.id)
         .eq("customer_id", customerId)
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: true }),
@@ -191,6 +197,7 @@ export async function getPortalBookings(customerId: string) {
 }
 
 export async function getPortalRental(customerId: string, bookingId: string) {
+  const tenant = await getCurrentTenant();
   const [{ data: booking, error: bookingError }, { data: requests, error: requestsError }] =
     await Promise.all([
       supabaseAdmin
@@ -199,6 +206,7 @@ export async function getPortalRental(customerId: string, bookingId: string) {
           "id, booking_ref, customer_id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, delivery_date, pickup_date, pickup_mode, status, total_price_cents, service_town, service_county, notes, created_at",
         )
         .eq("id", bookingId)
+        .eq("business_id", tenant.id)
         .eq("customer_id", customerId)
         .maybeSingle(),
       supabaseAdmin
@@ -206,6 +214,7 @@ export async function getPortalRental(customerId: string, bookingId: string) {
         .select(
           "id, action_type, status, customer_visible_status, details_json, customer_update, submitted_at, created_at, updated_at",
         )
+        .eq("business_id", tenant.id)
         .eq("booking_id", bookingId)
         .order("submitted_at", { ascending: false }),
     ]);

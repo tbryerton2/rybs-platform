@@ -12,7 +12,11 @@ export async function POST(req: Request) {
   const redirectTo = String(form.get("redirectTo") || "/admin/bookings#holds").trim();
 
   if (id) {
-    const { error } = await supabaseAdmin.from("booking_holds").delete().eq("id", id);
+    const { error } = await supabaseAdmin
+      .from("booking_holds")
+      .delete()
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id);
     if (error) console.error("API DELETE HOLD ERROR:", error);
   }
 

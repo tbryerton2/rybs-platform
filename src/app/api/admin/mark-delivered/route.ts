@@ -14,7 +14,8 @@ export async function POST(req: Request) {
     const { error } = await supabaseAdmin
       .from("bookings")
       .update({ status: "delivered" })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id);
 
     if (error) console.error("API MARK DELIVERED ERROR:", error);
   }

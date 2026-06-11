@@ -7,6 +7,7 @@ import { isValidEmail } from "@/lib/identity";
 import { clearPortalSessionCookies, deactivatePortalAccess, requirePortalCustomer } from "@/lib/portal/auth";
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
@@ -27,6 +28,7 @@ function normalizePreferredContactMethod(value: string) {
 
 export async function updatePortalAccountAction(formData: FormData) {
   const customer = await requirePortalCustomer();
+  const tenant = await getCurrentTenant();
 
   const fullName = value(formData, "full_name");
   const company = value(formData, "company");
@@ -49,6 +51,7 @@ export async function updatePortalAccountAction(formData: FormData) {
     .from("customers")
     .select(extendedSelect)
     .eq("id", customer.id)
+    .eq("business_id", tenant.id)
     .maybeSingle();
 
   let supportsExtendedFields = true;
@@ -59,6 +62,7 @@ export async function updatePortalAccountAction(formData: FormData) {
       .from("customers")
       .select(fallbackSelect)
       .eq("id", customer.id)
+      .eq("business_id", tenant.id)
       .maybeSingle();
   }
 
@@ -187,12 +191,20 @@ export async function updatePortalAccountAction(formData: FormData) {
     (entry): entry is EntityHistoryEntry => entry !== null,
   );
 
-  let updateResult = await supabaseAdmin.from("customers").update(updates).eq("id", customer.id);
+  let updateResult = await supabaseAdmin
+    .from("customers")
+    .update(updates)
+    .eq("id", customer.id)
+    .eq("business_id", tenant.id);
   if (updateResult.error && isPortalSchemaError(updateResult.error) && supportsExtendedFields) {
     const fallbackUpdates = { ...updates };
     delete fallbackUpdates.company;
     delete fallbackUpdates.preferred_contact_method;
-    updateResult = await supabaseAdmin.from("customers").update(fallbackUpdates).eq("id", customer.id);
+    updateResult = await supabaseAdmin
+      .from("customers")
+      .update(fallbackUpdates)
+      .eq("id", customer.id)
+      .eq("business_id", tenant.id);
   }
 
   if (updateResult.error) {

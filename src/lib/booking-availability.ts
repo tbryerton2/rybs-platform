@@ -21,6 +21,7 @@ type DeliveryAvailabilityInput = {
   pickupDate?: string | null;
   excludeHoldIds?: string[];
   excludeBookingIds?: string[];
+  businessId?: string;
   logContext: string;
 };
 
@@ -34,6 +35,7 @@ export async function getDeliveryAvailabilitySnapshot(
     pickupDate: input.pickupDate ?? null,
     excludeHoldIds: input.excludeHoldIds,
     excludeBookingIds: input.excludeBookingIds,
+    businessId: input.businessId,
   });
 
   return {

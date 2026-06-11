@@ -9,6 +9,7 @@ import {
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import { updatePortalAccountAction } from "./actions";
 import { PortalShell } from "../_components/portal-shell";
 import { PortalSubpageHeader } from "../_components/portal-subpage-header";
@@ -26,10 +27,12 @@ function readValue(params: SearchParams, key: string) {
 }
 
 async function getPortalAccountProfile(customerId: string): Promise<PortalAccountProfile> {
+  const tenant = await getCurrentTenant();
   const lookup = await supabaseAdmin
     .from("customers")
     .select("company, preferred_contact_method")
     .eq("id", customerId)
+    .eq("business_id", tenant.id)
     .maybeSingle();
 
   if (lookup.error && !isPortalSchemaError(lookup.error)) {

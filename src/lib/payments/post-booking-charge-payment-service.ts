@@ -368,12 +368,14 @@ async function loadBookingCharge(input: {
 
 async function loadBooking(input: {
   supabase: PostBookingChargePaymentSupabaseClient;
+  businessId: string;
   bookingId: string;
 }) {
   const { data, error } = await input.supabase
     .from("bookings")
     .select(BOOKING_SELECT)
     .eq("id", input.bookingId)
+    .eq("business_id", input.businessId)
     .maybeSingle<BookingRow>();
 
   if (error) {
@@ -812,7 +814,7 @@ export async function chargePendingBookingChargeWithSavedCard(
 
   const charge = await loadBookingCharge({ supabase, businessId, bookingId, bookingChargeId });
 
-  const booking = await loadBooking({ supabase, bookingId });
+  const booking = await loadBooking({ supabase, businessId, bookingId });
   const customerId = booking.customer_id;
   if (!customerId) {
     throw new PostBookingChargePaymentServiceError(

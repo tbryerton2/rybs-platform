@@ -4,6 +4,7 @@ import { isValidEmail, normalizeEmail } from "@/lib/identity";
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseServer } from "@/lib/supabase/server";
 import { combineCustomerNameParts } from "@/lib/customer-name";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type CustomerContactInput = {
   fullName?: string | null;
@@ -94,6 +95,7 @@ function getLegacyCustomerIdentifier(input: CustomerContactInput) {
 async function findMatchingCustomer(
   supabase: SupabaseClient,
   input: CustomerContactInput,
+  businessId: string,
 ) {
   const normalizedEmail = normalizeEmail(input.email);
   const fullName = clean(input.fullName);
@@ -102,6 +104,7 @@ async function findMatchingCustomer(
     const emailLookup = await supabase
       .from("customers")
       .select(CUSTOMER_SELECT)
+      .eq("business_id", businessId)
       .eq("normalized_email", normalizedEmail)
       .maybeSingle();
 
@@ -113,6 +116,7 @@ async function findMatchingCustomer(
     const fallbackEmailLookup = await supabase
       .from("customers")
       .select(CUSTOMER_FALLBACK_SELECT)
+      .eq("business_id", businessId)
       .ilike("email", normalizedEmail)
       .limit(1);
 
@@ -127,6 +131,7 @@ async function findMatchingCustomer(
     const { data, error } = await supabase
       .from("customers")
       .select(CUSTOMER_SELECT)
+      .eq("business_id", businessId)
       .not("phone", "is", null);
 
     if (error) throw new Error(error.message);
@@ -147,6 +152,7 @@ async function ensureCustomerLocation(
   supabase: SupabaseClient,
   customerId: string,
   input: CustomerContactInput,
+  businessId: string,
 ) {
   const street = clean(input.street);
   const city = clean(input.city);
@@ -187,6 +193,7 @@ async function ensureCustomerLocation(
   const label = hasDefault ? "Saved location" : "Primary location";
 
   const { error: insertError } = await supabase.from("customer_locations").insert({
+    business_id: businessId,
     customer_id: customerId,
     label,
     street,
@@ -214,9 +221,15 @@ async function resolvePersistedCustomerId(
   supabase: SupabaseClient,
   customer: CustomerRow | null,
   input: CustomerContactInput,
+  businessId: string,
 ) {
   if (customer?.id) {
-    const byId = await supabase.from("customers").select("id").eq("id", customer.id).maybeSingle();
+    const byId = await supabase
+      .from("customers")
+      .select("id")
+      .eq("id", customer.id)
+      .eq("business_id", businessId)
+      .maybeSingle();
     if (byId.error && !isPortalSchemaError(byId.error)) {
       throw new Error(byId.error.message);
     }
@@ -230,6 +243,7 @@ async function resolvePersistedCustomerId(
     const byEmail = await supabase
       .from("customers")
       .select("id")
+      .eq("business_id", businessId)
       .eq("normalized_email", normalizedEmail)
       .maybeSingle();
 
@@ -247,6 +261,7 @@ async function resolvePersistedCustomerId(
     const { data, error } = await supabase
       .from("customers")
       .select("id, name, phone")
+      .eq("business_id", businessId)
       .not("phone", "is", null);
 
     if (error) throw new Error(error.message);
@@ -266,6 +281,7 @@ async function resolvePersistedCustomerId(
 export async function findOrCreateCustomerRecord(
   input: CustomerContactInput,
   supabase: SupabaseClient = supabaseServer(),
+  businessId?: string,
 ) {
   const fullName = clean(input.fullName);
   const email = clean(input.email);
@@ -283,12 +299,14 @@ export async function findOrCreateCustomerRecord(
     return null;
   }
 
-  let customer = await findMatchingCustomer(supabase, input);
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
+  let customer = await findMatchingCustomer(supabase, input, resolvedBusinessId);
   let customerCreated = false;
 
   if (!customer) {
     const legacyIdentifier = getLegacyCustomerIdentifier(input);
     const insertPayload = {
+      business_id: resolvedBusinessId,
       name: fullName,
       email,
       phone,
@@ -309,6 +327,7 @@ export async function findOrCreateCustomerRecord(
 
     if (inserted.error && isPortalSchemaError(inserted.error)) {
       const fallbackPayload = {
+        business_id: resolvedBusinessId,
         name: fullName,
         email,
         phone,
@@ -340,16 +359,20 @@ export async function findOrCreateCustomerRecord(
     if (!customer.primary_zip && zip) updates.primary_zip = zip;
 
     if (Object.keys(updates).length > 0) {
-      const { error } = await supabase.from("customers").update(updates).eq("id", customer.id);
+      const { error } = await supabase
+        .from("customers")
+        .update(updates)
+        .eq("id", customer.id)
+        .eq("business_id", resolvedBusinessId);
       if (error) throw new Error(error.message);
     }
   }
 
-  const persistedCustomerId = await resolvePersistedCustomerId(supabase, customer, input);
+  const persistedCustomerId = await resolvePersistedCustomerId(supabase, customer, input, resolvedBusinessId);
 
   assertPortalAccessEnabled(customer);
 
-  await ensureCustomerLocation(supabase, persistedCustomerId, input);
+  await ensureCustomerLocation(supabase, persistedCustomerId, input, resolvedBusinessId);
 
   if (customerCreated) {
     await recordEntityHistory(supabase, [
@@ -372,13 +395,15 @@ export async function attachCustomerToBooking(
   input: CustomerContactInput,
   supabase: SupabaseClient = supabaseServer(),
 ) {
-  const customerId = await findOrCreateCustomerRecord(input, supabase);
+  const businessId = (await getCurrentTenant()).id;
+  const customerId = await findOrCreateCustomerRecord(input, supabase, businessId);
   if (!customerId) return null;
 
   const { error } = await supabase
     .from("bookings")
     .update({ customer_id: customerId })
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .eq("business_id", businessId);
 
   if (error) {
     if (isPortalSchemaError(error)) return customerId;
@@ -393,10 +418,12 @@ export async function ensureCustomerForEmail(
 ) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
+  const businessId = (await getCurrentTenant()).id;
 
   const { data: existing, error: existingError } = await supabase
     .from("customers")
     .select("id, portal_status")
+    .eq("business_id", businessId)
     .eq("normalized_email", normalizedEmail)
     .maybeSingle();
 
@@ -408,6 +435,7 @@ export async function ensureCustomerForEmail(
   const emailFallback = await supabase
     .from("customers")
     .select("id, portal_status")
+    .eq("business_id", businessId)
     .ilike("email", normalizedEmail)
     .limit(1);
 
@@ -427,6 +455,7 @@ export async function ensureCustomerForEmail(
     .select(
       "id, customer_first_name, customer_last_name, customer_email, customer_phone, customer_street, customer_city, customer_state, customer_zip, notes",
     )
+    .eq("business_id", businessId)
     .ilike("customer_email", normalizedEmail)
     .order("created_at", { ascending: false });
 
@@ -447,6 +476,7 @@ export async function ensureCustomerForEmail(
       deliveryNotes: latest.notes,
     },
     supabase,
+    businessId,
   );
 
   if (!customerId) return null;
@@ -455,6 +485,7 @@ export async function ensureCustomerForEmail(
     .from("customers")
     .select("id, portal_status")
     .eq("id", customerId)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (finalCustomerError && !isPortalSchemaError(finalCustomerError)) {
@@ -473,6 +504,7 @@ export async function ensureCustomerForEmail(
     const { error: updateError } = await supabase
       .from("bookings")
       .update({ customer_id: customerId })
+      .eq("business_id", businessId)
       .in("id", matchingBookingIds);
 
     if (updateError) throw new Error(updateError.message);

@@ -7,6 +7,7 @@ import {
   type RentalWindowDumpster,
 } from "@/lib/rental-window-availability";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type DumpsterAvailabilityInput = {
   dumpsterSize: string;
@@ -15,6 +16,7 @@ export type DumpsterAvailabilityInput = {
   pickupDate?: string | null;
   excludeHoldIds?: string[];
   excludeBookingIds?: string[];
+  businessId?: string;
 };
 
 export type OverlappingBookingDetail = {
@@ -193,6 +195,7 @@ export async function getPooledDumpsterAvailabilityBySize(
   }
 
   const nowIso = new Date().toISOString();
+  const businessId = input.businessId ?? (await getCurrentTenant()).id;
 
   const [dumpstersResult, bookingsResult, holdsResult] = await Promise.all([
     supabaseAdmin
@@ -204,12 +207,14 @@ export async function getPooledDumpsterAvailabilityBySize(
       .select(
         "id, status, delivery_date, pickup_date, included_rental_days, dumpster_size, dumpster_product_id, dumpster_id",
       )
+      .eq("business_id", businessId)
       .eq("dumpster_size", dumpsterSize)
       .not("delivery_date", "is", null)
       .order("delivery_date", { ascending: true }),
     supabaseAdmin
       .from("booking_holds")
       .select("id, status, delivery_date, pickup_date, expires_at, dumpster_size, dumpster_product_id")
+      .eq("business_id", businessId)
       .eq("dumpster_size", dumpsterSize)
       .gt("expires_at", nowIso)
       .order("delivery_date", { ascending: true }),

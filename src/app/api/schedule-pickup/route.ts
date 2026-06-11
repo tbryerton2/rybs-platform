@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export async function POST(req: Request) {
+  const tenant = await getCurrentTenant();
   const formData = await req.formData();
 
   const id = formData.get("id") as string;
@@ -17,7 +19,8 @@ export async function POST(req: Request) {
       pickup_date,
       pickup_mode: "scheduled",
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", tenant.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

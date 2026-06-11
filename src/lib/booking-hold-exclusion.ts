@@ -2,7 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getServerTenantStorageKey } from "@/lib/tenant/server";
+import { getCurrentTenant, getServerTenantStorageKey } from "@/lib/tenant/server";
 import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 
 type ValidActiveHoldExclusionInput = {
@@ -22,6 +22,7 @@ export async function getValidActiveHoldExclusionId(input: ValidActiveHoldExclus
   if (!holdId) return null;
 
   const cookieName = await getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalClientId);
+  const tenant = await getCurrentTenant();
   const clientId = normalizeText((await cookies()).get(cookieName)?.value);
   if (!clientId) return null;
 
@@ -29,6 +30,7 @@ export async function getValidActiveHoldExclusionId(input: ValidActiveHoldExclus
     .from("booking_holds")
     .select("id, client_id, status, expires_at, delivery_date, pickup_date, dumpster_size, dumpster_product_id")
     .eq("id", holdId)
+    .eq("business_id", tenant.id)
     .maybeSingle();
 
   if (error) {

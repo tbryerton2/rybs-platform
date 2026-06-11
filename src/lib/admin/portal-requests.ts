@@ -114,14 +114,15 @@ function logPortalRequestError(scope: string, details: Record<string, unknown>) 
   console.error(`[admin/portal-requests] ${scope}`, details);
 }
 
-async function loadBookings(bookingIds: string[]) {
+async function loadBookings(bookingIds: string[], businessId: string) {
   if (bookingIds.length === 0) {
     return new Map<string, PortalRequestBookingRow>();
   }
 
-	  const { data, error } = await supabaseAdmin
-	    .from("bookings")
-	    .select("id, customer_id, customer_first_name, customer_last_name, customer_street, customer_city, customer_zip, status, delivery_date, pickup_date")
+  const { data, error } = await supabaseAdmin
+    .from("bookings")
+    .select("id, customer_id, customer_first_name, customer_last_name, customer_street, customer_city, customer_zip, status, delivery_date, pickup_date")
+    .eq("business_id", businessId)
     .in("id", bookingIds);
 
   if (error) {
@@ -135,12 +136,16 @@ async function loadBookings(bookingIds: string[]) {
   return new Map((data ?? []).map((booking) => [booking.id, booking as PortalRequestBookingRow]));
 }
 
-async function loadCustomers(customerIds: string[]) {
+async function loadCustomers(customerIds: string[], businessId: string) {
   if (customerIds.length === 0) {
     return new Map<string, PortalRequestCustomerRow>();
   }
 
-  const { data, error } = await supabaseAdmin.from("customers").select("id, name, email, phone").in("id", customerIds);
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id, name, email, phone")
+    .eq("business_id", businessId)
+    .in("id", customerIds);
 
   if (error) {
     logPortalRequestError("customers-query-failed", {
@@ -157,10 +162,11 @@ function getRelatedCustomerId(request: Pick<PortalRequestBaseRow, "customer_id" 
   return booking?.customer_id ?? request.customer_id ?? null;
 }
 
-export async function getPortalRequests(filter: string): Promise<PortalRequestListLoadResult> {
+export async function getPortalRequests(filter: string, businessId: string): Promise<PortalRequestListLoadResult> {
   let query = supabaseAdmin
     .from("rental_action_requests")
     .select("id, booking_id, customer_id, action_type, status, customer_visible_status, priority, submitted_at")
+    .eq("business_id", businessId)
     .order("submitted_at", { ascending: false })
     .limit(200);
 
@@ -200,9 +206,10 @@ export async function getPortalRequests(filter: string): Promise<PortalRequestLi
       return now - new Date(request.submitted_at).getTime() >= 24 * 60 * 60 * 1000;
     });
   }
-  const bookingsById = await loadBookings(uniqueIds(requests.map((request) => request.booking_id)));
+  const bookingsById = await loadBookings(uniqueIds(requests.map((request) => request.booking_id)), businessId);
   const customersById = await loadCustomers(
     uniqueIds(requests.map((request) => getRelatedCustomerId(request, bookingsById.get(request.booking_id)))),
+    businessId,
   );
 
   return {
@@ -242,13 +249,14 @@ export async function getPortalRequests(filter: string): Promise<PortalRequestLi
   };
 }
 
-export async function getPortalRequestDetail(id: string): Promise<PortalRequestDetail | null> {
+export async function getPortalRequestDetail(id: string, businessId: string): Promise<PortalRequestDetail | null> {
   const { data, error } = await supabaseAdmin
     .from("rental_action_requests")
     .select(
       "id, booking_id, customer_id, action_type, status, customer_visible_status, priority, details_json, internal_notes, customer_update, submitted_at, reviewed_at, resolved_at",
     )
     .eq("id", id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (error) {
@@ -262,9 +270,9 @@ export async function getPortalRequestDetail(id: string): Promise<PortalRequestD
   }
 
   const request = data as PortalRequestBaseRow;
-  const booking = (await loadBookings(uniqueIds([request.booking_id]))).get(request.booking_id) ?? null;
+  const booking = (await loadBookings(uniqueIds([request.booking_id]), businessId)).get(request.booking_id) ?? null;
   const customerId = getRelatedCustomerId(request, booking);
-  const customer = customerId ? (await loadCustomers([customerId])).get(customerId) ?? null : null;
+  const customer = customerId ? (await loadCustomers([customerId], businessId)).get(customerId) ?? null : null;
 
   return {
     ...request,

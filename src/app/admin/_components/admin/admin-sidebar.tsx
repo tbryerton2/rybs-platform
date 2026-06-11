@@ -60,7 +60,9 @@ export function AdminSidebar({
             </p>
             <a
               href="/admin/logout"
-              className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
+              target="_self"
+              data-no-prefetch
+              className="relative z-10 mt-3 inline-flex pointer-events-auto items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
             >
               <ArrowRightOnRectangleIcon className="h-4 w-4" />
               Sign out

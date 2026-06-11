@@ -12,7 +12,11 @@ export async function POST(req: Request) {
   const redirectTo = String(form.get("redirectTo") || "/admin/bookings").trim();
 
   if (id) {
-    const { error } = await supabaseAdmin.from("bookings").delete().eq("id", id);
+    const { error } = await supabaseAdmin
+      .from("bookings")
+      .delete()
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id);
     if (error) console.error("API DELETE BOOKING ERROR:", error);
   }
 

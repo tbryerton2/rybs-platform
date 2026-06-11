@@ -10,6 +10,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type Payload = {
   customer_first_name?: string | null;
@@ -59,6 +60,7 @@ function withOtherConcernDetails(
 
 export async function POST(req: Request) {
   try {
+    const tenant = await getCurrentTenant();
     const body = (await req.json()) as Payload;
     const selectedDumpster = resolveSelectedDumpster({
       dumpsterSize: body.dumpster_size,
@@ -116,6 +118,7 @@ export async function POST(req: Request) {
               dumpsterSize: selectedDumpster.dumpsterSize,
               dumpsterProductId: selectedDumpster.dumpsterProductId,
               pickupDate: rentalPeriod.effectivePickupDate,
+              businessId: tenant.id,
               logContext: "api/bookings/create",
             }),
         });
@@ -164,6 +167,7 @@ export async function POST(req: Request) {
     try {
       createdBooking = await createBookingRecord({
         supabase,
+        businessId: tenant.id,
         booking: {
           delivery_date: body.delivery_date ?? null,
           pickup_mode: body.pickup_mode ?? "request",
@@ -212,6 +216,7 @@ export async function POST(req: Request) {
         supabase,
         createdBooking.bookingId,
         body.reordered_from_booking_id,
+        tenant.id,
       );
       reorderReferenceSkipped = reorderReferenceResult.skipped;
     } catch (reorderReferenceError) {

@@ -1,5 +1,6 @@
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 const SCHEDULE_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
@@ -44,10 +45,12 @@ const BASE_SCHEDULE_JOB_SELECT = `
         `;
 
 export async function getScheduleJobs(weekStartISO: string, weekEndISO: string) {
+  const tenant = await getCurrentTenant();
   const buildQuery = (selectClause: string) =>
     supabaseAdmin
       .from("bookings")
       .select(selectClause)
+      .eq("business_id", tenant.id)
       .in("status", ["confirmed", "scheduled", "delivered"])
       .lte("delivery_date", weekEndISO)
       .not("status", "eq", "cancelled")

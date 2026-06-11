@@ -26,7 +26,8 @@ export async function POST(req: Request) {
   const { error } = await supabaseAdmin
     .from("bookings")
     .update(update)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", adminAuth.session.business.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

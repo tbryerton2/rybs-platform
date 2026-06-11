@@ -128,6 +128,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const serverSupabase = supabaseServer();
+    const tenant = await getCurrentTenant();
     const body = (await req.json().catch(() => ({}))) as ConfirmBody;
 
     const holdId = (body.holdId || "").trim();
@@ -236,6 +237,7 @@ export async function POST(req: Request) {
       .from("booking_holds")
       .update({ status: "converting" })
       .eq("id", holdId)
+      .eq("business_id", tenant.id)
       .eq("status", "active")
       .gt("expires_at", new Date().toISOString())
       .select("id, delivery_date, expires_at")
@@ -267,6 +269,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -280,6 +283,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -303,6 +307,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -316,6 +321,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -331,6 +337,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -351,6 +358,7 @@ export async function POST(req: Request) {
             dumpsterProductId: selectedDumpster.dumpsterProductId,
             pickupDate: effectivePickup,
             excludeHoldIds: [holdId],
+            businessId: tenant.id,
             logContext: "api/confirm-booking",
           }),
       });
@@ -359,6 +367,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -377,7 +386,6 @@ export async function POST(req: Request) {
 
     if (paymentMethodToken) {
       try {
-        const tenant = await getCurrentTenant();
         checkoutPayment = await createCheckoutPayment({
           businessId: tenant.id,
           bookingHoldId: holdId,
@@ -394,6 +402,7 @@ export async function POST(req: Request) {
           .from("booking_holds")
           .update({ status: "active" })
           .eq("id", holdId)
+          .eq("business_id", tenant.id)
           .eq("status", "converting");
 
         console.error("[confirm-booking] checkout payment failed before provider result:", paymentError);
@@ -417,6 +426,7 @@ export async function POST(req: Request) {
           .from("booking_holds")
           .update({ status: "active" })
           .eq("id", holdId)
+          .eq("business_id", tenant.id)
           .eq("status", "converting");
 
         const statusCode =
@@ -443,6 +453,7 @@ export async function POST(req: Request) {
     try {
       createdBooking = await createBookingRecord({
         supabase: serverSupabase,
+        businessId: tenant.id,
         booking: {
           delivery_date: deliveryDate,
           pickup_date: effectivePickup || null,
@@ -499,6 +510,7 @@ export async function POST(req: Request) {
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
+        .eq("business_id", tenant.id)
         .eq("status", "converting");
 
       return NextResponse.json(
@@ -654,6 +666,7 @@ export async function POST(req: Request) {
         .from("bookings")
         .select("id, reordered_from_booking_id")
         .eq("id", createdBooking.bookingId)
+        .eq("business_id", tenant.id)
         .maybeSingle();
 
       if (verification.error) {
@@ -701,6 +714,7 @@ export async function POST(req: Request) {
       .from("booking_holds")
       .update({ status: "converted" })
       .eq("id", holdId)
+      .eq("business_id", tenant.id)
       .eq("status", "converting");
 
     if (finalize.error) {
