@@ -264,7 +264,7 @@ export async function updatePricingSettingsAction(
   prevState: PricingSettingsFormState,
   formData: FormData
 ): Promise<PricingSettingsFormState> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = asString(formData.get("id")).trim();
   const values = buildValues(formData);
@@ -313,8 +313,10 @@ export async function updatePricingSettingsAction(
       allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
       included_services_blurb: values.includedServicesBlurb || null,
       ton_overage_price: tonOveragePrice,
+      business_id: adminSession.business.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id);
 
   if (error && isMissingPricingSettingsRentalPeriodColumnsError(error)) {
     return {
@@ -366,7 +368,7 @@ export async function updateDumpsterProductSettingAction(
   prevState: DumpsterProductSettingsFormState,
   formData: FormData
 ): Promise<DumpsterProductSettingsFormState> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = asString(formData.get("id")).trim();
   const values = buildDumpsterProductValues(formData);
@@ -421,6 +423,7 @@ export async function updateDumpsterProductSettingAction(
   }
 
   const payload = {
+      business_id: adminSession.business.id,
       dumpster_size: values.dumpsterSize,
       dumpster_product_id: values.dumpsterProductId,
       display_name: values.displayName,
@@ -440,6 +443,7 @@ export async function updateDumpsterProductSettingAction(
         .from("dumpster_product_settings")
         .update(payload)
         .eq("id", id)
+        .eq("business_id", adminSession.business.id)
     : supabaseAdmin.from("dumpster_product_settings").upsert(payload, {
         onConflict: "dumpster_size",
       });

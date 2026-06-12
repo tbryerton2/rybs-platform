@@ -120,10 +120,11 @@ function buildFleetEquipmentWriteValues(input: FleetEquipmentMutationInput) {
   };
 }
 
-export async function listFleetEquipment() {
+export async function listFleetEquipment(businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment")
     .select(FLEET_EQUIPMENT_SELECT)
+    .eq("business_id", businessId)
     .order("status", { ascending: true })
     .order("name", { ascending: true });
 
@@ -134,11 +135,12 @@ export async function listFleetEquipment() {
   return ((data ?? []) as FleetEquipmentRow[]).map(mapFleetEquipmentRowToRecord);
 }
 
-export async function getFleetEquipmentById(id: string) {
+export async function getFleetEquipmentById(id: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment")
     .select(FLEET_EQUIPMENT_SELECT)
     .eq("id", id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (error) {
@@ -154,6 +156,7 @@ export async function getFleetEquipmentById(id: string) {
 
 export async function createFleetEquipment(
   input: FleetEquipmentMutationInput,
+  businessId: string,
 ): Promise<FleetEquipmentMutationResult> {
   const fieldErrors = validateFleetEquipment(input);
   if (Object.keys(fieldErrors).length > 0) {
@@ -166,7 +169,10 @@ export async function createFleetEquipment(
 
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment")
-    .insert(buildFleetEquipmentWriteValues(input))
+    .insert({
+      ...buildFleetEquipmentWriteValues(input),
+      business_id: businessId,
+    })
     .select(FLEET_EQUIPMENT_SELECT)
     .single();
 
@@ -187,6 +193,7 @@ export async function createFleetEquipment(
 export async function updateFleetEquipment(
   id: string,
   input: FleetEquipmentMutationInput,
+  businessId: string,
 ): Promise<FleetEquipmentMutationResult> {
   const fieldErrors = validateFleetEquipment(input);
   if (Object.keys(fieldErrors).length > 0) {
@@ -199,8 +206,12 @@ export async function updateFleetEquipment(
 
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment")
-    .update(buildFleetEquipmentWriteValues(input))
+    .update({
+      ...buildFleetEquipmentWriteValues(input),
+      business_id: businessId,
+    })
     .eq("id", id)
+    .eq("business_id", businessId)
     .select(FLEET_EQUIPMENT_SELECT)
     .maybeSingle();
 

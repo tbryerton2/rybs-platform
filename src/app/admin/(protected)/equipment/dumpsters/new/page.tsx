@@ -3,11 +3,13 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { DumpsterDetailClient } from "../dumpster-detail-client";
 import { getNextDumpsterEquipmentId } from "../data";
 
 export default async function AdminNewDumpsterPage() {
-  const nextEquipmentId = await getNextDumpsterEquipmentId();
+  const adminSession = await requireAdminOwner();
+  const nextEquipmentId = await getNextDumpsterEquipmentId(adminSession.business.id);
 
   return (
     <AdminPage className="space-y-6 py-8" width="wide">

@@ -26,6 +26,7 @@ export async function GET(req: Request) {
       dumpsterProductId: dumpsterProductId || null,
       deliveryDate,
       pickupDate: pickupDate || null,
+      businessId: adminAuth.session.business.id,
     });
 
     return NextResponse.json({

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isBookingSchemaError } from "@/lib/booking-schema";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type ServiceAreaZipRecord = {
   zip: string;
@@ -21,7 +22,11 @@ export function sanitizeServiceAreaZip(input: string | null | undefined) {
   return (input || "").replace(/\D/g, "").slice(0, 5);
 }
 
-export async function getActiveServiceAreaZip(zipInput: string): Promise<ServiceAreaZipRecord | null> {
+export async function getActiveServiceAreaZip(
+  zipInput: string,
+  businessId?: string,
+): Promise<ServiceAreaZipRecord | null> {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const zip = sanitizeServiceAreaZip(zipInput);
 
   if (!/^\d{5}$/.test(zip)) {
@@ -34,6 +39,7 @@ export async function getActiveServiceAreaZip(zipInput: string): Promise<Service
     .from("service_area_zips")
     .select(selectColumns)
     .eq("zip", zip)
+    .eq("business_id", resolvedBusinessId)
     .eq("active", true)
     .maybeSingle();
   let data = result.data as ServiceAreaZipRow | null;
@@ -45,6 +51,7 @@ export async function getActiveServiceAreaZip(zipInput: string): Promise<Service
       .from("service_area_zips")
       .select("zip, county, town")
       .eq("zip", zip)
+      .eq("business_id", resolvedBusinessId)
       .eq("active", true)
       .maybeSingle();
     data = fallback.data as ServiceAreaZipRow | null;

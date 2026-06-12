@@ -65,7 +65,7 @@ export async function updateZipLocationAction(
   prevState: ZipFormState,
   formData: FormData
 ): Promise<ZipFormState> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = parseId(formData.get("id"));
   const town = normalizeText(asString(formData.get("town")));
@@ -76,6 +76,7 @@ export async function updateZipLocationAction(
     .from("service_area_zips")
     .select("active")
     .eq("id", id)
+    .eq("business_id", adminSession.business.id)
     .single();
 
   if (activeResult.error) {
@@ -111,8 +112,10 @@ export async function updateZipLocationAction(
       town,
       county,
       state: state || null,
+      business_id: adminSession.business.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id);
 
   if (error) {
     return {
@@ -136,7 +139,7 @@ export async function toggleZipActiveAction(
   _prevState: ZipToggleState,
   formData: FormData,
 ): Promise<ZipToggleState> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = parseId(formData.get("id"));
   const nextActive = asString(formData.get("nextActive")) === "true";
@@ -146,6 +149,7 @@ export async function toggleZipActiveAction(
       .from("service_area_zips")
       .select("state" as string)
       .eq("id", id)
+      .eq("business_id", adminSession.business.id)
       .single();
 
     if (locationResult.error) {
@@ -182,8 +186,10 @@ export async function toggleZipActiveAction(
     .from("service_area_zips")
     .update({
       active: nextActive,
+      business_id: adminSession.business.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id);
 
   if (error) {
     return {
@@ -208,10 +214,26 @@ export async function updateZipPricingAction(
   _prevState: ZipFormState,
   formData: FormData
 ): Promise<ZipFormState> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = parseId(formData.get("id"));
   const overrides: ZipPricingOverrideInput[] = [];
+
+  const { data: serviceZip, error: serviceZipError } = await supabaseAdmin
+    .from("service_area_zips")
+    .select("id")
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id)
+    .single();
+
+  if (serviceZipError || !serviceZip) {
+    return {
+      success: false,
+      message: "",
+      error: serviceZipError?.message ?? "ZIP code not found.",
+      messageKey: Date.now(),
+    };
+  }
 
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("price_override:")) continue;
@@ -248,6 +270,7 @@ export async function updateZipPricingAction(
       if (!dumpsterSize) return null;
 
       return {
+        business_id: adminSession.business.id,
         service_area_zip_id: id,
         dumpster_size: dumpsterSize,
         price_override: entry.value,
@@ -264,6 +287,7 @@ export async function updateZipPricingAction(
     const { error: deleteError } = await supabaseAdmin
       .from("service_area_zip_pricing_overrides")
       .delete()
+      .eq("business_id", adminSession.business.id)
       .eq("service_area_zip_id", id)
       .in("dumpster_size", clearedSizes);
 
@@ -301,8 +325,10 @@ export async function updateZipPricingAction(
     .from("service_area_zips")
     .update({
       price_14_yard_override: fourteenYardOverride,
+      business_id: adminSession.business.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id);
 
   if (error) {
     return {

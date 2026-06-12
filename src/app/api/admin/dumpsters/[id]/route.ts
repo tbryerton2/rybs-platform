@@ -38,8 +38,12 @@ export async function PATCH(
 
       const { data, error } = await supabaseAdmin
         .from("dumpsters")
-        .update(buildDumpsterInsert(body.dumpster))
+        .update({
+          ...buildDumpsterInsert(body.dumpster),
+          business_id: adminAuth.session.business.id,
+        })
         .eq("id", id)
+        .eq("business_id", adminAuth.session.business.id)
         .select(DUMPSTER_SELECT)
         .single<DumpsterRow>();
 
@@ -60,8 +64,9 @@ export async function PATCH(
     if (typeof body.active === "boolean") {
       const { data, error } = await supabaseAdmin
         .from("dumpsters")
-        .update({ active: body.active })
+        .update({ active: body.active, business_id: adminAuth.session.business.id })
         .eq("id", id)
+        .eq("business_id", adminAuth.session.business.id)
         .select(DUMPSTER_SELECT)
         .single<DumpsterRow>();
 
@@ -119,7 +124,11 @@ export async function DELETE(
       );
     }
 
-    const { error } = await supabaseAdmin.from("dumpsters").delete().eq("id", id);
+    const { error } = await supabaseAdmin
+      .from("dumpsters")
+      .delete()
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id);
 
     if (error) {
       return NextResponse.json(

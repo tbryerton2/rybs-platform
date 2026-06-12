@@ -4,6 +4,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import {
   getFleetEquipmentDetailById,
   getFleetEquipmentServiceDates,
@@ -16,9 +17,10 @@ type PageProps = {
 
 export default async function EditFleetEquipmentPage({ params }: PageProps) {
   const { id } = await params;
+  const adminSession = await requireAdminOwner();
   const [record, serviceDates] = await Promise.all([
-    getFleetEquipmentDetailById(id),
-    getFleetEquipmentServiceDates(id),
+    getFleetEquipmentDetailById(id, adminSession.business.id),
+    getFleetEquipmentServiceDates(id, adminSession.business.id),
   ]);
 
   if (!record) notFound();

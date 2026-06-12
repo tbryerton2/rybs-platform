@@ -4,6 +4,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getServiceWarningState } from "@/lib/admin/dumpster-service-warning";
 import { formatInputDateET } from "@/lib/time";
 import { DumpsterDetailClient } from "../dumpster-detail-client";
@@ -20,11 +21,12 @@ type PageProps = {
 
 export default async function AdminDumpsterDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const adminSession = await requireAdminOwner();
   const resolvedSearchParams = (await searchParams) ?? {};
   const todayYmd = formatInputDateET(new Date());
   const [dumpster, serviceDates] = await Promise.all([
-    getDumpsterById(id),
-    getDumpsterServiceDates(id),
+    getDumpsterById(id, adminSession.business.id),
+    getDumpsterServiceDates(id, adminSession.business.id),
   ]);
   const serviceWarningPill = getServiceWarningState(serviceDates, todayYmd);
 

@@ -177,6 +177,7 @@ export default async function ZipMapPage({
       supabaseAdmin
         .from("service_area_zips")
         .select("id, zip, town, county, active, price_14_yard_override")
+        .eq("business_id", adminSession.business.id)
         .order("zip", { ascending: true }),
       bookingsQuery,
     ]);

@@ -2,10 +2,12 @@ import "server-only";
 
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type DumpsterRentalPolicyInput = {
   dumpsterSize?: string | null;
   dumpsterProductId?: string | null;
+  businessId?: string | null;
 };
 
 export type DumpsterRentalPolicy = {
@@ -27,7 +29,8 @@ function normalizeText(value: string | null | undefined) {
 export async function getDumpsterRentalPolicy(
   input: DumpsterRentalPolicyInput,
 ): Promise<DumpsterRentalPolicy> {
-  const pricingSettings = await getPricingSettingsSnapshot();
+  const businessId = input.businessId ?? (await getCurrentTenant()).id;
+  const pricingSettings = await getPricingSettingsSnapshot(businessId);
   const dumpsterSize = normalizeText(input.dumpsterSize) ?? "14 yard";
   const dumpsterProductId = normalizeText(input.dumpsterProductId);
 
@@ -44,6 +47,7 @@ export async function getDumpsterRentalPolicy(
     const query = supabaseAdmin
       .from("dumpster_product_settings")
       .select("included_rental_days, extra_day_price, base_price, display_name")
+      .eq("business_id", businessId)
       .limit(1);
 
     const { data, error } = dumpsterProductId

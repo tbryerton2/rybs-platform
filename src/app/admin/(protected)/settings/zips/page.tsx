@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { InteractiveInfoPopover } from "@/app/admin/(protected)/customers/[id]/interactive-info-popover";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { AddZipForm } from "./add-zip-form";
 import { ZipList } from "./zip-list";
 
@@ -34,10 +35,12 @@ export default async function AdminServiceAreaPage({
   const addedZip = sp(resolvedSearchParams, "added");
   const deletedZip = sp(resolvedSearchParams, "deleted");
   const toggled = sp(resolvedSearchParams, "toggled");
+  const adminSession = await requireAdminOwner();
 
   const { data, error } = await supabaseAdmin
     .from("service_area_zips")
     .select("id, zip, active, county, town, state, price_14_yard_override" as string)
+    .eq("business_id", adminSession.business.id)
     .order("zip", { ascending: true });
 
   if (error) {

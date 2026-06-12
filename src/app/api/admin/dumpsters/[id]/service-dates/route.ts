@@ -26,6 +26,7 @@ export async function GET(
     const { data, error } = await supabaseAdmin
       .from("dumpster_service_dates")
       .select(DUMPSTER_SERVICE_DATE_SELECT)
+      .eq("business_id", adminAuth.session.business.id)
       .eq("dumpster_id", id)
       .order("service_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -55,6 +56,20 @@ export async function POST(
     if (!adminAuth.ok) return adminAuth.response;
 
     const { id } = await params;
+    const { data: dumpster, error: dumpsterError } = await supabaseAdmin
+      .from("dumpsters")
+      .select("id, business_id")
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id)
+      .single<{ id: string; business_id: string | null }>();
+
+    if (dumpsterError || !dumpster) {
+      return NextResponse.json(
+        { ok: false, error: dumpsterError?.message ?? "Dumpster not found." },
+        { status: 404 },
+      );
+    }
+
     const body = (await req.json().catch(() => ({}))) as CreateServiceDateBody;
     const serviceDate = body.serviceDate;
 
@@ -69,7 +84,10 @@ export async function POST(
 
     const { data, error } = await supabaseAdmin
       .from("dumpster_service_dates")
-      .insert(buildDumpsterServiceDateInsert(id, serviceDate))
+      .insert({
+        ...buildDumpsterServiceDateInsert(id, serviceDate),
+        business_id: dumpster.business_id ?? adminAuth.session.business.id,
+      })
       .select(DUMPSTER_SERVICE_DATE_SELECT)
       .single<DumpsterServiceDateRow>();
 

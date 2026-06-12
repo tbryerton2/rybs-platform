@@ -19,10 +19,11 @@ function isMissingServiceDateTableError(message: string) {
   return normalized.includes("dumpster_service_dates") && normalized.includes("does not exist");
 }
 
-export async function getDumpsters() {
+export async function getDumpsters(businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("dumpsters")
     .select(DUMPSTER_SELECT)
+    .eq("business_id", businessId)
     .order("active", { ascending: false })
     .order("display_name", { ascending: true });
 
@@ -38,7 +39,8 @@ export async function getDumpsters() {
   try {
     const { data: serviceDateData, error: serviceDateError } = await supabaseAdmin
       .from("dumpster_service_dates")
-      .select(DUMPSTER_SERVICE_DATE_SELECT);
+      .select(DUMPSTER_SERVICE_DATE_SELECT)
+      .eq("business_id", businessId);
 
     if (serviceDateError) {
       if (isMissingServiceDateTableError(serviceDateError.message)) {
@@ -67,11 +69,12 @@ export async function getDumpsters() {
   }
 }
 
-export async function getDumpsterById(id: string) {
+export async function getDumpsterById(id: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("dumpsters")
     .select(DUMPSTER_SELECT)
     .eq("id", id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (error) {
@@ -89,8 +92,11 @@ export async function getDumpsterById(id: string) {
   return record ?? null;
 }
 
-export async function getNextDumpsterEquipmentId() {
-  const { data, error } = await supabaseAdmin.from("dumpsters").select("equipment_id");
+export async function getNextDumpsterEquipmentId(businessId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("dumpsters")
+    .select("equipment_id")
+    .eq("business_id", businessId);
 
   if (error) {
     throw new Error(error.message);
@@ -100,11 +106,12 @@ export async function getNextDumpsterEquipmentId() {
   return getNextDumpsterEquipmentIdFromValues(values);
 }
 
-export async function getDumpsterServiceDates(dumpsterId: string) {
+export async function getDumpsterServiceDates(dumpsterId: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("dumpster_service_dates")
     .select(DUMPSTER_SERVICE_DATE_SELECT)
     .eq("dumpster_id", dumpsterId)
+    .eq("business_id", businessId)
     .order("service_date", { ascending: false })
     .order("created_at", { ascending: false });
 

@@ -7,6 +7,7 @@ import {
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export function sanitizeZip(input?: string) {
   return (input || "").toString().replace(/\D/g, "").slice(0, 5);
@@ -22,14 +23,16 @@ export async function getDumpsterPriceForZip(
     deliveryDate?: string | null;
     pickupDate?: string | null;
     pickupMode?: "unspecified" | "date" | null;
+    businessId?: string | null;
   },
 ) {
+  const businessId = bookingInput?.businessId ?? (await getCurrentTenant()).id;
   const zip = sanitizeZip(inputZip);
   const zipValid = zip.length === 5;
   const selectedDumpster = resolveSelectedDumpster(selectedDumpsterInput);
   const [pricingSettings, rentalPolicy] = await Promise.all([
-    getPricingSettingsSnapshot(),
-    getDumpsterRentalPolicy(selectedDumpster),
+    getPricingSettingsSnapshot(businessId),
+    getDumpsterRentalPolicy({ ...selectedDumpster, businessId }),
   ]);
   const defaultPrice = rentalPolicy.basePrice;
   const buildQuote = (price: number, overridePrice: number | null, pricingSource: "zip_override" | "global_default") =>
@@ -76,6 +79,8 @@ export async function getDumpsterPriceForZip(
       )
     `)
     .eq("zip", zip)
+    .eq("business_id", businessId)
+    .eq("service_area_zip_pricing_overrides.business_id", businessId)
     .maybeSingle();
 
   if (error) {
@@ -135,6 +140,7 @@ export async function get14YardPriceForZip(
     deliveryDate?: string | null;
     pickupDate?: string | null;
     pickupMode?: "unspecified" | "date" | null;
+    businessId?: string | null;
   },
 ) {
   return getDumpsterPriceForZip(
@@ -144,10 +150,11 @@ export async function get14YardPriceForZip(
   );
 }
 
-export async function getZipPricingOverridesBySize(inputZip?: string) {
+export async function getZipPricingOverridesBySize(inputZip?: string, businessId?: string) {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const zip = sanitizeZip(inputZip);
   const zipValid = zip.length === 5;
-  const pricingSettings = await getPricingSettingsSnapshot();
+  const pricingSettings = await getPricingSettingsSnapshot(resolvedBusinessId);
   const defaultPrice = pricingSettings.basePrice;
 
   if (!zipValid) {
@@ -171,6 +178,8 @@ export async function getZipPricingOverridesBySize(inputZip?: string) {
       )
     `)
     .eq("zip", zip)
+    .eq("business_id", resolvedBusinessId)
+    .eq("service_area_zip_pricing_overrides.business_id", resolvedBusinessId)
     .maybeSingle();
 
   if (error) {

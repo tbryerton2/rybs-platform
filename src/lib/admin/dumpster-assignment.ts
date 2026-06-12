@@ -84,8 +84,9 @@ export async function getAssignableDumpstersForBooking(input: {
   pickupDate: string | null;
   includedRentalDays: number | null;
   currentDumpsterId?: string | null;
+  businessId?: string;
 }) {
-  const tenant = await getCurrentTenant();
+  const businessId = input.businessId ?? (await getCurrentTenant()).id;
   const dumpsterSize = String(input.dumpsterSize ?? "").trim();
   if (!dumpsterSize || !isYmd(input.deliveryDate)) {
     return {
@@ -95,7 +96,7 @@ export async function getAssignableDumpstersForBooking(input: {
     };
   }
 
-  const pricingSettings = await getPricingSettingsSnapshot();
+  const pricingSettings = await getPricingSettingsSnapshot(businessId);
   const requestedPickupDate =
     input.pickupDate && isYmd(input.pickupDate)
       ? input.pickupDate
@@ -107,6 +108,7 @@ export async function getAssignableDumpstersForBooking(input: {
   const dumpstersQuery = supabaseAdmin
     .from("dumpsters")
     .select("id, display_name, equipment_id, size, yard_location, service_status, operational_status, active")
+    .eq("business_id", businessId)
     .eq("size", dumpsterSize)
     .eq("active", true)
     .eq("service_status", "Ready")
@@ -119,6 +121,7 @@ export async function getAssignableDumpstersForBooking(input: {
         .from("dumpsters")
         .select("id, display_name, equipment_id, size, yard_location, service_status, operational_status, active")
         .eq("id", currentDumpsterId)
+        .eq("business_id", businessId)
         .maybeSingle<AssignableDumpsterRow>()
     : Promise.resolve({ data: null, error: null });
 
@@ -154,7 +157,7 @@ export async function getAssignableDumpstersForBooking(input: {
   const { data: assignedBookings, error: assignedBookingsError } = await supabaseAdmin
     .from("bookings")
     .select("id, dumpster_id, delivery_date, pickup_date, included_rental_days, status")
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .in("dumpster_id", Array.from(candidateDumpsterIds))
     .neq("id", input.bookingId)
     .not("delivery_date", "is", null)

@@ -33,11 +33,12 @@ type FleetEquipmentInspectionDateRow = {
 
 export type FleetEquipmentInspectionStatus = "Current" | "Due soon" | "Expired" | "Not set";
 
-export async function getFleetEquipmentDetailById(id: string) {
+export async function getFleetEquipmentDetailById(id: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment")
     .select(FLEET_EQUIPMENT_SELECT)
     .eq("id", id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
@@ -45,11 +46,12 @@ export async function getFleetEquipmentDetailById(id: string) {
   return mapFleetEquipmentRowToRecord(data as FleetEquipmentRow);
 }
 
-export async function getFleetEquipmentServiceDates(fleetEquipmentId: string) {
+export async function getFleetEquipmentServiceDates(fleetEquipmentId: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment_service_dates")
     .select(FLEET_EQUIPMENT_SERVICE_DATE_SELECT)
     .eq("fleet_equipment_id", fleetEquipmentId)
+    .eq("business_id", businessId)
     .order("service_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -61,7 +63,7 @@ export async function getFleetEquipmentServiceDates(fleetEquipmentId: string) {
   return ((data ?? []) as FleetEquipmentServiceDateRow[]).map(mapFleetEquipmentServiceDateRowToRecord);
 }
 
-export async function getFleetEquipmentDueSoonIds(windowDays = 45) {
+export async function getFleetEquipmentDueSoonIds(businessId: string, windowDays = 45) {
   const today = new Date();
   const dueSoonEnd = new Date(today);
   dueSoonEnd.setDate(dueSoonEnd.getDate() + windowDays);
@@ -69,6 +71,7 @@ export async function getFleetEquipmentDueSoonIds(windowDays = 45) {
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment_service_dates")
     .select("fleet_equipment_id")
+    .eq("business_id", businessId)
     .gte("service_date", formatInputDateET(today))
     .lte("service_date", formatInputDateET(dueSoonEnd));
 
@@ -80,7 +83,7 @@ export async function getFleetEquipmentDueSoonIds(windowDays = 45) {
   return [...new Set(((data ?? []) as FleetEquipmentServiceDateIdRow[]).map((row) => row.fleet_equipment_id))];
 }
 
-export async function getFleetEquipmentMaintenanceAttentionIds(windowDays = 45) {
+export async function getFleetEquipmentMaintenanceAttentionIds(businessId: string, windowDays = 45) {
   const today = new Date();
   const dueSoonEnd = new Date(today);
   dueSoonEnd.setDate(dueSoonEnd.getDate() + windowDays);
@@ -88,6 +91,7 @@ export async function getFleetEquipmentMaintenanceAttentionIds(windowDays = 45) 
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment_service_dates")
     .select("fleet_equipment_id, service_date")
+    .eq("business_id", businessId)
     .lte("service_date", formatInputDateET(dueSoonEnd));
 
   if (error) {
@@ -106,7 +110,7 @@ export async function getFleetEquipmentMaintenanceAttentionIds(windowDays = 45) 
   return [...attentionIds];
 }
 
-export async function getFleetEquipmentInspectionStatusMap(windowDays = 45) {
+export async function getFleetEquipmentInspectionStatusMap(businessId: string, windowDays = 45) {
   const today = new Date();
   const todayYmd = formatInputDateET(today);
   const dueSoonEnd = new Date(today);
@@ -116,6 +120,7 @@ export async function getFleetEquipmentInspectionStatusMap(windowDays = 45) {
   const { data, error } = await supabaseAdmin
     .from("fleet_equipment_service_dates")
     .select("fleet_equipment_id, service_date")
+    .eq("business_id", businessId)
     .eq("service_type", "Inspection")
     .order("service_date", { ascending: true });
 

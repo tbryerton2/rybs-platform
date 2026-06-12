@@ -177,9 +177,11 @@ export async function getPooledDumpsterAvailabilityBySize(
     throw new Error("deliveryDate must use YYYY-MM-DD.");
   }
 
+  const businessId = input.businessId ?? (await getCurrentTenant()).id;
   const rentalPolicy = await getDumpsterRentalPolicy({
     dumpsterSize,
     dumpsterProductId,
+    businessId,
   });
   const requestedPickupDate =
     input.pickupDate && isYmd(input.pickupDate)
@@ -195,12 +197,12 @@ export async function getPooledDumpsterAvailabilityBySize(
   }
 
   const nowIso = new Date().toISOString();
-  const businessId = input.businessId ?? (await getCurrentTenant()).id;
 
   const [dumpstersResult, bookingsResult, holdsResult] = await Promise.all([
     supabaseAdmin
       .from("dumpsters")
       .select("id, display_name, size, active, operational_status, maintenance_status, service_status, asset_tag")
+      .eq("business_id", businessId)
       .eq("active", true),
     supabaseAdmin
       .from("bookings")

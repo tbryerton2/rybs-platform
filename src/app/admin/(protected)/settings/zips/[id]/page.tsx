@@ -4,6 +4,7 @@ export const revalidate = 0;
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { InteractiveInfoPopover } from "@/app/admin/(protected)/customers/[id]/interactive-info-popover";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { formatDumpsterSizeFromCapacity } from "@/lib/booking-product";
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -64,6 +65,7 @@ export default async function AdminZipDetailPage({
   const resolvedParams = await params;
 
   const id = Number(resolvedParams.id);
+  const adminSession = await requireAdminOwner();
 
   if (!Number.isFinite(id)) notFound();
 
@@ -73,11 +75,13 @@ export default async function AdminZipDetailPage({
         .from("service_area_zips")
         .select("id, zip, county, active, town, state, price_14_yard_override" as string)
         .eq("id", id)
+        .eq("business_id", adminSession.business.id)
         .single(),
-      getEditableDumpsterProductSettings(),
+      getEditableDumpsterProductSettings(adminSession.business.id),
       supabaseAdmin
         .from("service_area_zip_pricing_overrides")
         .select("dumpster_size, price_override")
+        .eq("business_id", adminSession.business.id)
         .eq("service_area_zip_id", id),
     ]);
 

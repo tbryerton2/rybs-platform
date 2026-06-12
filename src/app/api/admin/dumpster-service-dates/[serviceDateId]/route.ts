@@ -40,8 +40,10 @@ export async function PATCH(
         service_date: serviceDate.serviceDate,
         service_type: serviceDate.serviceType,
         notes: serviceDate.notes.trim() || null,
+        business_id: adminAuth.session.business.id,
       })
       .eq("id", serviceDateId)
+      .eq("business_id", adminAuth.session.business.id)
       .select(DUMPSTER_SERVICE_DATE_SELECT)
       .single<DumpsterServiceDateRow>();
 
@@ -74,7 +76,8 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from("dumpster_service_dates")
       .delete()
-      .eq("id", serviceDateId);
+      .eq("id", serviceDateId)
+      .eq("business_id", adminAuth.session.business.id);
 
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 400 });

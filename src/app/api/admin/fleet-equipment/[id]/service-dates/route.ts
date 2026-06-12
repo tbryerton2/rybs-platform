@@ -26,6 +26,7 @@ export async function GET(
     const { data, error } = await supabaseAdmin
       .from("fleet_equipment_service_dates")
       .select(FLEET_EQUIPMENT_SERVICE_DATE_SELECT)
+      .eq("business_id", adminAuth.session.business.id)
       .eq("fleet_equipment_id", id)
       .order("service_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -55,6 +56,20 @@ export async function POST(
     if (!adminAuth.ok) return adminAuth.response;
 
     const { id } = await params;
+    const { data: fleetEquipment, error: fleetEquipmentError } = await supabaseAdmin
+      .from("fleet_equipment")
+      .select("id, business_id")
+      .eq("id", id)
+      .eq("business_id", adminAuth.session.business.id)
+      .single<{ id: string; business_id: string | null }>();
+
+    if (fleetEquipmentError || !fleetEquipment) {
+      return NextResponse.json(
+        { ok: false, error: fleetEquipmentError?.message ?? "Fleet equipment not found." },
+        { status: 404 },
+      );
+    }
+
     const body = (await req.json().catch(() => ({}))) as CreateServiceDateBody;
     const serviceDate = body.serviceDate;
 
@@ -69,7 +84,10 @@ export async function POST(
 
     const { data, error } = await supabaseAdmin
       .from("fleet_equipment_service_dates")
-      .insert(buildFleetEquipmentServiceDateInsert(id, serviceDate))
+      .insert({
+        ...buildFleetEquipmentServiceDateInsert(id, serviceDate),
+        business_id: fleetEquipment.business_id ?? adminAuth.session.business.id,
+      })
       .select(FLEET_EQUIPMENT_SERVICE_DATE_SELECT)
       .single<FleetEquipmentServiceDateRow>();
 

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type PricingSettingsSnapshot = {
   basePrice: number;
@@ -109,12 +110,14 @@ function normalizePricingSettingsSnapshot(
   };
 }
 
-export async function getPricingSettingsSnapshot(): Promise<PricingSettingsSnapshot> {
+export async function getPricingSettingsSnapshot(businessId?: string): Promise<PricingSettingsSnapshot> {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const { data, error } = await supabaseAdmin
     .from("pricing_settings")
     .select(
       "standard_rental_price, included_rental_days, daily_overage_price, max_rental_days, allow_extended_rental_at_booking, included_services_blurb, included_tons, ton_overage_price",
     )
+    .eq("business_id", resolvedBusinessId)
     .maybeSingle();
 
   if (
@@ -142,6 +145,7 @@ export async function getPricingSettingsSnapshot(): Promise<PricingSettingsSnaps
           .filter(Boolean)
           .join(", "),
       )
+      .eq("business_id", resolvedBusinessId)
       .maybeSingle<
         LegacyPricingSettingsRow & {
           max_rental_days?: number | null;

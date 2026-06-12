@@ -11,6 +11,7 @@ export type DumpsterAvailabilityComparisonInput = {
   dumpsterProductId?: string | null;
   deliveryDate: string;
   pickupDate?: string | null;
+  businessId?: string;
 };
 
 export type LegacyRpcAvailabilityResult = {
@@ -69,7 +70,7 @@ function inferMismatchReason(
 export async function compareLegacyRpcToPooledDumpsterAvailability(
   input: DumpsterAvailabilityComparisonInput,
 ): Promise<DumpsterAvailabilityComparisonResult> {
-  const pricingSettings = await getPricingSettingsSnapshot();
+  const pricingSettings = await getPricingSettingsSnapshot(input.businessId);
   const pickupDate =
     input.pickupDate && input.pickupDate.trim()
       ? input.pickupDate.trim()

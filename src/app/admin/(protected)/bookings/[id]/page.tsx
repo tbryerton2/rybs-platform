@@ -1080,6 +1080,7 @@ export default async function AdminBookingDetailPage({
     pickupDate: booking.pickup_date,
     includedRentalDays: booking.included_rental_days,
     currentDumpsterId: booking.dumpster_id,
+    businessId: adminSession.business.id,
   });
   const compatibleDumpsters = assignmentOptions.compatibleDumpsters;
   const currentAssignedDumpster = assignmentOptions.currentAssignedDumpster;

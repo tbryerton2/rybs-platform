@@ -38,7 +38,8 @@ export async function POST(req: Request) {
 
     const { data: equipmentRows, error: equipmentError } = await supabaseAdmin
       .from("dumpsters")
-      .select("equipment_id");
+      .select("equipment_id")
+      .eq("business_id", adminAuth.session.business.id);
 
     if (equipmentError) {
       return NextResponse.json({ ok: false, error: equipmentError.message }, { status: 400 });
@@ -51,7 +52,10 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("dumpsters")
-      .insert(buildDumpsterInsert(createRecord))
+      .insert({
+        ...buildDumpsterInsert(createRecord),
+        business_id: adminAuth.session.business.id,
+      })
       .select(DUMPSTER_SELECT)
       .single<DumpsterRow>();
 

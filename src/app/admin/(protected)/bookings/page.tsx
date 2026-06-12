@@ -1306,8 +1306,12 @@ export default async function AdminBookingsPage({
       .gte("delivery_date", todayISOET())
       .order("delivery_date", { ascending: true })
       .limit(500),
-    getActiveDumpsterFilterOptions(),
-    supabaseAdmin.from("service_area_zips").select("zip").order("zip", { ascending: true }),
+    getActiveDumpsterFilterOptions(adminSession.business.id),
+    supabaseAdmin
+      .from("service_area_zips")
+      .select("zip")
+      .eq("business_id", adminSession.business.id)
+      .order("zip", { ascending: true }),
   ]);
   const bookings = mergeBookingRows(baseBookings, supplementalSearchBookings);
 

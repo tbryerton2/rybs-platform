@@ -7,6 +7,7 @@ import {
   ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getDumpsterInventorySummary } from "@/lib/admin/dumpster-inventory";
 import { getScheduleJobs } from "@/lib/admin/schedule";
 import {
@@ -657,6 +658,7 @@ export default async function AdminSchedulePage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const adminSession = await requireAdminOwner();
   const params = await searchParams;
   const requestedWeek = sp(params, "week");
 
@@ -671,7 +673,7 @@ export default async function AdminSchedulePage({
 
   const [allJobs, inventorySummary] = await Promise.all([
     getScheduleJobs(weekStartISO, weekEndISO),
-    getDumpsterInventorySummary(),
+    getDumpsterInventorySummary(adminSession.business.id),
   ]);
   const jobs = allJobs as BookingRow[];
   const bookableFleetSize = inventorySummary.bookableCount;

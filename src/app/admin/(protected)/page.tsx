@@ -468,10 +468,10 @@ export default async function AdminDashboardPage() {
       .order("submitted_at", { ascending: false }),
     listEmployeesForCurrentBusiness({ includeInactive: true }),
     listExpensesForCurrentBusiness(),
-    getDumpsters(),
-    listFleetEquipment(),
-    getFleetEquipmentMaintenanceAttentionIds(),
-    getFleetEquipmentInspectionStatusMap(),
+    getDumpsters(adminSession.business.id),
+    listFleetEquipment(adminSession.business.id),
+    getFleetEquipmentMaintenanceAttentionIds(adminSession.business.id),
+    getFleetEquipmentInspectionStatusMap(adminSession.business.id),
   ]);
 
   if (activeBookingsResult.error) throw new Error(activeBookingsResult.error.message);

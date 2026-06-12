@@ -5,6 +5,7 @@ import Link from "next/link";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import {
   getFleetEquipmentInspectionStatusMap,
   getFleetEquipmentMaintenanceAttentionIds,
@@ -26,6 +27,7 @@ function getSavedMessage(saved: string | undefined) {
 }
 
 export default async function AdminTrucksTrailersPage({ searchParams }: PageProps) {
+  const adminSession = await requireAdminOwner();
   let records: Awaited<ReturnType<typeof listFleetEquipment>> = [];
   let maintenanceAttentionIds: string[] = [];
   let inspectionStatusById: Record<string, "Current" | "Due soon" | "Expired" | "Not set"> = {};
@@ -35,9 +37,9 @@ export default async function AdminTrucksTrailersPage({ searchParams }: PageProp
 
   try {
     [records, maintenanceAttentionIds, inspectionStatusById] = await Promise.all([
-      listFleetEquipment(),
-      getFleetEquipmentMaintenanceAttentionIds(),
-      getFleetEquipmentInspectionStatusMap(),
+      listFleetEquipment(adminSession.business.id),
+      getFleetEquipmentMaintenanceAttentionIds(adminSession.business.id),
+      getFleetEquipmentInspectionStatusMap(adminSession.business.id),
     ]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load fleet equipment right now.";

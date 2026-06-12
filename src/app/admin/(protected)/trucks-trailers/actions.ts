@@ -14,9 +14,9 @@ import type {
 export async function createFleetEquipmentAction(
   input: FleetEquipmentMutationInput,
 ): Promise<FleetEquipmentMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await createFleetEquipment(input);
+  const result = await createFleetEquipment(input, adminSession.business.id);
 
   if (result.ok) {
     revalidatePath("/admin/trucks-trailers");
@@ -29,9 +29,9 @@ export async function updateFleetEquipmentAction(
   id: string,
   input: FleetEquipmentMutationInput,
 ): Promise<FleetEquipmentMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await updateFleetEquipment(id, input);
+  const result = await updateFleetEquipment(id, input, adminSession.business.id);
 
   if (result.ok) {
     revalidatePath("/admin/trucks-trailers");

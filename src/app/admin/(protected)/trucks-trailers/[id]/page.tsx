@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getFleetEquipmentDueSoonIndicator } from "@/lib/admin/fleet-equipment-service-dates";
 import {
   getFleetEquipmentDetailById,
@@ -28,10 +29,11 @@ function getSavedMessage(saved: string | undefined) {
 
 export default async function FleetEquipmentDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const adminSession = await requireAdminOwner();
   const { saved } = (await searchParams) ?? {};
   const [record, serviceDates] = await Promise.all([
-    getFleetEquipmentDetailById(id),
-    getFleetEquipmentServiceDates(id),
+    getFleetEquipmentDetailById(id, adminSession.business.id),
+    getFleetEquipmentServiceDates(id, adminSession.business.id),
   ]);
   const dueSoonIndicator = getFleetEquipmentDueSoonIndicator(serviceDates);
 

@@ -28,7 +28,7 @@ export async function addServiceZipAction(
   _prevState: AddZipFormState,
   formData: FormData,
 ): Promise<AddZipFormState> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const zip = normalizeZip(asString(formData.get("zip")));
 
@@ -44,6 +44,7 @@ export async function addServiceZipAction(
   const { data, error } = await supabaseAdmin
     .from("service_area_zips")
     .insert({
+      business_id: adminSession.business.id,
       zip,
       active: true,
     })
@@ -84,7 +85,7 @@ export async function addServiceZipAction(
 }
 
 export async function toggleServiceZipAction(formData: FormData) {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = Number(asString(formData.get("id")));
 
@@ -96,6 +97,7 @@ export async function toggleServiceZipAction(formData: FormData) {
     .from("service_area_zips")
     .select("id, zip, active")
     .eq("id", id)
+    .eq("business_id", adminSession.business.id)
     .single();
 
   if (readError || !row) {
@@ -106,8 +108,9 @@ export async function toggleServiceZipAction(formData: FormData) {
 
   const { error: updateError } = await supabaseAdmin
     .from("service_area_zips")
-    .update({ active: nextActive })
-    .eq("id", id);
+    .update({ active: nextActive, business_id: adminSession.business.id })
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id);
 
   if (updateError) {
     throw new Error(updateError.message);
@@ -120,7 +123,7 @@ export async function toggleServiceZipAction(formData: FormData) {
 }
 
 export async function deleteServiceZipAction(formData: FormData) {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
   const id = Number(asString(formData.get("id")));
 
@@ -132,6 +135,7 @@ export async function deleteServiceZipAction(formData: FormData) {
     .from("service_area_zips")
     .select("id, zip")
     .eq("id", id)
+    .eq("business_id", adminSession.business.id)
     .single();
 
   if (readError || !row) {
@@ -141,7 +145,8 @@ export async function deleteServiceZipAction(formData: FormData) {
   const { error } = await supabaseAdmin
     .from("service_area_zips")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id);
 
   if (error) {
     throw new Error(error.message);

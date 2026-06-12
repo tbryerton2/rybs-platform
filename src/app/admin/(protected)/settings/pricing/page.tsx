@@ -11,6 +11,7 @@ import {
 import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { DumpsterProductSettingsForm } from "@/app/admin/(protected)/settings/pricing/dumpster-product-settings-form";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import {
   isMissingPricingSettingsIncludedServicesBlurbColumnError,
@@ -91,7 +92,7 @@ function SummaryMetricCard({
   );
 }
 
-async function getPricingSettings(): Promise<PricingSettingsRow> {
+async function getPricingSettings(businessId: string): Promise<PricingSettingsRow> {
   const selectClause = `
     id,
     standard_rental_price,
@@ -108,6 +109,7 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
   const { data, error } = await supabaseAdmin
     .from("pricing_settings")
     .select(selectClause)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (
@@ -134,6 +136,7 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
     const legacyResult = await supabaseAdmin
       .from("pricing_settings")
       .select(legacySelectClause)
+      .eq("business_id", businessId)
       .maybeSingle<{
         id: string;
         standard_rental_price: number;
@@ -173,6 +176,7 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
       included_services_blurb: null,
       included_tons: 1,
       ton_overage_price: 100,
+      business_id: businessId,
     })
     .select(selectClause)
     .single();
@@ -196,6 +200,7 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
         daily_overage_price: 30,
         included_tons: 1,
         ton_overage_price: 100,
+        business_id: businessId,
         ...(hasRentalPeriodColumns
           ? {
               max_rental_days: null,
@@ -245,9 +250,10 @@ async function getPricingSettings(): Promise<PricingSettingsRow> {
 }
 
 export default async function AdminPricingSettingsPage() {
+  const adminSession = await requireAdminOwner();
   const [pricing, productSettings] = await Promise.all([
-    getPricingSettings(),
-    getEditableDumpsterProductSettings(),
+    getPricingSettings(adminSession.business.id),
+    getEditableDumpsterProductSettings(adminSession.business.id),
   ]);
   const maxRentalSummary =
     pricing.max_rental_days == null ? "No hard cap" : `${pricing.max_rental_days} days`;

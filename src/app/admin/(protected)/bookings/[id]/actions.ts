@@ -813,6 +813,7 @@ export async function updateAssignedDumpsterAction(formData: FormData) {
       pickupDate: current.data.pickup_date,
       includedRentalDays: current.data.included_rental_days,
       currentDumpsterId: currentAssignment,
+      businessId: adminSession.business.id,
     });
 
     const canAssign = assignmentOptions.compatibleDumpsters.some((option) => option.id === dumpsterId);

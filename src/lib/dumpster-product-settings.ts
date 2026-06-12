@@ -4,6 +4,7 @@ import { getOfferedDumpsterProducts, type OfferedDumpsterProduct } from "@/lib/a
 import { getZipPricingOverridesBySize } from "@/lib/pricing";
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type DumpsterProductSettingsRow = {
   id: string;
@@ -124,10 +125,12 @@ function compareOfferedProducts(left: OfferedDumpsterProduct, right: OfferedDump
     : left.activeCount - right.activeCount;
 }
 
-export async function getDumpsterProductSettings(): Promise<DumpsterProductSetting[]> {
+export async function getDumpsterProductSettings(businessId?: string): Promise<DumpsterProductSetting[]> {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const { data, error } = await supabaseAdmin
     .from("dumpster_product_settings")
     .select(DUMPSTER_PRODUCT_SETTINGS_SELECT)
+    .eq("business_id", resolvedBusinessId)
     .order("sort_order", { ascending: true })
     .order("display_name", { ascending: true });
 
@@ -138,11 +141,12 @@ export async function getDumpsterProductSettings(): Promise<DumpsterProductSetti
   return ((data ?? []) as DumpsterProductSettingsRow[]).map(mapRow);
 }
 
-export async function getEditableDumpsterProductSettings(): Promise<DumpsterProductSetting[]> {
+export async function getEditableDumpsterProductSettings(businessId?: string): Promise<DumpsterProductSetting[]> {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const [offeredProducts, productSettings, pricingSettings] = await Promise.all([
-    getOfferedDumpsterProducts(),
-    getDumpsterProductSettings(),
-    getPricingSettingsSnapshot(),
+    getOfferedDumpsterProducts(resolvedBusinessId),
+    getDumpsterProductSettings(resolvedBusinessId),
+    getPricingSettingsSnapshot(resolvedBusinessId),
   ]);
 
   const settingsBySize = new Map(
@@ -205,12 +209,14 @@ export async function getEditableDumpsterProductSettings(): Promise<DumpsterProd
 
 export async function getPublicDumpsterProducts(
   zip?: string,
+  businessId?: string,
 ): Promise<PublicDumpsterProduct[]> {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
   const [offeredProducts, productSettings, pricingSettings, zipPricingOverrides] = await Promise.all([
-    getOfferedDumpsterProducts(),
-    getDumpsterProductSettings(),
-    getPricingSettingsSnapshot(),
-    getZipPricingOverridesBySize(zip),
+    getOfferedDumpsterProducts(resolvedBusinessId),
+    getDumpsterProductSettings(resolvedBusinessId),
+    getPricingSettingsSnapshot(resolvedBusinessId),
+    getZipPricingOverridesBySize(zip, resolvedBusinessId),
   ]);
 
   const settingsBySize = new Map(
