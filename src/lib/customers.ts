@@ -384,7 +384,7 @@ export async function findOrCreateCustomerRecord(
         changedByType: "system",
         changeReason: "Customer record created from booking flow",
       },
-    ]);
+    ], resolvedBusinessId);
   }
 
   return persistedCustomerId;

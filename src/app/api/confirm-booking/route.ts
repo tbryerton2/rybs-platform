@@ -686,6 +686,7 @@ export async function POST(req: Request) {
     }
 
     const ev = await serverSupabase.from("booking_events").insert({
+      business_id: tenant.id,
       booking_id: createdBooking.bookingId,
       type: "status_change",
       old_status: "pending",
@@ -696,6 +697,7 @@ export async function POST(req: Request) {
     if (ev.error) console.error("booking_events insert failed:", ev.error);
 
     const msg = await supabase.from("booking_messages").insert({
+      business_id: tenant.id,
       booking_id: createdBooking.bookingId,
       channel: "email",
       direction: "outbound",

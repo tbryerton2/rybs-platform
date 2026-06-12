@@ -2,6 +2,7 @@ export type BookingMessageStatus = "queued" | "sent" | "failed";
 
 export type StoredBookingMessage = {
   id: string;
+  businessId: string | null;
   bookingId: string;
   bookingChargeId: string | null;
   channel: "email";
@@ -19,6 +20,7 @@ export type StoredBookingMessage = {
 };
 
 export type QueueBookingEmailInput = {
+  businessId: string;
   bookingId: string;
   bookingChargeId?: string | null;
   template: string;
@@ -29,15 +31,17 @@ export type QueueBookingEmailInput = {
 };
 
 export type FindBookingMessageByChargeAndTemplateInput = {
+  businessId?: string | null;
   bookingChargeId: string;
   template: string;
 };
 
 const BOOKING_MESSAGE_SELECT =
-  "id, booking_id, booking_charge_id, channel, direction, template, to, subject, body, provider, provider_message_id, status, error, created_at, sent_at";
+  "id, business_id, booking_id, booking_charge_id, channel, direction, template, to, subject, body, provider, provider_message_id, status, error, created_at, sent_at";
 
 type BookingMessageRow = {
   id: string;
+  business_id: string | null;
   booking_id: string;
   booking_charge_id: string | null;
   channel: string;
@@ -135,6 +139,7 @@ function isUniqueViolation(error: unknown) {
 function toStoredBookingMessage(row: BookingMessageRow): StoredBookingMessage {
   return {
     id: row.id,
+    businessId: row.business_id,
     bookingId: row.booking_id,
     bookingChargeId: row.booking_charge_id,
     channel: "email",
@@ -154,16 +159,22 @@ function toStoredBookingMessage(row: BookingMessageRow): StoredBookingMessage {
 
 async function findByChargeAndTemplate(input: {
   supabase: BookingMessageSupabaseClient;
+  businessId?: string | null;
   bookingChargeId: string;
   template: string;
 }) {
-  const { data, error } = await input.supabase
+  let query = input.supabase
     .from("booking_messages")
     .select(BOOKING_MESSAGE_SELECT)
     .eq("booking_charge_id", input.bookingChargeId)
     .eq("template", input.template)
-    .in("status", ["queued", "sent"])
-    .maybeSingle<BookingMessageRow>();
+    .in("status", ["queued", "sent"]);
+
+  if (input.businessId) {
+    query = query.eq("business_id", input.businessId);
+  }
+
+  const { data, error } = await query.maybeSingle<BookingMessageRow>();
 
   if (error) {
     throw new BookingMessageServiceError(error.message, error);
@@ -176,6 +187,7 @@ export async function findBookingMessageByChargeAndTemplate(
   input: FindBookingMessageByChargeAndTemplateInput,
 ) {
   const supabase = await getSupabaseClient();
+  const businessId = clean(input.businessId);
   const bookingChargeId = cleanRequired(input.bookingChargeId, "bookingChargeId");
   const template = cleanRequired(input.template, "template");
 
@@ -183,6 +195,7 @@ export async function findBookingMessageByChargeAndTemplate(
 
   return findByChargeAndTemplate({
     supabase,
+    businessId,
     bookingChargeId,
     template,
   });
@@ -190,6 +203,7 @@ export async function findBookingMessageByChargeAndTemplate(
 
 export async function queueBookingEmail(input: QueueBookingEmailInput) {
   const supabase = await getSupabaseClient();
+  const businessId = cleanRequired(input.businessId, "businessId");
   const bookingId = cleanRequired(input.bookingId, "bookingId");
   const bookingChargeId = normalizeOptionalUuid(input.bookingChargeId, "bookingChargeId");
   const template = cleanRequired(input.template, "template");
@@ -199,10 +213,12 @@ export async function queueBookingEmail(input: QueueBookingEmailInput) {
   const provider = clean(input.provider) ?? "resend";
 
   assertUuid(bookingId, "bookingId");
+  assertUuid(businessId, "businessId");
 
   if (bookingChargeId) {
     const existing = await findByChargeAndTemplate({
       supabase,
+      businessId,
       bookingChargeId,
       template,
     });
@@ -213,6 +229,7 @@ export async function queueBookingEmail(input: QueueBookingEmailInput) {
   const { data, error } = await supabase
     .from("booking_messages")
     .insert({
+      business_id: businessId,
       booking_id: bookingId,
       booking_charge_id: bookingChargeId,
       channel: "email",
@@ -234,6 +251,7 @@ export async function queueBookingEmail(input: QueueBookingEmailInput) {
     if (bookingChargeId && isUniqueViolation(error)) {
       const raced = await findByChargeAndTemplate({
         supabase,
+        businessId,
         bookingChargeId,
         template,
       });

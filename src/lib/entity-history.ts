@@ -21,11 +21,14 @@ function serializeHistoryValue(value: unknown) {
 export async function recordEntityHistory(
   supabase: SupabaseClient,
   entries: EntityHistoryEntry[],
+  businessId: string,
 ) {
   if (entries.length === 0) return;
+  if (!businessId) throw new Error("businessId is required when recording entity history.");
 
   const { error } = await supabase.from("entity_history").insert(
     entries.map((entry) => ({
+      business_id: businessId,
       entity_type: entry.entityType,
       entity_id: entry.entityId,
       field_name: entry.fieldName,

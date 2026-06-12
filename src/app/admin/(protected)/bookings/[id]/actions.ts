@@ -477,6 +477,7 @@ export async function updateBookingStatusAction(formData: FormData) {
       changedByType: "admin",
       changeReason: "Updated booking status",
     }),
+    adminSession.business.id,
   );
 
   revalidatePath(`/admin/bookings/${id}`);
@@ -522,6 +523,7 @@ export async function updateDeliveryDateAction(formData: FormData) {
       ["delivery_date"],
       { changedByType: "admin", changeReason: "Updated delivery date" },
     ),
+    adminSession.business.id,
   );
 
   revalidatePath(`/admin/bookings/${id}`);
@@ -574,6 +576,7 @@ export async function updatePickupDetailsAction(formData: FormData) {
       ["pickup_mode", "pickup_date"],
       { changedByType: "admin", changeReason: "Updated pickup details" },
     ),
+    adminSession.business.id,
   );
 
   revalidatePath(`/admin/bookings/${id}`);
@@ -765,6 +768,7 @@ export async function updateOperationalControlsAction(formData: FormData) {
       fieldsToCheck.filter((fieldName) => fieldName in changedUpdates),
       { changedByType: "admin", changeReason: "Updated operational controls" },
     ),
+    adminSession.business.id,
   );
 
   revalidatePath(`/admin/bookings/${id}`);
@@ -848,6 +852,7 @@ export async function updateAssignedDumpsterAction(formData: FormData) {
         changeReason: dumpsterId ? "Planned dumpster" : "Cleared planned dumpster",
       },
     ),
+    adminSession.business.id,
   );
 
   revalidatePath(`/admin/bookings/${id}`);
@@ -894,7 +899,7 @@ export async function quickMarkDeliveredAction(formData: FormData) {
       changedByType: "admin",
       changeReason: "Quick mark delivered",
     },
-  ]);
+  ], adminSession.business.id);
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -937,7 +942,7 @@ export async function quickMarkPickedUpAction(formData: FormData) {
       changedByType: "admin",
       changeReason: "Quick mark picked up",
     },
-  ]);
+  ], adminSession.business.id);
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");
@@ -978,7 +983,7 @@ export async function quickCancelBookingAction(formData: FormData) {
       changedByType: "admin",
       changeReason: "Quick cancel booking",
     },
-  ]);
+  ], adminSession.business.id);
 
   revalidatePath(`/admin/bookings/${id}`);
   revalidatePath("/admin/bookings");

@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { AdminAuditHistoryCard } from "@/app/admin/_components/admin/admin-audit-history-card";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { formatTimestamp } from "@/lib/admin/employees";
 import { getEmployeeForCurrentBusiness } from "@/lib/admin/employees.server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -52,6 +53,7 @@ function getHistoryTitle(fieldName: string) {
 }
 
 export default async function EmployeeDetailPage({ params, searchParams }: PageProps) {
+  const adminSession = await requireAdminOwner();
   const { employeeId } = await params;
   const { saved } = (await searchParams) ?? {};
   const [employee, historyResult] = await Promise.all([
@@ -59,6 +61,7 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
     supabaseAdmin
       .from("entity_history")
       .select("id, field_name, old_value, new_value, changed_by_type, created_at")
+      .eq("business_id", adminSession.business.id)
       .eq("entity_type", "employee")
       .eq("entity_id", employeeId)
       .order("created_at", { ascending: false })

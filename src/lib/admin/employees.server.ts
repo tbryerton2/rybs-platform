@@ -470,7 +470,7 @@ export async function createEmployeeForCurrentBusiness(
       changedById: actorUserId ?? null,
       changeReason: "Employee record created from admin",
     },
-  ]);
+  ], tenant.id);
 
   return {
     ok: true,
@@ -605,6 +605,7 @@ export async function updateEmployeeForCurrentBusiness(
         changeReason: "Employee record updated from admin",
       },
     ),
+    tenant.id,
   );
 
   return {
@@ -689,7 +690,7 @@ async function setEmployeeStatusForCurrentBusiness(
           status === "inactive" ? "Employee soft-deactivated by admin" : "Employee reactivated by admin",
       },
     ),
-  ]);
+  ], tenant.id);
 
   return {
     ok: true,

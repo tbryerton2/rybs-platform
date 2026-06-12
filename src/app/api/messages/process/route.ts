@@ -6,6 +6,23 @@ type ResendSendResult = Awaited<ReturnType<Resend["emails"]["send"]>> & {
   id?: string | null;
 };
 
+async function updateMessageStatus(
+  id: string,
+  businessId: string | null,
+  values: Record<string, unknown>,
+) {
+  let query = supabaseAdmin
+    .from("booking_messages")
+    .update(values)
+    .eq("id", id);
+
+  if (businessId) {
+    query = query.eq("business_id", businessId);
+  }
+
+  return query;
+}
+
 export async function POST() {
   try {
     const resendKey = process.env.RESEND_API_KEY;
@@ -22,7 +39,7 @@ export async function POST() {
     const { data: messages, error } = await supabaseAdmin
       .from("booking_messages")
       .select(
-        "id, booking_id, channel, to, subject, body, status, provider, provider_message_id"
+        "id, business_id, booking_id, channel, to, subject, body, status, provider, provider_message_id"
       )
       .eq("status", "queued")
       .eq("channel", "email")
@@ -43,13 +60,14 @@ export async function POST() {
       // Safety checks
       const toEmail = (msg.to ?? "").trim();
       if (!toEmail) {
-        await supabaseAdmin
-          .from("booking_messages")
-          .update({
+        await updateMessageStatus(
+          msg.id,
+          msg.business_id ?? null,
+          {
             status: "failed",
             error: "Missing recipient email",
-          })
-          .eq("id", msg.id);
+          },
+        );
         continue;
       }
 
@@ -57,13 +75,14 @@ export async function POST() {
       const body = (msg.body ?? "").trim();
 
       if (!body) {
-        await supabaseAdmin
-          .from("booking_messages")
-          .update({
+        await updateMessageStatus(
+          msg.id,
+          msg.business_id ?? null,
+          {
             status: "failed",
             error: "Missing email body",
-          })
-          .eq("id", msg.id);
+          },
+        );
         continue;
       }
 
@@ -78,26 +97,28 @@ export async function POST() {
         const providerMessageId =
           result.data?.id ?? result.id ?? null;
 
-        await supabaseAdmin
-          .from("booking_messages")
-          .update({
+        await updateMessageStatus(
+          msg.id,
+          msg.business_id ?? null,
+          {
             status: "sent",
             sent_at: new Date().toISOString(),
             provider: "resend",
             provider_message_id: providerMessageId,
             error: null,
-          })
-          .eq("id", msg.id);
+          },
+        );
 
         processed += 1;
       } catch (sendErr: unknown) {
-        await supabaseAdmin
-          .from("booking_messages")
-          .update({
+        await updateMessageStatus(
+          msg.id,
+          msg.business_id ?? null,
+          {
             status: "failed",
             error: sendErr instanceof Error ? sendErr.message : "Resend send failed",
-          })
-          .eq("id", msg.id);
+          },
+        );
       }
     }
 

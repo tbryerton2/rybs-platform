@@ -234,7 +234,7 @@ export async function createExpenseForCurrentBusiness(
       changedById: actorUserId ?? null,
       changeReason: "Expense record created from admin",
     },
-  ]);
+  ], tenant.id);
 
   return {
     ok: true,
@@ -324,6 +324,7 @@ export async function updateExpenseForCurrentBusiness(
         changeReason: "Expense record updated from admin",
       },
     ),
+    tenant.id,
   );
 
   return {
@@ -386,7 +387,7 @@ export async function archiveExpenseForCurrentBusiness(
       changedById: actorUserId ?? null,
       changeReason: "Expense archived from admin",
     },
-  ]);
+  ], tenant.id);
 
   return {
     ok: true,

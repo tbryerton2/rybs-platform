@@ -767,6 +767,7 @@ async function queuePostBookingChargePaidReceipt(input: {
     });
 
     await input.enqueue({
+      businessId: input.businessId,
       bookingId: input.booking.id,
       bookingChargeId: input.charge.id,
       template: "post_booking_charge_paid",

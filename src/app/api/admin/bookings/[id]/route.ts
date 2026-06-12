@@ -65,6 +65,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
 
     // 2) Log event (every change)
     await supabaseAdmin.from("booking_events").insert({
+      business_id: adminAuth.session.business.id,
       booking_id: id,
       type: "status_changed",
       old_status: oldStatus,
@@ -93,6 +94,7 @@ if (shouldNotify && toEmail) {
   };
 
   const { error: msgErr } = await supabaseAdmin.from("booking_messages").insert({
+    business_id: adminAuth.session.business.id,
     booking_id: id,
     channel: "email",
     direction: "outbound",

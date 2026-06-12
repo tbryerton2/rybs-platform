@@ -854,6 +854,7 @@ export default async function AdminBookingDetailPage({
     supabaseAdmin
       .from("entity_history")
       .select("id, field_name, old_value, new_value, changed_by_type, change_reason, created_at")
+      .eq("business_id", businessId)
       .eq("entity_type", "booking")
       .eq("entity_id", booking.id)
       .order("created_at", { ascending: false })
@@ -870,6 +871,7 @@ export default async function AdminBookingDetailPage({
       ? supabaseAdmin
           .from("entity_history")
           .select("id, field_name, old_value, new_value, changed_by_type, change_reason, created_at")
+          .eq("business_id", businessId)
           .eq("entity_type", "customer")
           .eq("entity_id", booking.customer_id)
           .in("field_name", ["email", "name", "phone", "portal_status"])

@@ -164,6 +164,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
       supabaseAdmin
         .from("entity_history")
         .select("id, field_name, old_value, new_value, changed_by_type, change_reason, created_at")
+        .eq("business_id", adminSession.business.id)
         .eq("entity_type", "customer")
         .eq("entity_id", id)
         .order("created_at", { ascending: false })

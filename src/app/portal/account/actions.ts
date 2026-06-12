@@ -212,7 +212,7 @@ export async function updatePortalAccountAction(formData: FormData) {
   }
 
   if (historyEntries.length > 0) {
-    await recordEntityHistory(supabaseAdmin, historyEntries);
+    await recordEntityHistory(supabaseAdmin, historyEntries, tenant.id);
   }
 
   revalidatePath("/portal/account");

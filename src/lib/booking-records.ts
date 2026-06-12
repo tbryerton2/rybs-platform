@@ -194,7 +194,7 @@ export async function createBookingRecord({
       changedByType: "system",
       changeReason: "Booking created",
     },
-  ]);
+  ], resolvedBusinessId);
 
   return {
     bookingId: insertResult.data.id as string,

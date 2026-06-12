@@ -357,7 +357,7 @@ export async function deactivatePortalAccess(
       changedByType: "customer",
       changeReason: reason,
     },
-  ]);
+  ], tenant.id);
 }
 
 export async function requirePortalCustomer() {

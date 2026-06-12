@@ -85,7 +85,7 @@ export async function updateCustomerIdentityAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   if (historyEntries.length > 0) {
-    await recordEntityHistory(supabaseAdmin, historyEntries);
+    await recordEntityHistory(supabaseAdmin, historyEntries, adminSession.business.id);
   }
 
   revalidatePath("/admin/customers");
@@ -138,7 +138,7 @@ export async function setCustomerPortalStatusAction(formData: FormData) {
       changeReason:
         portalStatus === "deactivated" ? "Portal access deactivated by admin" : "Portal access reactivated by admin",
     },
-  ]);
+  ], adminSession.business.id);
 
   revalidatePath("/admin/customers");
   revalidatePath(`/admin/customers/${id}`);

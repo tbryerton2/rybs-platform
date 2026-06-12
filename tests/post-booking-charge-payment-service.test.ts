@@ -345,6 +345,7 @@ async function callService(
         }
         return {
           id: "message-1",
+          businessId: input.businessId,
           bookingId: input.bookingId,
           bookingChargeId: input.bookingChargeId ?? null,
           channel: "email",

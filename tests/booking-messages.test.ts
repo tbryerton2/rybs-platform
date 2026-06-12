@@ -8,11 +8,13 @@ import {
 } from "../src/lib/booking-messages.ts";
 
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";
+const BUSINESS_ID = "00000000-0000-4000-8000-000000000001";
 const BOOKING_CHARGE_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_BOOKING_CHARGE_ID = "33333333-3333-4333-8333-333333333333";
 
 type BookingMessageRow = {
   id: string;
+  business_id: string | null;
   booking_id: string;
   booking_charge_id: string | null;
   channel: string;
@@ -43,6 +45,7 @@ type MockFilter = {
 function baseMessage(overrides: Partial<BookingMessageRow> = {}): BookingMessageRow {
   return {
     id: "message-existing",
+    business_id: BUSINESS_ID,
     booking_id: BOOKING_ID,
     booking_charge_id: BOOKING_CHARGE_ID,
     channel: "email",
@@ -124,6 +127,7 @@ function createMockSupabase(
 
           const row = baseMessage({
             id: `message-${insertCount}`,
+            business_id: (this.values.business_id as string | null) ?? null,
             booking_id: String(this.values.booking_id),
             booking_charge_id: (this.values.booking_charge_id as string | null) ?? null,
             channel: String(this.values.channel),
@@ -175,6 +179,7 @@ function useMockSupabase(
 
 function validQueueInput() {
   return {
+    businessId: BUSINESS_ID,
     bookingId: BOOKING_ID,
     template: "booking_confirmed",
     to: "customer@example.com",
