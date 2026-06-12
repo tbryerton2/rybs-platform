@@ -164,20 +164,22 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
 
   if (data) return data;
 
+  const defaultPricingSettings = {
+    standard_rental_price: 475,
+    scheduled_pickup_price: 475,
+    included_rental_days: 7,
+    daily_overage_price: 30,
+    max_rental_days: null,
+    allow_extended_rental_at_booking: false,
+    included_services_blurb: null,
+    included_tons: 1,
+    ton_overage_price: 100,
+    business_id: businessId,
+  };
+
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from("pricing_settings")
-    .insert({
-      standard_rental_price: 475,
-      scheduled_pickup_price: 475,
-      included_rental_days: 7,
-      daily_overage_price: 30,
-      max_rental_days: null,
-      allow_extended_rental_at_booking: false,
-      included_services_blurb: null,
-      included_tons: 1,
-      ton_overage_price: 100,
-      business_id: businessId,
-    })
+    .upsert(defaultPricingSettings, { onConflict: "business_id" })
     .select(selectClause)
     .single();
 
@@ -193,7 +195,7 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
     const hasRentalPeriodColumns = !isMissingPricingSettingsRentalPeriodColumnsError(insertError);
     const legacyInsertResult = await supabaseAdmin
       .from("pricing_settings")
-      .insert({
+      .upsert({
         standard_rental_price: 475,
         scheduled_pickup_price: 475,
         included_rental_days: 7,
@@ -207,7 +209,7 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
               allow_extended_rental_at_booking: false,
             }
           : {}),
-      })
+      }, { onConflict: "business_id" })
       .select(`
         id,
         standard_rental_price,

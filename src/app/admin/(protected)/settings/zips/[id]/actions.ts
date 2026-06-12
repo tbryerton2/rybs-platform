@@ -305,7 +305,7 @@ export async function updateZipPricingAction(
     const { error: upsertError } = await supabaseAdmin
       .from("service_area_zip_pricing_overrides")
       .upsert(nonNullOverrides, {
-        onConflict: "service_area_zip_id,dumpster_size",
+        onConflict: "business_id,service_area_zip_id,dumpster_size",
       });
 
     if (upsertError) {

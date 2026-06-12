@@ -6,6 +6,7 @@ import {
   validateDumpsterRecord,
   DUMPSTER_SELECT,
   getNextDumpsterEquipmentIdFromValues,
+  getDumpsterEquipmentIdConflictMessage,
   type DumpsterRow,
 } from "@/lib/admin/dumpster-inventory-shared";
 import { decorateDumpstersWithOperationalStatus } from "@/lib/admin/dumpster-operational-status";
@@ -60,7 +61,10 @@ export async function POST(req: Request) {
       .single<DumpsterRow>();
 
     if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: getDumpsterEquipmentIdConflictMessage(error) ?? error.message },
+        { status: 400 },
+      );
     }
 
     const [savedDumpster] = await decorateDumpstersWithOperationalStatus([

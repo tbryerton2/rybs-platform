@@ -201,3 +201,21 @@ export function validateDumpsterRecord(record: DumpsterRecord) {
 
   return errors;
 }
+
+export function getDumpsterEquipmentIdConflictMessage(error: { message?: string; code?: string } | null | undefined) {
+  const message = String(error?.message ?? "").toLowerCase();
+
+  if (message.includes("dumpsters_business_id_equipment_id_key")) {
+    return "This equipment ID already exists for this business.";
+  }
+
+  if (message.includes("dumpsters_equipment_id_key")) {
+    return "This equipment ID is currently blocked by the legacy global equipment ID constraint. It will be available after the final constraint cleanup migration.";
+  }
+
+  if (error?.code === "23505" || message.includes("duplicate") || message.includes("unique")) {
+    return "This equipment ID already exists for this business.";
+  }
+
+  return null;
+}

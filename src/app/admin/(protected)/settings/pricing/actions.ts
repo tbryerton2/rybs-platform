@@ -445,7 +445,7 @@ export async function updateDumpsterProductSettingAction(
         .eq("id", id)
         .eq("business_id", adminSession.business.id)
     : supabaseAdmin.from("dumpster_product_settings").upsert(payload, {
-        onConflict: "dumpster_size",
+        onConflict: "business_id,dumpster_size",
       });
 
   const { error } = await query;

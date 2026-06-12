@@ -24,6 +24,11 @@ function isValidZip(zip: string) {
   return /^\d{5}$/.test(zip);
 }
 
+function isUniqueConstraintError(error: { message?: string; code?: string } | null | undefined) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return error?.code === "23505" || message.includes("duplicate") || message.includes("unique");
+}
+
 export async function addServiceZipAction(
   _prevState: AddZipFormState,
   formData: FormData,
@@ -41,6 +46,31 @@ export async function addServiceZipAction(
     };
   }
 
+  const { data: existingZip, error: existingZipError } = await supabaseAdmin
+    .from("service_area_zips")
+    .select("id")
+    .eq("business_id", adminSession.business.id)
+    .eq("zip", zip)
+    .maybeSingle();
+
+  if (existingZipError) {
+    return {
+      error: "Unable to check this ZIP code right now. Please try again.",
+      createdZipId: null,
+      createdZip: null,
+      messageKey: Date.now(),
+    };
+  }
+
+  if (existingZip) {
+    return {
+      error: `ZIP ${zip} already exists for this business.`,
+      createdZipId: null,
+      createdZip: null,
+      messageKey: Date.now(),
+    };
+  }
+
   const { data, error } = await supabaseAdmin
     .from("service_area_zips")
     .insert({
@@ -52,15 +82,30 @@ export async function addServiceZipAction(
     .single();
 
   if (error) {
-    const message = error.message.toLowerCase();
+    const message = String(error.message ?? "").toLowerCase();
 
-    if (
-      message.includes("duplicate") ||
-      message.includes("unique") ||
-      message.includes("already exists")
-    ) {
+    if (message.includes("service_area_zips_business_id_zip_key")) {
       return {
-        error: `ZIP ${zip} already exists.`,
+        error: `ZIP ${zip} already exists for this business.`,
+        createdZipId: null,
+        createdZip: null,
+        messageKey: Date.now(),
+      };
+    }
+
+    if (message.includes("service_area_zips_zip_key")) {
+      return {
+        error:
+          "This ZIP is currently blocked by the legacy global ZIP constraint. It will be available after the final constraint cleanup migration.",
+        createdZipId: null,
+        createdZip: null,
+        messageKey: Date.now(),
+      };
+    }
+
+    if (isUniqueConstraintError(error)) {
+      return {
+        error: `ZIP ${zip} already exists for this business.`,
         createdZipId: null,
         createdZip: null,
         messageKey: Date.now(),
