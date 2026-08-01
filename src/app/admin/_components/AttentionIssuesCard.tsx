@@ -49,7 +49,7 @@ export function AttentionIssuesCard(props: {
     <Card title="Attention / Issues" subtitle="Items that need action">
       <div className="mt-2 space-y-4">
         {/* Overdue deliveries */}
-        <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+        <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
           <SectionHeader
             title="Overdue deliveries"
             count={props.overdueDeliveries.length}
@@ -58,7 +58,7 @@ export function AttentionIssuesCard(props: {
 
           {props.overdueDeliveries.length > 0 ? (
             <>
-              <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
                 {props.overdueDeliveries.slice(0, 3).map((b) => (
                   <li key={b.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
@@ -73,7 +73,7 @@ export function AttentionIssuesCard(props: {
 
                       <Link
                         href={`/admin/bookings?bookingId=${encodeURIComponent(b.id)}`}
-                        className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        className="shrink-0 rounded-[4px] px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
                       >
                         View
                       </Link>
@@ -97,7 +97,7 @@ export function AttentionIssuesCard(props: {
         </div>
 
         {/* Pickup requests waiting */}
-        <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+        <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
           <SectionHeader
             title="Pickup requests waiting"
             count={props.pickupRequestsWaitingCount}
@@ -121,7 +121,7 @@ export function AttentionIssuesCard(props: {
         </div>
 
         {/* Holds expiring soon */}
-        <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+        <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
           <SectionHeader
             title="Holds expiring soon"
             count={props.holdsExpiringSoon.length}
@@ -130,7 +130,7 @@ export function AttentionIssuesCard(props: {
 
           {props.holdsExpiringSoon.length > 0 ? (
             <>
-              <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
                 {props.holdsExpiringSoon.slice(0, 3).map((h) => (
                   <li key={h.id} className="px-4 py-3">
                     <div className="text-xs text-slate-700">

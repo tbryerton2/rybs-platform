@@ -10,53 +10,24 @@ function readValue(params: SearchParams, key: string) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function getMessage(searchParams: SearchParams) {
+function getErrorMessage(searchParams: SearchParams) {
   const error = readValue(searchParams, "error");
-  const sent = readValue(searchParams, "sent");
-  const email = readValue(searchParams, "email");
-
-  if (sent === "1") {
-    return {
-      tone: "success",
-      text: email
-        ? `We sent a secure access link to ${email}.`
-        : "We sent a secure access link to your email.",
-    } as const;
-  }
 
   switch (error) {
     case "invalid-email":
-      return { tone: "error", text: "Enter a valid email address to continue." } as const;
+      return "Enter a valid email address to continue.";
     case "not-found":
-      return {
-        tone: "error",
-        text: "We could not find a portal account for that email yet. Use the email you booked with.",
-      } as const;
+      return "We could not find a portal account for that email yet. Use the email you booked with.";
     case "send-failed":
-      return {
-        tone: "error",
-        text: "We could not send your access link right now. Please try again.",
-      } as const;
+      return "We could not send your access link right now. Please try again.";
     case "rate-limited":
-      return {
-        tone: "error",
-        text: "You requested too many access emails too quickly. Please wait a minute before trying again.",
-      } as const;
+      return "You requested too many access emails too quickly. Please wait a minute before trying again.";
     case "lookup-failed":
-      return {
-        tone: "error",
-        text: "We hit a problem finding your portal account before sending the access email.",
-      } as const;
+      return "We hit a problem finding your portal account before sending the access email.";
     case "deactivated":
-      return {
-        tone: "error",
-        text: "Portal access for this account is currently disabled. Please contact support if you need help.",
-      } as const;
+      return "Portal access for this account is currently disabled. Please contact support if you need help.";
     case "invalid-link":
-      return {
-        tone: "error",
-        text: "That access link is invalid or expired. Request a new one below.",
-      } as const;
+      return "That access link is invalid or expired. Request a new one below.";
     default:
       return null;
   }
@@ -71,10 +42,11 @@ export default async function PortalLoginPage({
   if (customer) redirect("/portal");
 
   const resolvedSearchParams = (await searchParams) ?? {};
-  const message = getMessage(resolvedSearchParams);
+  const errorMessage = getErrorMessage(resolvedSearchParams);
   const email = readValue(resolvedSearchParams, "email") ?? "";
   const cooldown = Number(readValue(resolvedSearchParams, "cooldown") ?? "0");
   const error = readValue(resolvedSearchParams, "error");
+  const isSent = readValue(resolvedSearchParams, "sent") === "1" && !error;
   const isRateLimited = error === "rate-limited";
   const isDeactivated = error === "deactivated";
 
@@ -110,34 +82,54 @@ export default async function PortalLoginPage({
           <div className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
             Portal access
           </div>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            Access your portal
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            Use the same email you booked with. We will send a secure access link so you can open your portal and manage your bookings.
-          </p>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            New here? Your booking email is enough to get started. Returning? Use that same email to get back into your portal securely.
-          </p>
+          {isSent ? (
+            <>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+                Check your email
+              </h2>
+              <div className="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50 px-5 py-5">
+                <p className="text-sm leading-6 text-emerald-900">
+                  We sent a secure access link to{" "}
+                  {email ? <span className="font-semibold">{email}</span> : "your email"}.
+                </p>
+                <p className="mt-3 text-sm leading-6 text-emerald-800">
+                  Use that link to open your Tan Can Man portal and manage your bookings.
+                </p>
+              </div>
 
-          {message ? (
-            <div
-              className={`mt-6 rounded-2xl px-4 py-3 text-sm ${
-                message.tone === "success"
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                  : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
-              }`}
-            >
-              {message.text}
-            </div>
-          ) : null}
+              <PortalLoginForm
+                action={sendPortalLoginLinkAction}
+                initialEmail={email}
+                initialCooldownSeconds={cooldown > 0 ? cooldown : undefined}
+                mode="resend"
+              />
+            </>
+          ) : (
+            <>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+                Access your portal
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                Use the same email you booked with. We will send a secure access link so you can open your portal and manage your bookings.
+              </p>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                New here? Your booking email is enough to get started. Returning? Use that same email to get back into your portal securely.
+              </p>
 
-          <PortalLoginForm
-            action={sendPortalLoginLinkAction}
-            initialEmail={email}
-            initialCooldownSeconds={cooldown > 0 ? cooldown : undefined}
-            blocked={isDeactivated}
-          />
+              {errorMessage ? (
+                <div className="mt-6 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+                  {errorMessage}
+                </div>
+              ) : null}
+
+              <PortalLoginForm
+                action={sendPortalLoginLinkAction}
+                initialEmail={email}
+                initialCooldownSeconds={cooldown > 0 ? cooldown : undefined}
+                blocked={isDeactivated}
+              />
+            </>
+          )}
 
           {process.env.NODE_ENV === "development" && isRateLimited ? (
             <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 ring-1 ring-amber-200">

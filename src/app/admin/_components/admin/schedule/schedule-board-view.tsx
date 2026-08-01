@@ -8,6 +8,7 @@ import {
   TruckIcon,
 } from "@heroicons/react/24/outline";
 import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard";
+import { ShowCaption } from "@/app/admin/_components/admin/show-caption";
 import ScheduleBoard from "./schedule-board";
 
 type BookingRow = {
@@ -56,6 +57,8 @@ type DayData = {
   totalStops: number;
   workloadLabel: string | null;
 };
+
+type BookingCompletionAction = (formData: FormData) => Promise<void>;
 
 export type ScheduleBoardFilter =
   | "stops"
@@ -134,7 +137,7 @@ function FilterSummaryCard({
     >
       <div className="flex gap-4">
         <div
-          className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${toneClasses[tone].icon}`}
+          className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset ${toneClasses[tone].icon}`}
         >
           <Icon className="h-6 w-6" />
         </div>
@@ -154,6 +157,9 @@ export default function ScheduleBoardView({
   totalPickups,
   overdueDeliveriesCount,
   overduePickupsCount,
+  overdueJobs,
+  onMarkDelivered,
+  onMarkPickedUp,
 }: {
   days: DayData[];
   totalStops: number;
@@ -161,56 +167,68 @@ export default function ScheduleBoardView({
   totalPickups: number;
   overdueDeliveriesCount: number;
   overduePickupsCount: number;
+  overdueJobs: BookingRow[];
+  onMarkDelivered: BookingCompletionAction;
+  onMarkPickedUp: BookingCompletionAction;
 }) {
   const [activeFilter, setActiveFilter] = useState<ScheduleBoardFilter>("stops");
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <FilterSummaryCard
-          icon={MapPinIcon}
-          label="Stops scheduled"
-          value={totalStops}
-          tone="orange"
-          active={activeFilter === "stops"}
-          onClick={() => setActiveFilter("stops")}
-        />
-        <FilterSummaryCard
-          icon={TruckIcon}
-          label="Deliveries"
-          value={totalDeliveries}
-          tone="emerald"
-          active={activeFilter === "deliveries"}
-          onClick={() => setActiveFilter("deliveries")}
-        />
-        <FilterSummaryCard
-          icon={ArrowUturnLeftIcon}
-          label="Pickups"
-          value={totalPickups}
-          tone="blue"
-          active={activeFilter === "pickups"}
-          onClick={() => setActiveFilter("pickups")}
-        />
-        <FilterSummaryCard
-          icon={OctagonAlert}
-          label="Overdue deliveries"
-          value={overdueDeliveriesCount}
-          tone="slate"
-          active={activeFilter === "overdueDeliveries"}
-          onClick={() => setActiveFilter("overdueDeliveries")}
-        />
-        <FilterSummaryCard
-          icon={ExclamationTriangleIcon}
-          label="Overdue pickups"
-          value={overduePickupsCount}
-          tone="rose"
-          active={activeFilter === "overduePickups"}
-          onClick={() => setActiveFilter("overduePickups")}
-        />
+      <div>
+        <ShowCaption />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <FilterSummaryCard
+            icon={MapPinIcon}
+            label="Stops scheduled"
+            value={totalStops}
+            tone="orange"
+            active={activeFilter === "stops"}
+            onClick={() => setActiveFilter("stops")}
+          />
+          <FilterSummaryCard
+            icon={TruckIcon}
+            label="Deliveries"
+            value={totalDeliveries}
+            tone="emerald"
+            active={activeFilter === "deliveries"}
+            onClick={() => setActiveFilter("deliveries")}
+          />
+          <FilterSummaryCard
+            icon={ArrowUturnLeftIcon}
+            label="Pickups"
+            value={totalPickups}
+            tone="blue"
+            active={activeFilter === "pickups"}
+            onClick={() => setActiveFilter("pickups")}
+          />
+          <FilterSummaryCard
+            icon={OctagonAlert}
+            label="Overdue deliveries"
+            value={overdueDeliveriesCount}
+            tone="slate"
+            active={activeFilter === "overdueDeliveries"}
+            onClick={() => setActiveFilter("overdueDeliveries")}
+          />
+          <FilterSummaryCard
+            icon={ExclamationTriangleIcon}
+            label="Overdue pickups"
+            value={overduePickupsCount}
+            tone="rose"
+            active={activeFilter === "overduePickups"}
+            onClick={() => setActiveFilter("overduePickups")}
+          />
+        </div>
       </div>
 
       <div className="mt-6">
-        <ScheduleBoard days={days} activeFilter={activeFilter} />
+        <ScheduleBoard
+          days={days}
+          activeFilter={activeFilter}
+          overdueJobs={overdueJobs}
+          onMarkDelivered={onMarkDelivered}
+          onMarkPickedUp={onMarkPickedUp}
+        />
       </div>
     </>
   );

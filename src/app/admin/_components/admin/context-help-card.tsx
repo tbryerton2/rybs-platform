@@ -55,9 +55,9 @@ export function ContextHelpCard({
   }
 
   return (
-    <div className={`rounded-2xl border px-4 py-4 ${toneClasses(tone)}`}>
+    <div className={`rounded-[14px] border px-4 py-4 ${toneClasses(tone)}`}>
       <div className="flex gap-3">
-        <span className="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-2xl bg-white/80 text-slate-500 ring-1 ring-inset ring-slate-200/80">
+        <span className="mt-0.5 inline-flex h-8 w-8 flex-none items-center justify-center rounded-[14px] bg-white/80 text-slate-500 ring-1 ring-inset ring-slate-200/80">
           <InformationCircleIcon className="h-4 w-4" />
         </span>
 

@@ -53,6 +53,23 @@ function Field({
   );
 }
 
+function ExpenseStatusPill({ status }: { status: ExpenseRecord["paymentStatus"] }) {
+  return (
+    <span
+      className={[
+        "inline-flex rounded-full px-4 py-1.5 text-sm font-semibold",
+        status === "Paid"
+          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+          : status === "Scheduled"
+            ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+            : "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+      ].join(" ")}
+    >
+      {status}
+    </span>
+  );
+}
+
 type ExpenseDetailClientProps = {
   mode: "create" | "edit";
   initialExpense?: ExpenseRecord | null;
@@ -69,6 +86,9 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
 
   const isCreateMode = mode === "create";
   const heading = isCreateMode ? "Add expense" : "Edit expense";
+  const editHeading = draft.vendor.trim()
+    ? `${draft.category} - ${draft.vendor.trim()}`
+    : draft.category;
   const hasUnsavedChanges =
     JSON.stringify(normalizeExpenseMutationInput(toExpenseMutationInput(draft))) !==
     JSON.stringify(normalizeExpenseMutationInput(toExpenseMutationInput(savedExpense)));
@@ -138,18 +158,10 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
 
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">{heading}</h1>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
-              <span>{draft.category || "Choose a category"}</span>
-              <span className="text-slate-300" aria-hidden="true">
-                |
-              </span>
-              <span>{draft.vendor || "Add a vendor"}</span>
-              <span className="text-slate-300" aria-hidden="true">
-                |
-              </span>
-              <span>{draft.paymentStatus}</span>
-            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+              {isCreateMode ? heading : editHeading}
+            </h1>
+            {!isCreateMode ? <ExpenseStatusPill status={draft.paymentStatus} /> : null}
           </div>
 
           <div className="flex flex-wrap gap-2 xl:justify-end">
@@ -158,7 +170,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
                 type="button"
                 onClick={resetDraft}
                 disabled={isPending}
-                className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                className="admin-btn admin-btn-secondary h-10 px-4 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
                 {isCreateMode ? "Cancel" : "Reset changes"}
               </button>
@@ -167,7 +179,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               type="button"
               onClick={saveDraft}
               disabled={isPending}
-              className="inline-flex h-10 items-center rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="admin-btn admin-btn-primary h-10 px-4"
             >
               {isPending ? "Saving..." : isCreateMode ? "Create expense" : "Save changes"}
             </button>
@@ -176,12 +188,12 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
       </section>
 
       {panelError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {panelError}
         </div>
       ) : null}
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Expense date" error={errors.expenseDate}>
             <input
@@ -189,7 +201,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.expenseDate}
               disabled={isPending}
               onChange={(event) => updateDraft("expenseDate", event.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
           <Field label="Category">
@@ -197,7 +209,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.category}
               disabled={isPending}
               onChange={(event) => updateDraft("category", event.target.value as ExpenseRecord["category"])}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             >
               {expenseCategories.map((category) => (
                 <option key={category} value={category}>
@@ -211,7 +223,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.vendor}
               disabled={isPending}
               onChange={(event) => updateDraft("vendor", event.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
           <Field label="Amount" error={errors.amountCents}>
@@ -219,7 +231,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.amountCents ? (draft.amountCents / 100).toFixed(2) : ""}
               disabled={isPending}
               onChange={(event) => updateDraft("amountCents", parseCurrencyToCents(event.target.value))}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
           <Field label="Payment status">
@@ -227,7 +239,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.paymentStatus}
               disabled={isPending}
               onChange={(event) => updateDraft("paymentStatus", event.target.value as ExpenseRecord["paymentStatus"])}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             >
               {paymentStatuses.map((status) => (
                 <option key={status} value={status}>
@@ -241,7 +253,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.paymentMethod}
               disabled={isPending}
               onChange={(event) => updateDraft("paymentMethod", event.target.value as ExpenseRecord["paymentMethod"])}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             >
               {paymentMethods.map((method) => (
                 <option key={method} value={method}>
@@ -252,7 +264,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
           </Field>
           <Field label="Recurring schedule" error={errors.recurrenceFrequency}>
             <div className="space-y-3">
-              <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+              <label className="inline-flex items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
                 <input
                   type="checkbox"
                   checked={draft.isRecurring}
@@ -274,7 +286,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
                   onChange={(event) =>
                     updateDraft("recurrenceFrequency", event.target.value as ExpenseRecord["recurrenceFrequency"])
                   }
-                  className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+                  className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
                 >
                   {recurrenceFrequencies.map((frequency) => (
                     <option key={frequency} value={frequency}>
@@ -290,7 +302,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.relatedAsset}
               disabled={isPending}
               onChange={(event) => updateDraft("relatedAsset", event.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
           <Field label="Receipt / invoice reference">
@@ -298,7 +310,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.receiptReference}
               disabled={isPending}
               onChange={(event) => updateDraft("receiptReference", event.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
         </div>
@@ -309,7 +321,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               value={draft.description}
               disabled={isPending}
               onChange={(event) => updateDraft("description", event.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
 
@@ -319,11 +331,11 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
               disabled={isPending}
               onChange={(event) => updateDraft("notes", event.target.value)}
               rows={4}
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
 
-          <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+          <label className="inline-flex items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
             <input
               type="checkbox"
               checked={draft.taxDeductible}
@@ -337,7 +349,7 @@ export function ExpenseDetailClient({ mode, initialExpense }: ExpenseDetailClien
       </section>
 
       {!isCreateMode ? (
-        <section className="rounded-[32px] border border-slate-200 bg-slate-50/80 p-6 shadow-sm">
+        <section className="rounded-[20px] border border-slate-200 bg-slate-50/80 p-6 shadow-sm">
           <div className="text-sm font-semibold text-slate-900">Record status</div>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             Last updated {draft.updatedAt ? formatTimestamp(draft.updatedAt) : "not yet saved"}.

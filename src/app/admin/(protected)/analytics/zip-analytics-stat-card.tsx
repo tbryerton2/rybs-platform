@@ -33,7 +33,7 @@ export function ZipAnalyticsStatCard({
 
   return (
     <div
-      className={`grid h-full min-h-[188px] grid-rows-[auto_auto_1fr] rounded-[28px] border px-5 py-5 transition ${accentClasses.card}`}
+      className={`grid h-full min-h-[188px] grid-rows-[auto_auto_1fr] rounded-[20px] border px-5 py-5 transition ${accentClasses.card}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">

@@ -140,7 +140,7 @@ export default async function AdminZipDetailPage({
       </section>
 
       <div className="space-y-6">
-        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-6 py-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-lg font-semibold text-slate-900">ZIP Overview</h2>
@@ -160,7 +160,7 @@ export default async function AdminZipDetailPage({
           </div>
 
           <div className="grid gap-4 px-6 py-6 sm:grid-cols-2 xl:grid-cols-5">
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+            <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 ZIP Code
               </div>
@@ -169,14 +169,14 @@ export default async function AdminZipDetailPage({
               </div>
             </div>
 
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+            <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 Status
               </div>
               <div className="mt-2">{statusBadge(zip.active)}</div>
             </div>
 
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+            <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 Town
               </div>
@@ -185,7 +185,7 @@ export default async function AdminZipDetailPage({
               </div>
             </div>
 
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+            <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 County
               </div>
@@ -194,7 +194,7 @@ export default async function AdminZipDetailPage({
               </div>
             </div>
 
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
+            <div className="rounded-[14px] bg-slate-50 px-4 py-4 ring-1 ring-slate-200">
               <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
                 State
               </div>
@@ -207,7 +207,7 @@ export default async function AdminZipDetailPage({
 
         <section
           id="location-details"
-          className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm"
+          className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm"
         >
           <div className="border-b border-slate-200 px-6 py-5">
             <h2 className="text-lg font-semibold text-slate-900">Location Details</h2>
@@ -221,7 +221,7 @@ export default async function AdminZipDetailPage({
           />
         </section>
 
-        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-6 py-5">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Pricing Override</h2>

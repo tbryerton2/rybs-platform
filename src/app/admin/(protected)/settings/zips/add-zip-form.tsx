@@ -125,7 +125,7 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
             maxLength={5}
             placeholder="13421"
             autoComplete="postal-code"
-            className="h-12 w-full min-w-0 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+            className="h-12 w-full min-w-0 rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
             required
             aria-invalid={state.error ? true : false}
             aria-describedby={state.error ? "zip-error" : undefined}
@@ -136,7 +136,7 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
           <button
             type="submit"
             disabled={pending}
-            className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="admin-btn admin-btn-primary h-12 px-5 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? "Adding..." : "Add ZIP"}
           </button>
@@ -144,7 +144,7 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
       </div>
 
       {setupHref && state.createdZip ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+        <div className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="leading-6">
               <span className="font-semibold">ZIP {state.createdZip} was added successfully.</span>{" "}
@@ -152,7 +152,7 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
             </p>
             <Link
               href={setupHref}
-              className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800"
+              className="admin-btn admin-btn-secondary h-10 shrink-0 px-4"
             >
               Set up ZIP
             </Link>

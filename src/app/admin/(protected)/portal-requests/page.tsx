@@ -92,12 +92,12 @@ export default async function AdminPortalRequestsPage({
       />
 
       {loadError ? (
-        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mt-6 rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Portal requests could not be fully loaded. {loadError}
         </div>
       ) : null}
 
-      <section className="mt-8 rounded-[32px] border border-slate-200 bg-white shadow-sm">
+      <section className="mt-8 rounded-[20px] border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-6 py-4">
           <div className="text-sm font-semibold text-slate-900">
             {requests.length} {requests.length === 1 ? "request" : "requests"}
@@ -182,7 +182,7 @@ export default async function AdminPortalRequestsPage({
                     <td className="px-6 py-4">
                       <Link
                         href={`/admin/portal-requests/${request.id}`}
-                        className="inline-flex rounded-full border border-slate-200 px-3 py-1.5 font-semibold text-slate-900 transition hover:border-[#F97316]/30 hover:bg-[#F97316]/5 hover:text-[#F97316]"
+                        className="admin-btn admin-btn-secondary admin-btn-sm"
                       >
                         Open
                       </Link>

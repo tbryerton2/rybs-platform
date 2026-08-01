@@ -1,5 +1,6 @@
 import "server-only";
 
+import { RENTAL_TERMS_CONSENT_TEXT } from "@/lib/booking-terms";
 import { normalizeHomeStatsIconKey, type HomeStatsIconKey } from "@/lib/home-stats-icons";
 import { getTenantContent, type TenantContentReadOptions } from "./server";
 
@@ -147,6 +148,22 @@ type PricingPromisesContent = {
   footnote: string;
 };
 
+export type PricingSizeGuideRowContent = {
+  id: string;
+  sizeLabel: string;
+  truckLoadEstimate: string;
+  description: string;
+  sortOrder: number;
+  active: boolean;
+};
+
+export type PricingSizeGuideContent = {
+  enabled: boolean;
+  buttonText: string;
+  title: string;
+  rows: PricingSizeGuideRowContent[];
+};
+
 type SupportMarketingContent = {
   headline: string;
   body: string;
@@ -249,6 +266,7 @@ type BookingConfirmContent = {
   capLoadingText: string;
   deliveryTimeNote: string;
   pickupWindowTemplate: string;
+  rentalTermsBody: string;
   pickupLaterTitle: string;
   pickupLaterDescription: string;
   pickupNowTitle: string;
@@ -297,15 +315,10 @@ const HOME_HERO_FALLBACK: HomeHeroContent = {
 
 const HOME_SERVICE_AREA_FALLBACK: HomeServiceAreaContent = {
   modalTitle: "Service area",
-  modalIntro: "We serve select areas in Central New York.",
-  coverageHeading: "Currently covered",
-  regionList: [
-    "Syracuse + surrounding suburbs",
-    "Clay, Cicero, Liverpool",
-    "Fayetteville, Manlius, DeWitt",
-    "Baldwinsville, North Syracuse",
-  ],
-  coverageFootnote: "We’re expanding coverage. More areas coming soon.",
+  modalIntro: "We currently serve the following ZIP codes in Central New York.",
+  coverageHeading: "Currently covered ZIP codes",
+  regionList: [],
+  coverageFootnote: "",
   unsupportedZipMessage: "We don’t currently serve ZIP",
   viewServiceAreaLabel: "View service area",
   closeLabel: "Got it",
@@ -504,6 +517,46 @@ const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
   footnote: "Extra days and weight overages are billed only when they apply.",
 };
 
+const PRICING_SIZE_GUIDE_FALLBACK: PricingSizeGuideContent = {
+  enabled: true,
+  buttonText: "Not sure which size? →",
+  title: "Which size is right for me?",
+  rows: [
+    {
+      id: "14-yard",
+      sizeLabel: "14-yard",
+      truckLoadEstimate: "~3-4 truck loads",
+      description: "Bathroom remodel, small cleanout, garage declutter, or a single room renovation.",
+      sortOrder: 10,
+      active: true,
+    },
+    {
+      id: "20-yard",
+      sizeLabel: "20-yard",
+      truckLoadEstimate: "~6-8 truck loads",
+      description: "Roofing job, kitchen remodel, basement or attic cleanout, multi-room renovation.",
+      sortOrder: 20,
+      active: true,
+    },
+    {
+      id: "30-yard",
+      sizeLabel: "30-yard",
+      truckLoadEstimate: "~9-12 truck loads",
+      description: "Large home renovation, new construction debris, full property cleanout.",
+      sortOrder: 30,
+      active: true,
+    },
+    {
+      id: "50-yard",
+      sizeLabel: "50-yard",
+      truckLoadEstimate: "~16-18 truck loads",
+      description: "Commercial jobs, major demolition, large construction sites, industrial cleanouts.",
+      sortOrder: 40,
+      active: true,
+    },
+  ],
+};
+
 const SUPPORT_MARKETING_FALLBACK: SupportMarketingContent = {
   headline: "Ready to book your dumpster?",
   body: "Fast delivery, honest pricing, and friendly local support.",
@@ -600,14 +653,15 @@ const BOOKING_SUMMARY_FALLBACK: BookingSummaryContent = {
 };
 
 const BOOKING_CONFIRM_FALLBACK: BookingConfirmContent = {
-  title: "Confirm Your Booking",
+  title: "Review Your Booking",
   description: "Review your details. We’ll finalize everything on the next step.",
   reorderTitle: "New booking based on a previous rental",
-  holdBannerTitle: "Your delivery date is being held. Time left: {time}",
-  holdBannerBody: "If this timer hits 00:00, you’ll need to choose a new date.",
+  holdBannerTitle: "{time} left to complete your booking",
+  holdBannerBody: "We're holding your dumpster while you finish your booking.",
   capLoadingText: "Checking availability limits…",
-  deliveryTimeNote: "We’ll contact you with the exact delivery time.",
+  deliveryTimeNote: "We'll contact you with a delivery window.",
   pickupWindowTemplate: "Pickup must be scheduled between {min} and {max}. Dates outside this window are unavailable.",
+  rentalTermsBody: RENTAL_TERMS_CONSENT_TEXT,
   pickupLaterTitle: "Included rental period",
   pickupLaterDescription: "Your pickup date is scheduled as part of booking.",
   pickupNowTitle: "Choose a pickup date",
@@ -1088,6 +1142,41 @@ export async function getPricingPromisesContent(
   };
 }
 
+export async function getPricingSizeGuideContent(
+  options?: TenantContentReadOptions,
+): Promise<PricingSizeGuideContent> {
+  const raw = asObject(await getTenantContent("content.pricing.product_content", options));
+  const rawSizeGuide = asObject(raw.sizeGuide);
+  const sourceRows = asRecordArray(rawSizeGuide.rows);
+  const fallbackRows = PRICING_SIZE_GUIDE_FALLBACK.rows;
+  const rows = (sourceRows.length ? sourceRows : fallbackRows)
+    .map((item, index) => {
+      const row = asObject(item);
+      const fallback = fallbackRows[index] ?? fallbackRows[0];
+
+      return {
+        id: asString(row.id, `size-guide-row-${index + 1}`),
+        sizeLabel: asString(row.sizeLabel, fallback.sizeLabel),
+        truckLoadEstimate: asString(row.truckLoadEstimate, fallback.truckLoadEstimate),
+        description: asString(row.description, fallback.description),
+        sortOrder: asNumber(row.sortOrder ?? row.sort_order, fallback.sortOrder),
+        active: asBoolean(row.active, fallback.active),
+      };
+    })
+    .filter((row) => row.active && row.sizeLabel && row.description)
+    .sort((left, right) => {
+      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+      return left.sizeLabel.localeCompare(right.sizeLabel);
+    });
+
+  return {
+    enabled: asBoolean(rawSizeGuide.enabled, PRICING_SIZE_GUIDE_FALLBACK.enabled),
+    buttonText: asString(rawSizeGuide.buttonText, PRICING_SIZE_GUIDE_FALLBACK.buttonText),
+    title: asString(rawSizeGuide.title, PRICING_SIZE_GUIDE_FALLBACK.title),
+    rows,
+  };
+}
+
 export async function getSupportMarketingContent(
   options?: TenantContentReadOptions,
 ): Promise<SupportMarketingContent> {
@@ -1292,20 +1381,38 @@ export async function getBookingSummaryContent(): Promise<BookingSummaryContent>
   };
 }
 
-export async function getBookingConfirmContent(): Promise<BookingConfirmContent> {
-  const raw = asObject(await getTenantContent("content.booking.confirm"));
+export async function getBookingConfirmContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingConfirmContent> {
+  const [confirmValue, termsValue] = await Promise.all([
+    getTenantContent("content.booking.confirm", options),
+    getTenantContent("content.terms.rental_terms", options),
+  ]);
+  const raw = asObject(confirmValue);
+  const termsRaw = asObject(termsValue);
+  const title = asString(raw.title, BOOKING_CONFIRM_FALLBACK.title);
+  const deliveryTimeNote = asString(raw.deliveryTimeNote, BOOKING_CONFIRM_FALLBACK.deliveryTimeNote);
+  const normalizedDeliveryTimeNote =
+    deliveryTimeNote === "We’ll contact you with the exact delivery time." ||
+    deliveryTimeNote === "We'll contact you with the exact delivery time."
+      ? BOOKING_CONFIRM_FALLBACK.deliveryTimeNote
+      : deliveryTimeNote;
 
   return {
-    title: asString(raw.title, BOOKING_CONFIRM_FALLBACK.title),
+    title: title === "Confirm Your Booking" ? BOOKING_CONFIRM_FALLBACK.title : title,
     description: asString(raw.description, BOOKING_CONFIRM_FALLBACK.description),
     reorderTitle: asString(raw.reorderTitle, BOOKING_CONFIRM_FALLBACK.reorderTitle),
     holdBannerTitle: asString(raw.holdBannerTitle, BOOKING_CONFIRM_FALLBACK.holdBannerTitle),
     holdBannerBody: asString(raw.holdBannerBody, BOOKING_CONFIRM_FALLBACK.holdBannerBody),
     capLoadingText: asString(raw.capLoadingText, BOOKING_CONFIRM_FALLBACK.capLoadingText),
-    deliveryTimeNote: asString(raw.deliveryTimeNote, BOOKING_CONFIRM_FALLBACK.deliveryTimeNote),
+    deliveryTimeNote: normalizedDeliveryTimeNote,
     pickupWindowTemplate: asString(
       raw.pickupWindowTemplate,
       BOOKING_CONFIRM_FALLBACK.pickupWindowTemplate,
+    ),
+    rentalTermsBody: asString(
+      termsRaw.body ?? termsRaw.termsAndConditionsBody ?? termsRaw.terms_and_conditions_body,
+      BOOKING_CONFIRM_FALLBACK.rentalTermsBody,
     ),
     pickupLaterTitle: asString(raw.pickupLaterTitle, BOOKING_CONFIRM_FALLBACK.pickupLaterTitle),
     pickupLaterDescription: asString(

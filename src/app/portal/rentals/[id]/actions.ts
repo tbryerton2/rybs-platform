@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePortalCustomer } from "@/lib/portal/auth";
+import { sendEmail } from "@/lib/email/ses";
+import { buildAdminPortalRequestEmail } from "@/lib/email/templates/admin-portal-request";
+import { buildAdminIssueReportEmail } from "@/lib/email/templates/admin-issue-report";
 import {
   getExtensionEligibility,
   getIssueReportEligibility,
@@ -59,6 +62,74 @@ async function loadOwnedBookingWithRequests(customerId: string, bookingId: strin
     booking,
     requests: requestsError ? [] : (requests ?? []),
   };
+}
+
+async function sendAdminPortalRequestEmail({
+  requestType,
+  customer,
+  booking,
+  priority,
+  details,
+}: {
+  requestType: string;
+  customer: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+  };
+  booking: {
+    id: string;
+    customer_street?: string | null;
+    customer_city?: string | null;
+    customer_zip?: string | null;
+  };
+  priority?: string | null;
+  details: Record<string, string | number | boolean | null | undefined>;
+}) {
+  const adminBookingEmail = process.env.ADMIN_BOOKING_EMAIL;
+
+  if (!adminBookingEmail) {
+    console.error(`[portal] skipped ${requestType} email because ADMIN_BOOKING_EMAIL is missing.`);
+    return;
+  }
+
+  const serviceAddress = [
+    booking.customer_street,
+    booking.customer_city,
+    booking.customer_zip,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const adminUrl = process.env.NEXT_PUBLIC_SITE_URL
+    ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/admin/portal-requests`
+    : null;
+
+  const adminNotification = buildAdminPortalRequestEmail({
+    requestType,
+    customerName: customer.name,
+    customerEmail: customer.email,
+    bookingId: booking.id,
+    priority,
+    serviceAddress,
+    details,
+    adminUrl,
+  });
+
+  try {
+    await sendEmail({
+      to: adminBookingEmail,
+      subject: adminNotification.subject,
+      text: adminNotification.text,
+      html: adminNotification.html,
+    });
+  } catch (portalRequestEmailError) {
+    console.error(`[portal] ${requestType} email send failed:`, {
+      bookingId: booking.id,
+      customerId: customer.id,
+      error: portalRequestEmailError,
+    });
+  }
 }
 
 export async function submitPortalPickupRequestAction(formData: FormData) {
@@ -138,6 +209,19 @@ export async function submitPortalPickupRequestAction(formData: FormData) {
 
     throw new Error(insertError.message);
   }
+
+  await sendAdminPortalRequestEmail({
+    requestType: "pickup_request",
+    customer,
+    booking,
+    priority: details.timingPreference === "asap" ? "high" : "normal",
+    details: {
+      timingPreference: details.timingPreference,
+      requestedDate: details.requestedDate,
+      accessConfirmed: details.accessConfirmed,
+      notes: details.notes,
+    },
+  });
 
   revalidatePath(`/portal/rentals/${booking.id}`);
   revalidatePath(`/portal/rentals/${booking.id}/pickup-request`);
@@ -226,6 +310,19 @@ export async function submitPortalExtensionRequestAction(formData: FormData) {
     throw new Error(insertError.message);
   }
 
+  await sendAdminPortalRequestEmail({
+    requestType: "extension_request",
+    customer,
+    booking,
+    priority: "normal",
+    details: {
+      requestedExtraDays: details.requestedExtraDays,
+      reason: details.reason,
+      notes: details.notes,
+      acknowledgePossibleFees: details.acknowledgePossibleFees,
+    },
+  });
+
   revalidatePath(`/portal/rentals/${booking.id}`);
   revalidatePath(`/portal/rentals/${booking.id}/extension-request`);
   revalidatePath("/portal");
@@ -303,6 +400,51 @@ export async function submitPortalIssueReportAction(formData: FormData) {
     }
 
     throw new Error(insertError.message);
+  }
+
+    const adminBookingEmail = process.env.ADMIN_BOOKING_EMAIL;
+
+  if (adminBookingEmail) {
+    const serviceAddress = [
+      booking.customer_street,
+      booking.customer_city,
+      booking.customer_zip,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    const adminUrl = process.env.NEXT_PUBLIC_SITE_URL
+      ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/admin/portal-requests?filter=issue_report`
+      : null;
+
+    const issueReportEmail = buildAdminIssueReportEmail({
+      customerName: customer.name,
+      customerEmail: customer.email,
+      bookingId: booking.id,
+      issueCategory: details.issueCategory,
+      urgency: details.urgency,
+      description: details.description,
+      preferredContactMethod: details.preferredContactMethod,
+      serviceAddress,
+      adminUrl,
+    });
+
+    try {
+      await sendEmail({
+        to: adminBookingEmail,
+        subject: issueReportEmail.subject,
+        text: issueReportEmail.text,
+        html: issueReportEmail.html,
+      });
+    } catch (issueReportEmailError) {
+      console.error("[portal] issue report email send failed:", {
+        bookingId: booking.id,
+        customerId: customer.id,
+        error: issueReportEmailError,
+      });
+    }
+  } else {
+    console.error("[portal] skipped issue report email because ADMIN_BOOKING_EMAIL is missing.");
   }
 
   revalidatePath(`/portal/rentals/${booking.id}`);

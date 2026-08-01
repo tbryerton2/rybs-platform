@@ -8,10 +8,10 @@ function PlaceholderCard({
   description: string;
 }) {
   return (
-    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <div className="text-lg font-semibold text-slate-900">{title}</div>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
-      <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-sm text-slate-500">
+      <div className="mt-6 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-sm text-slate-500">
         Report modules for this area will be added here.
       </div>
     </section>
@@ -26,7 +26,7 @@ export default function AdminAnalyticsReportsPage() {
         description="A starter home for future operational, financial, and marketing reports."
       />
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="max-w-3xl">
           <h2 className="text-lg font-semibold text-slate-900">Report library</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">

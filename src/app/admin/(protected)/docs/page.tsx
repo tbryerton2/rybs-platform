@@ -38,7 +38,7 @@ export default function AdminDocsPage() {
       {featuredDoc ? (
         <Link
           href={`/admin/docs/${featuredDoc.slug}`}
-          className="group block overflow-hidden rounded-[32px] border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-7"
+          className="group block overflow-hidden rounded-[20px] border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md sm:p-7"
         >
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)] xl:items-start">
             <div className="max-w-3xl">
@@ -89,7 +89,7 @@ export default function AdminDocsPage() {
               {featuredPrimaryCards.map((card) => (
                 <div
                   key={card.label}
-                  className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
+                  className="rounded-[14px] border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
                 >
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
                     {card.label}
@@ -123,7 +123,7 @@ export default function AdminDocsPage() {
           <Link
             key={doc.slug}
             href={`/admin/docs/${doc.slug}`}
-            className="group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+            className="group rounded-[14px] border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
           >
             <div className="flex h-full flex-col">
               <div>

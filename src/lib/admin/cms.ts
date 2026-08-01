@@ -6,8 +6,9 @@ import {
   getTenantContentRowByStatus,
 } from "@/lib/tenant/server";
 import { normalizeHomeStatsIconKey, type HomeStatsIconKey } from "@/lib/home-stats-icons";
+import { RENTAL_TERMS_CONSENT_TEXT } from "@/lib/booking-terms";
 
-export type CmsPageId = "home" | "pricing";
+export type CmsPageId = "home" | "pricing" | "terms";
 export type HomeSectionType = "card_grid" | "steps";
 
 export type CmsEntryStatus = {
@@ -131,6 +132,27 @@ export type PricingProductContentValue = {
   includedHeading: string;
   includedItems: string[];
   bottomNote: string;
+  sizeGuide: PricingSizeGuideValue;
+};
+
+export type PricingSizeGuideRow = {
+  id: string;
+  sizeLabel: string;
+  truckLoadEstimate: string;
+  description: string;
+  sortOrder: number;
+  active: boolean;
+};
+
+export type PricingSizeGuideValue = {
+  enabled: boolean;
+  buttonText: string;
+  title: string;
+  rows: PricingSizeGuideRow[];
+};
+
+export type TermsAndConditionsContentValue = {
+  body: string;
 };
 
 export type RetailSiteCmsState = {
@@ -146,11 +168,15 @@ export type RetailSiteCmsState = {
   pricing: {
     productContent: CmsEntry<PricingProductContentValue>;
   };
+  terms: {
+    rentalTerms: CmsEntry<TermsAndConditionsContentValue>;
+  };
 };
 
 export const CMS_PAGE_TABS: Array<{ id: CmsPageId; label: string }> = [
   { id: "home", label: "Home" },
   { id: "pricing", label: "Pricing" },
+  { id: "terms", label: "Terms & Conditions" },
 ];
 
 export const RETAIL_SITE_CMS_CONTENT_KEYS = [
@@ -162,7 +188,12 @@ export const RETAIL_SITE_CMS_CONTENT_KEYS = [
   "content.home.service_area_popup",
   "content.faq.home",
   "content.pricing.product_content",
+  "content.terms.rental_terms",
 ] as const;
+
+const TERMS_AND_CONDITIONS_DEFAULT: TermsAndConditionsContentValue = {
+  body: RENTAL_TERMS_CONSENT_TEXT,
+};
 
 const HOME_STATS_BAR_DEFAULT: HomeStatsBarValue = {
   enabled: true,
@@ -239,6 +270,46 @@ const HOME_SERVICE_AREA_LOOKUP_DEFAULT: HomeServiceAreaLookupValue = {
     "Hamilton",
   ],
   helperText: "& more — check your ZIP to confirm",
+};
+
+const PRICING_SIZE_GUIDE_DEFAULT: PricingSizeGuideValue = {
+  enabled: true,
+  buttonText: "Not sure which size? →",
+  title: "Which size is right for me?",
+  rows: [
+    {
+      id: "14-yard",
+      sizeLabel: "14-yard",
+      truckLoadEstimate: "~3-4 truck loads",
+      description: "Bathroom remodel, small cleanout, garage declutter, or a single room renovation.",
+      sortOrder: 10,
+      active: true,
+    },
+    {
+      id: "20-yard",
+      sizeLabel: "20-yard",
+      truckLoadEstimate: "~6-8 truck loads",
+      description: "Roofing job, kitchen remodel, basement or attic cleanout, multi-room renovation.",
+      sortOrder: 20,
+      active: true,
+    },
+    {
+      id: "30-yard",
+      sizeLabel: "30-yard",
+      truckLoadEstimate: "~9-12 truck loads",
+      description: "Large home renovation, new construction debris, full property cleanout.",
+      sortOrder: 30,
+      active: true,
+    },
+    {
+      id: "50-yard",
+      sizeLabel: "50-yard",
+      truckLoadEstimate: "~16-18 truck loads",
+      description: "Commercial jobs, major demolition, large construction sites, industrial cleanouts.",
+      sortOrder: 40,
+      active: true,
+    },
+  ],
 };
 
 const DEFAULT_CARD_GRID_ICON_KEYS = ["tag", "truck", "home"] satisfies HomeStatsIconKey[];
@@ -528,6 +599,56 @@ function normalizePricingProductContent(rawValue: unknown): PricingProductConten
     includedHeading: asString(raw.includedHeading),
     includedItems: includedItems.length ? includedItems : [""],
     bottomNote: asString(raw.bottomNote ?? raw.footnote),
+    sizeGuide: normalizePricingSizeGuide(raw.sizeGuide),
+  };
+}
+
+function clonePricingSizeGuideDefault(): PricingSizeGuideValue {
+  return {
+    ...PRICING_SIZE_GUIDE_DEFAULT,
+    rows: PRICING_SIZE_GUIDE_DEFAULT.rows.map((row) => ({ ...row })),
+  };
+}
+
+function normalizePricingSizeGuide(rawValue: unknown): PricingSizeGuideValue {
+  if (rawValue === undefined) {
+    return clonePricingSizeGuideDefault();
+  }
+
+  const raw = asObject(rawValue);
+  const sourceRows = asRecordArray(raw.rows);
+  const fallback = clonePricingSizeGuideDefault();
+  const rows = (sourceRows.length ? sourceRows : fallback.rows)
+    .map((item, index) => {
+      const row = asObject(item);
+
+      return {
+        id: asString(row.id, `size-guide-row-${index + 1}`),
+        sizeLabel: asString(row.sizeLabel, fallback.rows[index]?.sizeLabel ?? ""),
+        truckLoadEstimate: asString(row.truckLoadEstimate, fallback.rows[index]?.truckLoadEstimate ?? ""),
+        description: asString(row.description, fallback.rows[index]?.description ?? ""),
+        sortOrder: asNumber(row.sortOrder ?? row.sort_order, fallback.rows[index]?.sortOrder ?? index + 1),
+        active: asBoolean(row.active, fallback.rows[index]?.active ?? true),
+      };
+    })
+    .sort((left, right) => {
+      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+      return left.sizeLabel.localeCompare(right.sizeLabel);
+    });
+
+  return {
+    enabled: asBoolean(raw.enabled, fallback.enabled),
+    buttonText: asString(raw.buttonText, fallback.buttonText),
+    title: asString(raw.title, fallback.title),
+    rows,
+  };
+}
+
+function normalizeTermsAndConditions(rawValue: unknown): TermsAndConditionsContentValue {
+  const raw = asObject(rawValue);
+
+  return {
+    body: asString(raw.body ?? raw.termsAndConditionsBody ?? raw.terms_and_conditions_body, TERMS_AND_CONDITIONS_DEFAULT.body),
   };
 }
 
@@ -711,6 +832,22 @@ async function getPricingProductContentEntry(): Promise<CmsEntry<PricingProductC
   };
 }
 
+async function getTermsAndConditionsEntry(): Promise<CmsEntry<TermsAndConditionsContentValue>> {
+  const [draftRow, publishedRow, value] = await Promise.all([
+    getTenantContentRowByStatus("content.terms.rental_terms", "draft"),
+    getTenantContentRowByStatus("content.terms.rental_terms", "published"),
+    getTenantContentDraftFirst("content.terms.rental_terms"),
+  ]);
+
+  return {
+    contentKey: "content.terms.rental_terms",
+    hasDraft: Boolean(draftRow),
+    draftUpdatedAt: draftRow?.updated_at ?? null,
+    publishedUpdatedAt: publishedRow?.updated_at ?? null,
+    value: normalizeTermsAndConditions(value),
+  };
+}
+
 export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState> {
   const [
     hero,
@@ -721,6 +858,7 @@ export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState
     serviceAreaPopup,
     faq,
     productContent,
+    rentalTerms,
   ] = await Promise.all([
     getHomeHeroEntry(),
     getHomeStatsBarEntry(),
@@ -730,6 +868,7 @@ export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState
     getServiceAreaPopupEntry(),
     getHomeFaqEntry(),
     getPricingProductContentEntry(),
+    getTermsAndConditionsEntry(),
   ]);
 
   return {
@@ -744,6 +883,9 @@ export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState
     },
     pricing: {
       productContent,
+    },
+    terms: {
+      rentalTerms,
     },
   };
 }

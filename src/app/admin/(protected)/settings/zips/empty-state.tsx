@@ -2,7 +2,7 @@
 
 export function EmptyState() {
   return (
-    <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+    <div className="rounded-[14px] border border-dashed border-slate-300 bg-white p-10 text-center">
       <div className="text-base font-semibold text-slate-900">
         No service area yet
       </div>
@@ -17,7 +17,7 @@ export function EmptyState() {
           const input = document.getElementById("zip");
           input?.focus();
         }}
-        className="mt-6 inline-flex items-center rounded-2xl bg-[#F97316] px-4 py-2 text-sm font-medium text-white transition hover:opacity-95"
+        className="admin-btn admin-btn-primary mt-6"
       >
         Add ZIP
       </button>

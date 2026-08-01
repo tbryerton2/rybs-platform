@@ -1,11 +1,12 @@
 "use client";
 
-import type { InputHTMLAttributes, ReactNode } from "react";
+import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 import { FadingFormMessage } from "@/app/admin/_components/admin/fading-form-message";
 import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
+import { getMaxRentalDaysIncludedPeriodError } from "@/lib/admin/pricing-settings-validation";
 import {
   updatePricingSettingsAction,
   type PricingSettingsFieldErrors,
@@ -21,6 +22,7 @@ type PricingSettingsFormProps = {
     includedServicesBlurb: string | null;
     tonOveragePrice: number;
   };
+  highestActiveIncludedRentalDays: number | null;
 };
 
 const moneyFormatter = new Intl.NumberFormat("en-US", {
@@ -50,7 +52,10 @@ function parseInteger(value: string) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
-function validate(values: PricingSettingsFormValues): PricingSettingsFieldErrors {
+function validate(
+  values: PricingSettingsFormValues,
+  highestActiveIncludedRentalDays: number | null,
+): PricingSettingsFieldErrors {
   const fieldErrors: PricingSettingsFieldErrors = {};
   const maxRentalDays = values.maxRentalDays.trim() ? parseInteger(values.maxRentalDays) : null;
   const tonOveragePrice = parseCurrency(values.tonOveragePrice);
@@ -60,6 +65,14 @@ function validate(values: PricingSettingsFormValues): PricingSettingsFieldErrors
       fieldErrors.maxRentalDays = "Use a whole number of days.";
     } else if (maxRentalDays < 1) {
       fieldErrors.maxRentalDays = "Use a whole number of at least 1 day.";
+    } else {
+      const includedPeriodError = getMaxRentalDaysIncludedPeriodError(
+        maxRentalDays,
+        highestActiveIncludedRentalDays,
+      );
+      if (includedPeriodError) {
+        fieldErrors.maxRentalDays = includedPeriodError;
+      }
     }
   }
 
@@ -150,7 +163,7 @@ function Field({
           onChange={(event) => onChange(name, event.target.value)}
           placeholder={placeholder}
           className={[
-            "h-12 w-full rounded-2xl border bg-white text-sm text-slate-900 outline-none transition",
+            "h-12 w-full rounded-[14px] border bg-white text-sm text-slate-900 outline-none transition",
             "focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
             prefix ? "pl-8 pr-4" : "px-4",
             suffix ? "pr-28" : "",
@@ -209,7 +222,7 @@ function TextareaField({
         rows={3}
         maxLength={300}
         className={[
-          "mt-3 w-full max-w-2xl resize-y rounded-2xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
+          "mt-3 w-full max-w-2xl resize-y rounded-[14px] border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
           "focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
           error ? "border-red-300" : "border-slate-300",
         ].join(" ")}
@@ -245,7 +258,7 @@ function FormSectionHeading({
           <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
           <span
             role="tooltip"
-            className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+            className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
           >
             {tooltip}
           </span>
@@ -265,7 +278,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <section className="rounded-[14px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       {title || description ? (
         <div className="mb-6">
           {title ? <h2 className="text-lg font-semibold text-slate-950">{title}</h2> : null}
@@ -289,7 +302,7 @@ function InlineActionMessage({
   return (
     <div
       className={[
-        "rounded-2xl border px-4 py-3 text-sm",
+        "rounded-[14px] border px-4 py-3 text-sm",
         success
           ? "border-emerald-200 bg-emerald-50 text-emerald-900"
           : "border-red-200 bg-red-50 text-red-800",
@@ -301,7 +314,10 @@ function InlineActionMessage({
   );
 }
 
-export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
+export function PricingSettingsForm({
+  pricing,
+  highestActiveIncludedRentalDays,
+}: PricingSettingsFormProps) {
   const initialValues = useMemo(() => toFormValues(pricing), [pricing]);
   const initialState: PricingSettingsFormState = useMemo(
     () => ({
@@ -340,7 +356,10 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
     }
   }, [state.success, state.message, state.messageKey]);
 
-  const clientErrors = useMemo(() => validate(values), [values]);
+  const clientErrors = useMemo(
+    () => validate(values, highestActiveIncludedRentalDays),
+    [highestActiveIncludedRentalDays, values],
+  );
   const mergedErrors = useMemo(() => {
     const next: PricingSettingsFieldErrors = { ...state.fieldErrors };
 
@@ -379,13 +398,27 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
     }));
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (Object.keys(clientErrors).length > 0) {
+      event.preventDefault();
+      setTouched((current) => ({
+        ...current,
+        maxRentalDays: true,
+        includedServicesBlurb: true,
+        tonOveragePrice: true,
+      }));
+      setIsSubmitting(false);
+      return;
+    }
+
+    setIsSubmitting(true);
+  }
+
   return (
     <form
       action={formAction}
       className="space-y-6"
-      onSubmit={() => {
-        setIsSubmitting(true);
-      }}
+      onSubmit={handleSubmit}
     >
       <input type="hidden" name="id" value={pricing.id} />
 
@@ -439,7 +472,7 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
                 />
               </div>
 
-              <div className="rounded-3xl border border-orange-200 bg-orange-50/60 p-5">
+              <div className="rounded-[14px] border border-orange-200 bg-orange-50/60 p-5">
                 <ul className="space-y-2 text-sm text-slate-700">
                   <li className="flex items-start gap-2">
                     <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-orange-400" />
@@ -484,7 +517,7 @@ export function PricingSettingsForm({ pricing }: PricingSettingsFormProps) {
             </div>
 
             <div className="w-full mt-10">
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <label className="flex items-start gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-4">
                 <input
                   type="checkbox"
                   name="allowExtendedRentalAtBooking"

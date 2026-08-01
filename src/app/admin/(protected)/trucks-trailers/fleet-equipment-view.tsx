@@ -117,7 +117,7 @@ export function FleetEquipmentView({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="text-lg font-semibold text-slate-900">Truck or trailer details</div>
@@ -125,7 +125,7 @@ export function FleetEquipmentView({
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/admin/trucks-trailers/${record.id}/edit`}
-              className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="admin-btn admin-btn-secondary h-10 px-4"
             >
               Edit truck or trailer
             </Link>
@@ -143,13 +143,13 @@ export function FleetEquipmentView({
               ["Created", formatDateTimeLabelET(record.createdAt)],
               ["Last updated", formatDateTimeLabelET(record.updatedAt)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-[24px] border border-slate-200 bg-white p-4">
+              <div key={label} className="rounded-[14px] border border-slate-200 bg-white p-4">
                 <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt>
                 <dd className="mt-2 text-sm font-medium text-slate-900">{value}</dd>
               </div>
             ))}
           </dl>
-          <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+          <div className="rounded-[14px] border border-slate-200 bg-white p-5">
             <div className="text-sm font-semibold text-slate-900">Notes</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">{record.notes || "No notes added yet."}</p>
           </div>

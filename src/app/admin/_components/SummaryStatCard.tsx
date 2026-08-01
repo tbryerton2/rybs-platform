@@ -22,7 +22,7 @@ export function SummaryStatCard({
 
   const content = (
     <div
-      className={`rounded-xl px-4 py-3 shadow-sm ring-1 ${toneClasses} ${
+      className={`rounded-lg px-4 py-3 shadow-sm ring-1 ${toneClasses} ${
         href ? "transition-shadow hover:shadow-md" : ""
       }`}
     >

@@ -6,12 +6,14 @@ import type { Address, Currency } from "square";
 import type {
   PaymentProviderCustomerInput,
   PaymentProviderCustomerResult,
+  PaymentProviderFindSavedPaymentMethodInput,
   PaymentProviderAdapter,
   PaymentProviderChargeInput,
   PaymentProviderChargeResult,
   PaymentProviderEnvironment,
   PaymentProviderSavePaymentMethodInput,
   PaymentProviderSavePaymentMethodResult,
+  SaveCustomerPaymentMethodFailureStage,
   PaymentStatus,
 } from "../types";
 
@@ -34,6 +36,28 @@ function getSquareAccessToken() {
     throw new Error("SQUARE_ACCESS_TOKEN is required for Square checkout payments.");
   }
   return token;
+}
+
+export class SquarePaymentProviderOperationError extends Error {
+  readonly failureStage: SaveCustomerPaymentMethodFailureStage;
+  readonly safeErrorCode: string;
+  readonly retryable: boolean;
+  readonly cause?: unknown;
+
+  constructor(
+    message: string,
+    failureStage: SaveCustomerPaymentMethodFailureStage,
+    safeErrorCode: string,
+    retryable: boolean,
+    cause?: unknown,
+  ) {
+    super(message);
+    this.name = "SquarePaymentProviderOperationError";
+    this.failureStage = failureStage;
+    this.safeErrorCode = safeErrorCode;
+    this.retryable = retryable;
+    this.cause = cause;
+  }
 }
 
 function getSquareLocationId() {
@@ -100,6 +124,38 @@ function extractSquareError(error: unknown) {
   };
 }
 
+function toSquareOperationError(
+  error: unknown,
+  failureStage: SaveCustomerPaymentMethodFailureStage,
+  fallbackCode: string,
+  retryable: boolean,
+) {
+  const squareError = extractSquareError(error);
+  return new SquarePaymentProviderOperationError(
+    squareError.message,
+    failureStage,
+    squareError.code ?? fallbackCode,
+    retryable,
+    squareError.raw,
+  );
+}
+
+function squareResponseError(
+  fallbackMessage: string,
+  errors: Array<{ code?: string; detail?: string }> | undefined,
+  failureStage: SaveCustomerPaymentMethodFailureStage,
+  fallbackCode: string,
+  retryable: boolean,
+) {
+  const squareError = firstSquareErrorMessage(errors);
+  return new SquarePaymentProviderOperationError(
+    squareError.message ?? squareError.code ?? fallbackMessage,
+    failureStage,
+    squareError.code ?? fallbackCode,
+    retryable,
+  );
+}
+
 function clean(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -146,14 +202,6 @@ function getProviderCustomerReferenceId(input: PaymentProviderCustomerInput) {
   return clean(input.referenceId) ?? clean(input.localCustomerId);
 }
 
-function getSquareProviderErrorMessage(
-  fallback: string,
-  errors: Array<{ code?: string; detail?: string }> | undefined,
-) {
-  const squareError = firstSquareErrorMessage(errors);
-  return squareError.message ?? squareError.code ?? fallback;
-}
-
 function requireSquareId(value: string | null | undefined, fieldName: string) {
   const cleaned = clean(value);
   if (!cleaned) {
@@ -188,8 +236,12 @@ export async function createOrReuseSquareCustomer(
       });
 
       if (searchResponse.errors?.length) {
-        throw new Error(
-          getSquareProviderErrorMessage("Square customer search failed.", searchResponse.errors),
+        throw squareResponseError(
+          "Square customer search failed.",
+          searchResponse.errors,
+          "finding_square_customer",
+          "SQUARE_CUSTOMER_SEARCH_FAILED",
+          true,
         );
       }
 
@@ -204,8 +256,8 @@ export async function createOrReuseSquareCustomer(
         };
       }
     } catch (error) {
-      const squareError = extractSquareError(error);
-      throw new Error(squareError.message, { cause: squareError.raw });
+      if (error instanceof SquarePaymentProviderOperationError) throw error;
+      throw toSquareOperationError(error, "finding_square_customer", "SQUARE_CUSTOMER_SEARCH_FAILED", true);
     }
   }
 
@@ -216,9 +268,9 @@ export async function createOrReuseSquareCustomer(
   const phoneNumber = clean(input.phone);
 
   if (!givenName && !familyName && !companyName && !emailAddress && !phoneNumber) {
-    throw new Error(
-      "Square customer creation requires at least one name, company, email, or phone field.",
-    );
+      throw new Error(
+        "Square customer creation requires at least one name, company, email, or phone field.",
+      );
   }
 
   try {
@@ -235,8 +287,12 @@ export async function createOrReuseSquareCustomer(
     });
 
     if (response.errors?.length) {
-      throw new Error(
-        getSquareProviderErrorMessage("Square customer creation failed.", response.errors),
+      throw squareResponseError(
+        "Square customer creation failed.",
+        response.errors,
+        "creating_square_customer",
+        "SQUARE_CUSTOMER_CREATE_FAILED",
+        true,
       );
     }
 
@@ -248,9 +304,65 @@ export async function createOrReuseSquareCustomer(
       rawProviderResponse: response,
     };
   } catch (error) {
-    const squareError = extractSquareError(error);
-    throw new Error(squareError.message, { cause: squareError.raw });
+    if (error instanceof SquarePaymentProviderOperationError) throw error;
+    throw toSquareOperationError(error, "creating_square_customer", "SQUARE_CUSTOMER_CREATE_FAILED", true);
   }
+}
+
+function toSavedPaymentMethodResult(input: {
+  providerEnvironment: PaymentProviderEnvironment;
+  providerCustomerId: string;
+  card: {
+    id?: string | null;
+    cardBrand?: string | null;
+    last4?: string | null;
+    expMonth?: bigint | number | null;
+    expYear?: bigint | number | null;
+  } | null | undefined;
+}): PaymentProviderSavePaymentMethodResult {
+  return {
+    provider: "square",
+    providerEnvironment: input.providerEnvironment,
+    providerCustomerId: input.providerCustomerId,
+    providerPaymentMethodId: requireSquareId(input.card?.id, "providerPaymentMethodId"),
+    cardBrand: input.card?.cardBrand ?? null,
+    cardLast4: input.card?.last4 ?? null,
+    cardExpMonth: bigintToNumber(input.card?.expMonth),
+    cardExpYear: bigintToNumber(input.card?.expYear),
+  };
+}
+
+export async function findReusableSquareCard(
+  input: PaymentProviderFindSavedPaymentMethodInput,
+): Promise<PaymentProviderSavePaymentMethodResult | null> {
+  const environment = resolveSquareEnvironment();
+  const client = createSquareClient(environment);
+  const providerCustomerId = requireSquareId(input.providerCustomerId, "providerCustomerId");
+  const referenceId = clean(input.referenceId);
+
+  try {
+    const page = await client.cards.list({
+      customerId: providerCustomerId,
+      includeDisabled: false,
+      referenceId,
+    });
+
+    for await (const card of page) {
+      if (card.enabled !== true) continue;
+      if (card.customerId !== providerCustomerId) continue;
+      if (referenceId && card.referenceId !== referenceId) continue;
+
+      return toSavedPaymentMethodResult({
+        providerEnvironment: environment,
+        providerCustomerId,
+        card,
+      });
+    }
+  } catch (error) {
+    throw toSquareOperationError(error, "saving_square_card", "SQUARE_CARD_LIST_FAILED", true);
+  }
+
+  return null;
 }
 
 export async function saveSquareCard(
@@ -278,25 +390,81 @@ export async function saveSquareCard(
     });
 
     if (response.errors?.length) {
-      throw new Error(getSquareProviderErrorMessage("Square card save failed.", response.errors));
+      throw squareResponseError(
+        "Square card save failed.",
+        response.errors,
+        "saving_square_card",
+        "SQUARE_CARD_SAVE_FAILED",
+        true,
+      );
     }
 
     const card = response.card;
+    return {
+      ...toSavedPaymentMethodResult({
+        providerEnvironment: environment,
+        providerCustomerId,
+        card,
+      }),
+      rawProviderResponse: response,
+    };
+  } catch (error) {
+    if (error instanceof SquarePaymentProviderOperationError) throw error;
+    throw toSquareOperationError(error, "saving_square_card", "SQUARE_CARD_SAVE_FAILED", true);
+  }
+}
+
+export async function verifySquareSavedCard(input: {
+  providerPaymentMethodId: string;
+  providerCustomerId: string;
+}) {
+  const environment = resolveSquareEnvironment();
+  const client = createSquareClient(environment);
+  const cardId = requireSquareId(input.providerPaymentMethodId, "providerPaymentMethodId");
+  const expectedCustomerId = requireSquareId(input.providerCustomerId, "providerCustomerId");
+
+  try {
+    const response = await client.cards.get({ cardId });
+    const card = response.card;
+    const providerPaymentMethodId = card?.id ?? null;
+    const providerCustomerId = card?.customerId ?? null;
+    const enabled = card?.enabled ?? null;
 
     return {
-      provider: "square",
-      providerEnvironment: environment,
+      ok: providerPaymentMethodId === cardId && providerCustomerId === expectedCustomerId && enabled === true,
+      providerPaymentMethodId,
       providerCustomerId,
-      providerPaymentMethodId: requireSquareId(card?.id, "providerPaymentMethodId"),
-      cardBrand: card?.cardBrand ?? null,
-      cardLast4: card?.last4 ?? null,
-      cardExpMonth: bigintToNumber(card?.expMonth),
-      cardExpYear: bigintToNumber(card?.expYear),
+      enabled,
+      failureCode:
+        providerPaymentMethodId !== cardId
+          ? "SQUARE_CARD_ID_MISMATCH"
+          : providerCustomerId !== expectedCustomerId
+            ? "SQUARE_CUSTOMER_MISMATCH"
+            : enabled !== true
+              ? "SQUARE_CARD_DISABLED"
+              : null,
+      failureMessage:
+        providerPaymentMethodId !== cardId
+          ? "Square returned a different card ID."
+          : providerCustomerId !== expectedCustomerId
+            ? "Square card belongs to a different customer."
+            : enabled !== true
+              ? "Square card is not available for payments."
+              : null,
       rawProviderResponse: response,
     };
   } catch (error) {
     const squareError = extractSquareError(error);
-    throw new Error(squareError.message, { cause: squareError.raw });
+
+    return {
+      ok: false,
+      providerPaymentMethodId: cardId,
+      providerCustomerId: null,
+      enabled: null,
+      failureCode: squareError.code,
+      failureMessage: squareError.message,
+      rawProviderResponse: squareError.raw,
+    };
   }
 }
 
@@ -306,6 +474,9 @@ export function createSquarePaymentAdapter(): PaymentProviderAdapter {
   return {
     provider: "square",
     environment,
+    async verifySavedPaymentMethod(input) {
+      return verifySquareSavedCard(input);
+    },
     async charge(input: PaymentProviderChargeInput): Promise<PaymentProviderChargeResult> {
       const locationId = getSquareLocationId();
       const client = createSquareClient(environment);

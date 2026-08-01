@@ -33,9 +33,12 @@ type CustomerPaymentMethodRow = {
 };
 
 export class CustomerPaymentMethodServiceError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
     super(message);
     this.name = "CustomerPaymentMethodServiceError";
+    this.cause = cause;
   }
 }
 

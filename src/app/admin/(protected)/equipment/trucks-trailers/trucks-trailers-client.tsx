@@ -115,16 +115,16 @@ export function TrucksTrailersClient({
         />
       </section>
 
-      <section className="rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
+      <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search trucks & trailers</h2>
         </div>
         <div className="mt-5 flex flex-col gap-3 lg:flex-row">
           <label className="relative block flex-1">
             <MagnifyingGlassIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search unit, type, VIN, plate, or tracker ID" className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none focus:border-[#F97316]" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search unit, type, VIN, plate, or tracker ID" className="h-12 w-full rounded-[14px] border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none focus:border-[#F97316]" />
           </label>
-          <label className="inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700">
+          <label className="inline-flex h-12 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700">
             <input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]" />
             Include inactive
           </label>
@@ -132,14 +132,14 @@ export function TrucksTrailersClient({
       </section>
 
       <section className="grid gap-8 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.9fr)]">
-        <div className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+        <div className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
           <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
             <div className="text-lg font-semibold tracking-tight text-slate-900">Trucks & trailers</div>
             <div className="mt-1 text-sm text-slate-500">{filtered.length} {filtered.length === 1 ? "record" : "records"}</div>
           </div>
           {loadError ? (
             <div className="px-6 py-10 sm:px-8">
-              <div className="rounded-[24px] border border-rose-200 bg-rose-50/80 p-5">
+              <div className="rounded-[14px] border border-rose-200 bg-rose-50/80 p-5">
                 <div className="flex items-start gap-3">
                   <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 text-rose-600" />
                   <div>
@@ -151,7 +151,7 @@ export function TrucksTrailersClient({
             </div>
           ) : filtered.length === 0 ? (
             <div className="px-6 py-12 sm:px-8">
-              <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+              <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
                 {records.length === 0
                   ? "No trucks or trailers have been added yet."
                   : "No trucks or trailers match the current filters."}
@@ -192,7 +192,7 @@ export function TrucksTrailersClient({
                       </td>
                       <td className="px-4 py-4 text-slate-600">{item.tracker.enabled ? item.tracker.status : "Not installed"}</td>
                       <td className="px-6 py-4 sm:px-8">
-                        <button type="button" onClick={() => openReview(item.id)} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 transition hover:bg-slate-50">Review</button>
+                        <button type="button" onClick={() => openReview(item.id)} className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 transition hover:bg-slate-50">Review</button>
                       </td>
                     </tr>
                   ))}
@@ -203,7 +203,7 @@ export function TrucksTrailersClient({
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <div>
               <div className="text-lg font-semibold text-slate-900">Unit details</div>
               <p className="mt-1 text-sm text-slate-500">
@@ -213,7 +213,7 @@ export function TrucksTrailersClient({
 
             {selected ? (
               <div className="mt-6 space-y-5">
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+                <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
                   <div className="text-xl font-semibold text-slate-900">{selected.unitName}</div>
                   <div className="mt-1 text-sm text-slate-500">{selected.equipmentType} • {selected.equipmentId}</div>
                   <div className="mt-3">
@@ -231,13 +231,13 @@ export function TrucksTrailersClient({
                     ["Tracker", selected.tracker.enabled ? `${selected.tracker.status} • ${selected.tracker.trackerId || "No ID"}` : "Not installed"],
                     ["Last updated", formatTimestamp(selected.updatedAt)],
                   ].map(([label, value]) => (
-                    <div key={label} className="rounded-[24px] border border-slate-200 bg-white p-4">
+                    <div key={label} className="rounded-[14px] border border-slate-200 bg-white p-4">
                       <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt>
                       <dd className="mt-2 text-sm font-medium text-slate-900">{value}</dd>
                     </div>
                   ))}
                 </dl>
-                <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                <div className="rounded-[14px] border border-slate-200 bg-white p-5">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><ShieldCheckIcon className="h-4 w-4" /> Fleet notes</div>
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
@@ -282,15 +282,15 @@ export function TrucksTrailersClient({
                 </div>
               </div>
             ) : loadError ? (
-              <div className="mt-6 rounded-[24px] border border-dashed border-rose-200 bg-rose-50 px-5 py-8 text-center text-sm text-rose-700">
+              <div className="mt-6 rounded-[14px] border border-dashed border-rose-200 bg-rose-50 px-5 py-8 text-center text-sm text-rose-700">
                 Resolve the Supabase load error to review unit details.
               </div>
             ) : records.length === 0 ? (
-              <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+              <div className="mt-6 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
                 Trucks and trailers will appear here once `fleet_equipment` has hosted Supabase rows.
               </div>
             ) : (
-              <div className="mt-6 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+              <div className="mt-6 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
                 Select a truck or trailer to review details.
               </div>
             )}

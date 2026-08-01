@@ -95,7 +95,7 @@ export function DumpstersClient({
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <Link
             href="/admin/equipment/dumpsters/new"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="admin-btn admin-btn-primary h-11 gap-2 px-5"
           >
             <PlusIcon className="h-4 w-4" />
             Add dumpster
@@ -136,7 +136,7 @@ export function DumpstersClient({
         />
       </section>
 
-      <section className="rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
+      <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search Dumpsters</h2>
         </div>
@@ -148,10 +148,10 @@ export function DumpstersClient({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, size, internal ID, or tracker ID"
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
+              className="h-12 w-full rounded-[14px] border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
             />
           </label>
-          <label className="inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700">
+          <label className="inline-flex h-12 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700">
             <input
               type="checkbox"
               checked={includeInactive}
@@ -163,7 +163,7 @@ export function DumpstersClient({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+      <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="text-lg font-semibold tracking-tight text-slate-900">Dumpster records</div>

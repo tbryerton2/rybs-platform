@@ -79,3 +79,29 @@ export async function getActiveServiceAreaZip(
     state,
   };
 }
+
+export async function getActiveServiceAreaZipCodes(businessId?: string): Promise<string[]> {
+  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
+
+  const { data, error } = await supabaseAdmin
+    .from("service_area_zips")
+    .select("zip")
+    .eq("business_id", resolvedBusinessId)
+    .eq("active", true)
+    .order("zip", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const zipCodes = new Set<string>();
+
+  for (const row of data ?? []) {
+    const zip = sanitizeServiceAreaZip(row.zip);
+    if (/^\d{5}$/.test(zip)) {
+      zipCodes.add(zip);
+    }
+  }
+
+  return Array.from(zipCodes).sort((a, b) => a.localeCompare(b));
+}

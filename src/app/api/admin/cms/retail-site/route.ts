@@ -35,6 +35,7 @@ function parseEntries(body: Record<string, unknown>) {
 function revalidateRetailCmsPaths() {
   revalidatePath("/");
   revalidatePath("/pricing");
+  revalidatePath("/confirm");
   revalidatePath("/admin/cms");
 }
 

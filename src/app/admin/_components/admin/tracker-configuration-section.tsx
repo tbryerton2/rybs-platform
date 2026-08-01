@@ -44,9 +44,9 @@ function Field({
 }
 
 const fieldInputClass =
-  "h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
+  "h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
 const fieldTextareaClass =
-  "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
+  "w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
 const fieldErrorClass = "border-rose-300 focus:border-rose-500 focus:ring-4 focus:ring-rose-100";
 
 export function TrackerConfigurationSection({
@@ -79,7 +79,7 @@ export function TrackerConfigurationSection({
   showCancel?: boolean;
 }) {
   return (
-    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2 text-lg font-semibold text-slate-900">
           <WrenchScrewdriverIcon className="h-5 w-5" />
@@ -89,7 +89,7 @@ export function TrackerConfigurationSection({
           <button
             type="button"
             onClick={onEdit}
-            className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="admin-btn admin-btn-secondary h-10 px-4"
           >
             Edit tracker
           </button>
@@ -110,7 +110,7 @@ export function TrackerConfigurationSection({
             <div
               key={label}
               className={joinClasses(
-                "rounded-[24px] border border-slate-200 bg-white p-4",
+                "rounded-[14px] border border-slate-200 bg-white p-4",
                 label === "Tracker notes / troubleshooting" && "sm:col-span-2 xl:col-span-3",
               )}
             >
@@ -122,7 +122,7 @@ export function TrackerConfigurationSection({
       ) : (
         <>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+            <label className="inline-flex items-center gap-3 rounded-[14px] border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
               <input
                 type="checkbox"
                 checked={tracker.enabled}
@@ -197,7 +197,7 @@ export function TrackerConfigurationSection({
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-11 px-5"
                 >
                   Cancel
                 </button>
@@ -206,7 +206,7 @@ export function TrackerConfigurationSection({
                 type="button"
                 onClick={onSave}
                 disabled={isSaving || saveDisabled}
-                className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn admin-btn-primary h-11 px-5"
               >
                 {isSaving ? "Saving..." : saveLabel}
               </button>

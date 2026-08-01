@@ -77,7 +77,7 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
   const disabled = saving !== null;
 
   return (
-    <section className="rounded-lg border p-4 space-y-3">
+    <section className="rounded-[4px] border p-4 space-y-3">
       <div className="font-medium text-sm">Admin actions</div>
 
       <div className="text-sm text-muted-foreground">
@@ -104,7 +104,7 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-md border px-4 py-2"
+          className="admin-btn admin-btn-secondary"
           disabled={disabled}
           onClick={() => setStatus("confirmed")}
         >
@@ -113,7 +113,7 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
 
         <button
           type="button"
-          className="rounded-md border px-4 py-2"
+          className="admin-btn admin-btn-secondary"
           disabled={disabled}
           onClick={() => setStatus("scheduled")}
         >
@@ -122,7 +122,7 @@ export default function AdminBookingActions({ bookingId, currentStatus }: Props)
 
         <button
           type="button"
-          className="rounded-md border px-4 py-2"
+          className="admin-btn admin-btn-destructive"
           disabled={disabled}
           onClick={() => setStatus("cancelled")}
         >

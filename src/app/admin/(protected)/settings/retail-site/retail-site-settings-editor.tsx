@@ -12,7 +12,7 @@ type RetailSettingsTab = "header" | "homeVisibility" | "calendarClosures";
 
 const TABS: Array<{ id: RetailSettingsTab; label: string }> = [
   { id: "header", label: "Header" },
-  { id: "homeVisibility", label: "Home Visibility" },
+  { id: "homeVisibility", label: "Landing Page" },
   { id: "calendarClosures", label: "Calendar Closures" },
 ];
 
@@ -32,7 +32,7 @@ function ToggleRow({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4">
+    <div className="flex items-start justify-between gap-4 rounded-[14px] border border-slate-200 bg-white px-5 py-4">
       <div className="min-w-0">
         <div className="text-sm font-semibold text-slate-900">{label}</div>
         {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
@@ -56,6 +56,37 @@ function ToggleRow({
         />
       </button>
     </div>
+  );
+}
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-label={ariaLabel}
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={[
+        "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors",
+        checked ? "bg-[#F97316]" : "bg-slate-300",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "inline-block h-5 w-5 rounded-full bg-white transition-transform",
+          checked ? "translate-x-6" : "translate-x-1",
+        ].join(" ")}
+      />
+    </button>
   );
 }
 
@@ -85,7 +116,7 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className={[
-          "h-12 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition",
+          "h-12 w-full rounded-[14px] border bg-white px-4 text-sm text-slate-900 outline-none transition",
           error
             ? "border-rose-300 focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
             : "border-slate-300 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
@@ -116,7 +147,7 @@ function SelectField({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+        className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -139,12 +170,38 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <section className="rounded-[14px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
       </div>
       {children}
+    </section>
+  );
+}
+
+function HeaderSettingsSection({
+  title,
+  checked,
+  onChange,
+  toggleLabel,
+  divided,
+  children,
+}: {
+  title: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  toggleLabel: string;
+  divided?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={divided ? "border-t border-slate-200 pt-6" : undefined}>
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+        <ToggleSwitch checked={checked} onChange={onChange} ariaLabel={toggleLabel} />
+      </div>
+      {children ? <div className="mt-4 space-y-4">{children}</div> : null}
     </section>
   );
 }
@@ -369,7 +426,7 @@ export function RetailSiteSettingsEditor({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="rounded-[14px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
             {TABS.map((tab) => {
@@ -406,7 +463,7 @@ export function RetailSiteSettingsEditor({
               type="button"
               onClick={() => void save()}
               disabled={!dirty || saving}
-              className="inline-flex items-center justify-center rounded-2xl bg-[#F97316] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="admin-btn admin-btn-primary"
             >
               {saving ? "Saving..." : "Save Settings"}
             </button>
@@ -414,7 +471,7 @@ export function RetailSiteSettingsEditor({
         </div>
 
         {error ? (
-          <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div className="mt-4 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         ) : null}
@@ -423,109 +480,109 @@ export function RetailSiteSettingsEditor({
       {activeTab === "header" ? (
         <SectionCard
           title="Header"
-          description="Control the contact links, logo, and business name shown in the retail site header."
+          description="Manage contact links, logo, and business name shown in the retail site header."
         >
-          <div className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ToggleRow
-                label="Show phone in header"
-                description="Display the business phone number in the retail site header."
-                checked={settings.header.showCallTextButton}
-                onChange={(checked) =>
-                  updateSettings((current) => {
-                    current.header.showCallTextButton = checked;
-                    return current;
-                  })
-                }
-              />
-
-              <ToggleRow
-                label="Show email in header"
-                description="Display the business email address in the retail site header."
-                checked={settings.header.showEmailInHeader}
-                onChange={(checked) =>
-                  updateSettings((current) => {
-                    current.header.showEmailInHeader = checked;
-                    return current;
-                  })
-                }
-              />
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <div className="space-y-5">
-                <div className="grid gap-5 md:grid-cols-2">
-                  <TextInput
-                    label="Phone number"
-                    type="tel"
-                    value={settings.header.phoneNumber}
-                    onChange={(value) =>
-                      updateSettings((current) => {
-                        current.header.phoneNumber = value;
-                        return current;
-                      })
-                    }
-                    placeholder="+1-315-555-0123"
-                    error={phoneError}
-                    helperText="Used for the clickable phone link in the retail site header."
-                  />
-
-                  <TextInput
-                    label="Header email address"
-                    type="email"
-                    value={settings.header.emailAddress}
-                    onChange={(value) =>
-                      updateSettings((current) => {
-                        current.header.emailAddress = value;
-                        return current;
-                      })
-                    }
-                    placeholder="info@example.com"
-                    error={emailError}
-                    helperText="This email is used for the clickable email link in the retail site header."
-                  />
-                </div>
-
-                <ToggleRow
-                  label="Show logo in header"
-                  description="Displays the uploaded retail logo to the left of the business name."
-                  checked={settings.header.showLogoInHeader}
-                  onChange={(checked) =>
+          <div className="space-y-6">
+            <HeaderSettingsSection
+              title="Phone number"
+              checked={settings.header.showCallTextButton}
+              toggleLabel="Show phone in header"
+              onChange={(checked) =>
+                updateSettings((current) => {
+                  current.header.showCallTextButton = checked;
+                  return current;
+                })
+              }
+            >
+              {settings.header.showCallTextButton ? (
+                <TextInput
+                  label="Phone number"
+                  type="tel"
+                  value={settings.header.phoneNumber}
+                  onChange={(value) =>
                     updateSettings((current) => {
-                      current.header.showLogoInHeader = checked;
+                      current.header.phoneNumber = value;
                       return current;
                     })
                   }
+                  placeholder="+1-315-555-0123"
+                  error={phoneError}
+                  helperText="Shown as a clickable link in the site header."
                 />
+              ) : null}
+            </HeaderSettingsSection>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="mb-2 text-sm font-medium text-slate-800">Logo upload</div>
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void handleLogoUpload(file);
-                    }}
-                    className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-2xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
-                  />
-                  <p className="mt-2 text-sm text-slate-500">
-                    Upload a JPG, PNG, WEBP, or SVG logo. Re-uploading replaces the saved file reference.
-                  </p>
-                  {uploadingLogo ? <p className="mt-3 text-sm text-slate-500">Uploading logo...</p> : null}
-                  {logoUploadError ? (
-                    <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                      {logoUploadError}
-                    </div>
-                  ) : null}
+            <HeaderSettingsSection
+              title="Email address"
+              checked={settings.header.showEmailInHeader}
+              toggleLabel="Show email in header"
+              divided
+              onChange={(checked) =>
+                updateSettings((current) => {
+                  current.header.showEmailInHeader = checked;
+                  return current;
+                })
+              }
+            >
+              {settings.header.showEmailInHeader ? (
+                <TextInput
+                  label="Header email address"
+                  type="email"
+                  value={settings.header.emailAddress}
+                  onChange={(value) =>
+                    updateSettings((current) => {
+                      current.header.emailAddress = value;
+                      return current;
+                    })
+                  }
+                  placeholder="info@example.com"
+                  error={emailError}
+                  helperText="Shown as a clickable link in the site header."
+                />
+              ) : null}
+            </HeaderSettingsSection>
+
+            <HeaderSettingsSection
+              title="Logo and business name"
+              checked={settings.header.showLogoInHeader}
+              toggleLabel="Show logo in header"
+              divided
+              onChange={(checked) =>
+                updateSettings((current) => {
+                  current.header.showLogoInHeader = checked;
+                  return current;
+                })
+              }
+            >
+              {settings.header.showLogoInHeader ? (
+                <>
+                  <div>
+                    <div className="mb-2 text-sm font-medium text-slate-800">Logo upload</div>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleLogoUpload(file);
+                      }}
+                      className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-[14px] file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
+                    />
+                    <p className="mt-2 text-sm text-slate-500">
+                      Upload a JPG, PNG, WEBP, or SVG logo. Re-uploading replaces the saved file reference.
+                    </p>
+                    {uploadingLogo ? <p className="mt-3 text-sm text-slate-500">Uploading logo...</p> : null}
+                    {logoUploadError ? (
+                      <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                        {logoUploadError}
+                      </div>
+                    ) : null}
+                  </div>
 
                   {settings.header.logoUrl ? (
-                    <div className="mt-4 space-y-4">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                          Current logo
-                        </div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="mb-2 text-sm font-medium text-slate-800">Current logo</div>
                         <img
                           src={settings.header.logoUrl}
                           alt={settings.header.logoAlt || "Retail logo preview"}
@@ -542,40 +599,41 @@ export function RetailSiteSettingsEditor({
                       </button>
                     </div>
                   ) : null}
-                </div>
 
-                <TextInput
-                  label="Logo alt text"
-                  value={settings.header.logoAlt}
-                  onChange={(value) =>
-                    updateSettings((current) => {
-                      current.header.logoAlt = value;
-                      return current;
-                    })
-                  }
-                  placeholder="Tan Can Man logo"
-                  helperText="Used when the logo is shown in the retail header."
-                />
-
-                <div className="grid gap-5 md:grid-cols-2">
-                  <SelectField
-                    label="Business name size"
-                    value={settings.header.businessNameSize}
+                  <TextInput
+                    label="Logo alt text"
+                    value={settings.header.logoAlt}
                     onChange={(value) =>
                       updateSettings((current) => {
-                        current.header.businessNameSize =
-                          value === "small" || value === "large" ? value : "medium";
+                        current.header.logoAlt = value;
                         return current;
                       })
                     }
-                    helperText="Controls the visible size of the business name even when no logo is shown."
-                    options={[
-                      { value: "small", label: "Small" },
-                      { value: "medium", label: "Medium" },
-                      { value: "large", label: "Large" },
-                    ]}
+                    placeholder="Tan Can Man logo"
                   />
+                </>
+              ) : null}
 
+              <div className="grid gap-5 md:grid-cols-2">
+                <SelectField
+                  label="Business name size"
+                  value={settings.header.businessNameSize}
+                  onChange={(value) =>
+                    updateSettings((current) => {
+                      current.header.businessNameSize =
+                        value === "small" || value === "large" ? value : "medium";
+                      return current;
+                    })
+                  }
+                  helperText="Controls the visible size of the business name even when no logo is shown."
+                  options={[
+                    { value: "small", label: "Small" },
+                    { value: "medium", label: "Medium" },
+                    { value: "large", label: "Large" },
+                  ]}
+                />
+
+                {settings.header.showLogoInHeader ? (
                   <SelectField
                     label="Logo size mode"
                     value={settings.header.logoSizeMode}
@@ -591,33 +649,33 @@ export function RetailSiteSettingsEditor({
                       { value: "custom", label: "Custom" },
                     ]}
                   />
-                </div>
-
-                {settings.header.logoSizeMode === "custom" ? (
-                  <label className="block">
-                    <div className="mb-2 text-sm font-medium text-slate-800">Custom logo height</div>
-                    <input
-                      type="number"
-                      min={24}
-                      max={96}
-                      step={1}
-                      value={settings.header.customLogoHeight}
-                      onChange={(event) =>
-                        updateSettings((current) => {
-                          const next = Number(event.target.value);
-                          current.header.customLogoHeight = Number.isFinite(next) ? next : 48;
-                          return current;
-                        })
-                      }
-                      className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
-                    />
-                    <p className="mt-2 text-sm text-slate-500">
-                      Height in pixels. If this is blank or invalid, the header falls back to the match-size behavior.
-                    </p>
-                  </label>
                 ) : null}
               </div>
-            </div>
+
+              {settings.header.showLogoInHeader && settings.header.logoSizeMode === "custom" ? (
+                <label className="block">
+                  <div className="mb-2 text-sm font-medium text-slate-800">Custom logo height</div>
+                  <input
+                    type="number"
+                    min={24}
+                    max={96}
+                    step={1}
+                    value={settings.header.customLogoHeight}
+                    onChange={(event) =>
+                      updateSettings((current) => {
+                        const next = Number(event.target.value);
+                        current.header.customLogoHeight = Number.isFinite(next) ? next : 48;
+                        return current;
+                      })
+                    }
+                    className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                  />
+                  <p className="mt-2 text-sm text-slate-500">
+                    Height in pixels. If this is blank or invalid, the header falls back to the match-size behavior.
+                  </p>
+                </label>
+              ) : null}
+            </HeaderSettingsSection>
           </div>
         </SectionCard>
       ) : null}
@@ -663,7 +721,7 @@ export function RetailSiteSettingsEditor({
           >
             <div className="space-y-4">
               {settings.calendarClosures.blockedDates.map((entry, index) => (
-                <div key={`blocked-date-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div key={`blocked-date-${index}`} className="rounded-[14px] border border-slate-200 bg-slate-50 p-4">
                   <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
                     <label className="block">
                       <div className="mb-2 text-sm font-medium text-slate-800">Date</div>
@@ -671,7 +729,7 @@ export function RetailSiteSettingsEditor({
                         type="date"
                         value={entry.date}
                         onChange={(event) => updateBlockedDate(index, { date: event.target.value })}
-                        className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                        className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                       />
                     </label>
 
@@ -681,7 +739,7 @@ export function RetailSiteSettingsEditor({
                         value={entry.label}
                         onChange={(event) => updateBlockedDate(index, { label: event.target.value })}
                         placeholder="Optional"
-                        className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                        className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                       />
                     </label>
 
@@ -693,7 +751,7 @@ export function RetailSiteSettingsEditor({
                           return current;
                         })
                       }
-                      className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                      className="inline-flex h-12 items-center justify-center rounded-[14px] border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
                     >
                       Remove
                     </button>
@@ -709,7 +767,7 @@ export function RetailSiteSettingsEditor({
                     return current;
                   })
                 }
-                className="inline-flex rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                className="inline-flex rounded-[14px] border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
               >
                 Add single date
               </button>
@@ -722,7 +780,7 @@ export function RetailSiteSettingsEditor({
           >
             <div className="space-y-4">
               {settings.calendarClosures.blockedRanges.map((entry, index) => (
-                <div key={`blocked-range-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div key={`blocked-range-${index}`} className="rounded-[14px] border border-slate-200 bg-slate-50 p-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="block">
                       <div className="mb-2 text-sm font-medium text-slate-800">Start date</div>
@@ -730,7 +788,7 @@ export function RetailSiteSettingsEditor({
                         type="date"
                         value={entry.startDate}
                         onChange={(event) => updateBlockedRange(index, { startDate: event.target.value })}
-                        className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                        className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                       />
                     </label>
 
@@ -740,7 +798,7 @@ export function RetailSiteSettingsEditor({
                         type="date"
                         value={entry.endDate}
                         onChange={(event) => updateBlockedRange(index, { endDate: event.target.value })}
-                        className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                        className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                       />
                     </label>
                   </div>
@@ -752,7 +810,7 @@ export function RetailSiteSettingsEditor({
                         value={entry.label}
                         onChange={(event) => updateBlockedRange(index, { label: event.target.value })}
                         placeholder="Optional"
-                        className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                        className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                       />
                     </label>
 
@@ -764,7 +822,7 @@ export function RetailSiteSettingsEditor({
                           return current;
                         })
                       }
-                      className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                      className="inline-flex h-12 items-center justify-center rounded-[14px] border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
                     >
                       Remove
                     </button>
@@ -780,7 +838,7 @@ export function RetailSiteSettingsEditor({
                     return current;
                   })
                 }
-                className="inline-flex rounded-2xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                className="inline-flex rounded-[14px] border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
               >
                 Add blocked range
               </button>

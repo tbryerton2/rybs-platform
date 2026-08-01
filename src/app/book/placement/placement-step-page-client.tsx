@@ -1,13 +1,17 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowUpTrayIcon, CameraIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import {
+  HoldCountdownBanner,
+  useBookingHoldCountdown,
+} from "@/components/booking/hold-countdown-banner";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import {
   ACCESS_ISSUES,
   DELIVERY_PRESENCE_OPTIONS,
-  PLACEMENT_PREFERENCES,
   accessIssueLabel,
   deliveryPresenceLabel,
   placementPreferenceLabel,
@@ -17,6 +21,25 @@ import {
   type DeliveryPresence,
   type PlacementPreference,
 } from "@/lib/placement";
+
+const PLACEMENT_PREFERENCE_DISPLAY_ORDER: readonly PlacementPreference[] = [
+  "driveway",
+  "street_curb",
+  "left_side_of_driveway",
+  "right_side_of_driveway",
+  "parking_lot",
+  "alley_side_access",
+  "jobsite_custom_area",
+  "other",
+];
+
+const ACCESS_ISSUE_DISPLAY_OPTIONS = ACCESS_ISSUES.filter(
+  (issue) => issue !== "parked_vehicles" && issue !== "street_permit_required",
+);
+const PLACEMENT_PHOTO_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PLACEMENT_PHOTO_ACCEPT = "image/jpeg,image/png,image/webp";
+const PLACEMENT_PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const PLACEMENT_PHOTO_HELPER_TEXT = "JPG, PNG, or WEBP, up to 5MB";
 
 type BookingDraft = {
   zip?: string;
@@ -53,6 +76,10 @@ type BookingDraft = {
 
 function getBookingStorageKey() {
   return getTenantStorageKey(TENANT_STORAGE_KEYS.booking);
+}
+
+function getRetailPlacementPreferenceLabel(option: PlacementPreference) {
+  return option === "other" ? "Other" : placementPreferenceLabel[option];
 }
 
 function readDraft(): BookingDraft {
@@ -117,12 +144,14 @@ function cardInputClass(multiline = false) {
 function FormLabel({
   children,
   required = false,
+  bold = false,
 }: {
   children: ReactNode;
   required?: boolean;
+  bold?: boolean;
 }) {
   return (
-    <label className="text-sm font-medium text-slate-700">
+    <label className={`text-sm text-slate-700 ${bold ? "font-bold" : "font-medium"}`}>
       {children}
       {required ? (
         <>
@@ -189,10 +218,14 @@ type PlacementStepPageClientProps = {
 
 export default function PlacementStepPageClient({ content }: PlacementStepPageClientProps) {
   const router = useRouter();
+  const photoInputId = useId();
+  const photoErrorId = useId();
 
   const [hasHydratedDraft, setHasHydratedDraft] = useState(false);
   const hasEditedStateRef = useRef(false);
   const hasAttemptedStateAutofillRef = useRef(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const photoObjectUrlRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<BookingDraft>({});
   const initialDraft = draft;
   const serviceZip = (initialDraft.zip || initialDraft.customerZip || "").replace(/\D/g, "").slice(0, 5);
@@ -203,11 +236,15 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   const hasPickupDate = /^\d{4}-\d{2}-\d{2}$/.test(
     (initialDraft.pickupDate || initialDraft.priceQuote?.effectivePickupDate || "").trim(),
   );
-  const holdExpiresAtMs = Date.parse(initialDraft.holdExpiresAt || "");
+  const {
+    formattedTime: holdFormattedTime,
+    hasHoldExpiration,
+    holdExpired,
+  } = useBookingHoldCountdown(initialDraft.holdExpiresAt);
   const hasActiveHold =
-    Boolean(initialDraft.holdId && initialDraft.holdExpiresAt) &&
-    Number.isFinite(holdExpiresAtMs) &&
-    holdExpiresAtMs > Date.now();
+    Boolean(initialDraft.holdId) &&
+    hasHoldExpiration &&
+    !holdExpired;
   const hasRequiredPriorSteps =
     /^\d{5}$/.test(serviceZip) && hasDumpsterSelection && hasDeliveryDate && hasPickupDate && hasActiveHold;
 
@@ -239,6 +276,9 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   );
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isPhotoDragActive, setIsPhotoDragActive] = useState(false);
+  const [selectedPhotoName, setSelectedPhotoName] = useState("");
+  const [selectedPhotoPreviewUrl, setSelectedPhotoPreviewUrl] = useState("");
   const [showAccessDetails, setShowAccessDetails] = useState(
     (initialDraft.accessIssues?.length ?? 0) > 0 || !!initialDraft.gateInstructions,
   );
@@ -249,7 +289,6 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
   const [showSpecialInstructions, setShowSpecialInstructions] = useState(
     !!initialDraft.specialDeliveryInstructions,
   );
-  const [showTips, setShowTips] = useState(false);
 
   useEffect(() => {
     const nextDraft = readDraft();
@@ -277,6 +316,14 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
     setShowPhotoUpload(!!nextDraft.placementPhotoUrl);
     setShowSpecialInstructions(!!nextDraft.specialDeliveryInstructions);
     setHasHydratedDraft(true);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (photoObjectUrlRef.current) {
+        URL.revokeObjectURL(photoObjectUrlRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -425,6 +472,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
           .join(" • ")
       : defaultContactSummary;
   const photoSummary = placementPhotoUrl ? "Photo added" : "Add a photo of the drop area";
+  const photoPreviewUrl = selectedPhotoPreviewUrl || placementPhotoUrl;
   const notesSummary = specialDeliveryInstructions
     ? "Special instructions added"
     : "Add any extra notes for dispatch or the driver";
@@ -472,6 +520,88 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
     );
   }
 
+  function resetPhotoInput() {
+    if (photoInputRef.current) {
+      photoInputRef.current.value = "";
+    }
+  }
+
+  function clearSelectedPhotoPreview() {
+    if (photoObjectUrlRef.current) {
+      URL.revokeObjectURL(photoObjectUrlRef.current);
+      photoObjectUrlRef.current = null;
+    }
+    setSelectedPhotoPreviewUrl("");
+  }
+
+  function showSelectedPhotoPreview(file: File) {
+    clearSelectedPhotoPreview();
+    const previewUrl = URL.createObjectURL(file);
+    photoObjectUrlRef.current = previewUrl;
+    setSelectedPhotoPreviewUrl(previewUrl);
+  }
+
+  function removePlacementPhoto() {
+    setPlacementPhotoUrl("");
+    setSelectedPhotoName("");
+    setUploadError(null);
+    clearSelectedPhotoPreview();
+    resetPhotoInput();
+
+    const existing = readDraft();
+    sessionStorage.setItem(
+      getBookingStorageKey(),
+      JSON.stringify({
+        ...existing,
+        placementPhotoUrl: null,
+      }),
+    );
+  }
+
+  function getPlacementPhotoValidationError(file: File) {
+    if (!PLACEMENT_PHOTO_ALLOWED_TYPES.has(file.type)) {
+      return "Please upload a JPG, PNG, or WEBP image.";
+    }
+
+    if (file.size > PLACEMENT_PHOTO_MAX_SIZE_BYTES) {
+      return "Photo must be 5MB or smaller.";
+    }
+
+    return null;
+  }
+
+  function acceptPlacementPhoto(file: File | null | undefined) {
+    if (isUploadingPhoto) return;
+    if (!file) return;
+
+    const photoError = getPlacementPhotoValidationError(file);
+    if (photoError) {
+      setUploadError(photoError);
+      setSelectedPhotoName("");
+      clearSelectedPhotoPreview();
+      resetPhotoInput();
+      return;
+    }
+
+    setSelectedPhotoName(file.name);
+    showSelectedPhotoPreview(file);
+    void handlePhotoUpload(file);
+    resetPhotoInput();
+  }
+
+  function handlePhotoDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsPhotoDragActive(false);
+    acceptPlacementPhoto(event.dataTransfer.files?.[0]);
+  }
+
+  function handlePhotoDrag(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (!isUploadingPhoto) {
+      setIsPhotoDragActive(true);
+    }
+  }
+
   async function handlePhotoUpload(file: File) {
     setUploadError(null);
     setIsUploadingPhoto(true);
@@ -489,9 +619,12 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
       if (!res.ok || !json?.ok || !json?.url) {
         setUploadError(json?.error || content.photoFailedLabel);
+        setSelectedPhotoName("");
+        clearSelectedPhotoPreview();
         return;
       }
 
+      clearSelectedPhotoPreview();
       setPlacementPhotoUrl(json.url);
       setShowPhotoUpload(true);
 
@@ -505,6 +638,8 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
       );
     } catch {
       setUploadError(content.photoFailedLabel);
+      setSelectedPhotoName("");
+      clearSelectedPhotoPreview();
     } finally {
       setIsUploadingPhoto(false);
     }
@@ -559,23 +694,18 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
             <h1 className="mt-6 text-3xl font-semibold text-[#0F172A]">Your details</h1>
             <p className="text-[#475569]">
-              Add your contact information and delivery details now that your date has been selected.
+              Tell us where to deliver and how to reach you.
             </p>
           </div>
 
           <section className="mt-8 space-y-5">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-sm text-slate-600">
-                Service ZIP: <span className="font-semibold text-slate-900">{serviceZip}</span>
-              </div>
-            </div>
+            <HoldCountdownBanner
+              formattedTime={holdExpired ? null : holdFormattedTime}
+            />
 
             <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="space-y-1">
                 <h2 className="text-lg font-semibold text-slate-900">Contact & delivery address</h2>
-                <p className="text-sm leading-6 text-slate-500">
-                  This is where we will deliver the dumpster and how we will contact you about the job.
-                </p>
               </div>
 
               <div className="mt-5 grid gap-5">
@@ -684,31 +814,12 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
               ) : null}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm leading-6 text-slate-600">
-                <span className="font-semibold text-slate-900">{content.tipsLabel}</span>
-                <span>{content.tipsSummary}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowTips((current) => !current)}
-                  className="font-semibold text-[#F97316] hover:underline"
-                >
-                  {showTips ? "Hide" : "Read more"}
-                </button>
-              </div>
-              {showTips ? (
-                <div className="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600">
-                  {content.tipsExpanded}
-                </div>
-              ) : null}
-            </div>
-
             <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <FormLabel required>Placement preference</FormLabel>
+                  <FormLabel required bold>Placement preference</FormLabel>
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {PLACEMENT_PREFERENCES.map((option) => (
+                    {PLACEMENT_PREFERENCE_DISPLAY_ORDER.map((option) => (
                       <label
                         key={option}
                         className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 text-sm transition ${
@@ -724,7 +835,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                           checked={placementPreference === option}
                           onChange={() => setPlacementPreference(option)}
                         />
-                        <span className="font-medium">{placementPreferenceLabel[option]}</span>
+                        <span className="font-medium">{getRetailPlacementPreferenceLabel(option)}</span>
                       </label>
                     ))}
                   </div>
@@ -752,7 +863,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                 ) : null}
 
                 <div className="space-y-2">
-                  <FormLabel required>Delivery presence</FormLabel>
+                  <FormLabel required bold>Delivery presence</FormLabel>
                   <div className="grid gap-2">
                     {DELIVERY_PRESENCE_OPTIONS.map((option) => (
                       <label
@@ -833,7 +944,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                       {showAccessDetails ? (
                         <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                           <div className="grid gap-2 sm:grid-cols-2">
-                            {ACCESS_ISSUES.map((issue) => {
+                            {ACCESS_ISSUE_DISPLAY_OPTIONS.map((issue) => {
                               const checked = accessIssues.includes(issue);
 
                               return (
@@ -913,7 +1024,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                               className={cardInputClass()}
                               value={alternateContactName}
                               onChange={(e) => setAlternateContactName(e.target.value)}
-                              placeholder="Optional"
+                              placeholder="e.g., Jane Smith"
                             />
                           </div>
                           <div className="space-y-2">
@@ -922,7 +1033,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                               className={cardInputClass()}
                               value={alternateContactPhone}
                               onChange={(e) => setAlternateContactPhone(formatPhoneUS(digitsOnly(e.target.value)))}
-                              placeholder="Optional"
+                              placeholder="e.g., (315) 555-0000"
                               inputMode="tel"
                             />
                           </div>
@@ -942,44 +1053,84 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
                       {showPhotoUpload ? (
                         <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
                           <input
+                            id={photoInputId}
+                            ref={photoInputRef}
                             type="file"
-                            accept="image/jpeg,image/png,image/webp"
+                            accept={PLACEMENT_PHOTO_ACCEPT}
+                            disabled={isUploadingPhoto}
+                            aria-describedby={uploadError ? photoErrorId : undefined}
                             onChange={(e) => {
                               const file = e.target.files?.[0];
-                              if (file) void handlePhotoUpload(file);
+                              acceptPlacementPhoto(file);
                             }}
-                            className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-2xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800"
+                            className="sr-only"
                           />
+                          <div
+                            onDragEnter={handlePhotoDrag}
+                            onDragOver={handlePhotoDrag}
+                            onDragLeave={(event) => {
+                              event.preventDefault();
+                              setIsPhotoDragActive(false);
+                            }}
+                            onDrop={handlePhotoDrop}
+                            className={`rounded-xl border border-dashed px-5 py-5 text-center transition ${
+                              isPhotoDragActive
+                                ? "border-[#F97316] bg-[#FFF7ED] ring-4 ring-orange-100"
+                                : "border-slate-300 bg-white hover:border-slate-400"
+                            } ${isUploadingPhoto ? "cursor-wait opacity-75" : ""}`}
+                          >
+                            <CameraIcon className="mx-auto h-8 w-8 text-slate-400" aria-hidden="true" />
+                            <div className="mt-3 text-sm font-medium text-slate-700">
+                              Drag a photo here, or
+                            </div>
+                            <button
+                              type="button"
+                              disabled={isUploadingPhoto}
+                              onClick={() => photoInputRef.current?.click()}
+                              aria-label="Choose delivery photo"
+                              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <ArrowUpTrayIcon className="h-4 w-4" aria-hidden="true" />
+                              Choose photo
+                            </button>
+                            <div className="mt-2 text-xs text-slate-500">{PLACEMENT_PHOTO_HELPER_TEXT}</div>
+                          </div>
                           {isUploadingPhoto ? <div className="text-sm text-slate-500">{content.photoUploadingLabel}</div> : null}
                           {uploadError ? (
-                            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                            <div
+                              id={photoErrorId}
+                              className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+                              role="alert"
+                            >
                               {uploadError}
                             </div>
                           ) : null}
-                          {placementPhotoUrl ? (
+                          {photoPreviewUrl ? (
                             <div className="space-y-3">
-                              <img
-                                src={placementPhotoUrl}
-                                alt="Placement preview"
-                                className="h-40 w-full rounded-2xl border border-slate-200 object-cover"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPlacementPhotoUrl("");
-                                  const existing = readDraft();
-                                  sessionStorage.setItem(
-                                    getBookingStorageKey(),
-                                    JSON.stringify({
-                                      ...existing,
-                                      placementPhotoUrl: null,
-                                    }),
-                                  );
-                                }}
-                                className="text-sm font-semibold text-slate-600 hover:text-slate-900"
-                              >
-                                Remove photo
-                              </button>
+                              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                <img
+                                  src={photoPreviewUrl}
+                                  alt="Selected delivery photo preview"
+                                  className="h-40 w-full object-cover"
+                                />
+                                <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                  <div className="min-w-0 text-sm text-slate-600">
+                                    {selectedPhotoName ? (
+                                      <span className="block truncate">{selectedPhotoName}</span>
+                                    ) : (
+                                      <span>Delivery photo added</span>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={removePlacementPhoto}
+                                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900"
+                                  >
+                                    <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                                    Remove photo
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           ) : null}
                         </div>

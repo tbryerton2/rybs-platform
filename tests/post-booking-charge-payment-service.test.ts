@@ -4,10 +4,15 @@ import assert from "node:assert/strict";
 import {
   chargePendingBookingChargeWithSavedCard,
   PostBookingChargePaymentServiceError,
+  sendPostBookingChargeReceipt,
   type PostBookingChargePaymentSupabaseClient,
 } from "../src/lib/payments/post-booking-charge-payment-service.ts";
 import type { QueueBookingEmailInput } from "../src/lib/booking-messages.ts";
-import type { PaymentProviderAdapter, PaymentProviderChargeInput } from "../src/lib/payments/types.ts";
+import type {
+  PaymentProviderAdapter,
+  PaymentProviderChargeInput,
+  PaymentProviderSavedMethodVerificationInput,
+} from "../src/lib/payments/types.ts";
 
 const BUSINESS_ID = "11111111-1111-4111-8111-111111111111";
 const BOOKING_ID = "22222222-2222-4222-8222-222222222222";
@@ -43,6 +48,12 @@ function bookingCharge(overrides: MockRow = {}): MockRow {
     provider_payment_id: null,
     paid_at: null,
     failed_at: null,
+    customer_receipt_email_status: null,
+    customer_receipt_email_to: null,
+    customer_receipt_email_message_id: null,
+    customer_receipt_email_sent_at: null,
+    customer_receipt_email_failed_at: null,
+    customer_receipt_email_error: null,
     created_at: "2026-05-29T12:00:01.000Z",
     updated_at: "2026-05-29T12:00:01.000Z",
     ...overrides,
@@ -52,6 +63,7 @@ function bookingCharge(overrides: MockRow = {}): MockRow {
 function booking(overrides: MockRow = {}): MockRow {
   return {
     id: BOOKING_ID,
+    business_id: BUSINESS_ID,
     customer_id: CUSTOMER_ID,
     booking_ref: "BK-123456",
     customer_first_name: "Taylor",
@@ -204,6 +216,14 @@ function createMockSupabase(initialTables: MockTables) {
       return this;
     }
 
+    then<TResult1 = { data: MockRow[]; error: null }, TResult2 = never>(
+      onfulfilled?: ((value: { data: MockRow[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    ) {
+      const rows = applyQuery(tables[this.table] ?? [], this.filters, this.orders, this.limitCount);
+      return Promise.resolve({ data: rows.map((row) => ({ ...row })), error: null }).then(onfulfilled, onrejected);
+    }
+
     maybeSingle() {
       const rows = applyQuery(tables[this.table] ?? [], this.filters, this.orders, this.limitCount);
       return Promise.resolve({ data: rows[0] ?? null, error: null });
@@ -278,9 +298,19 @@ function createMockSupabase(initialTables: MockTables) {
 
 function createAdapter(result: "paid" | "failed" = "paid") {
   const calls: PaymentProviderChargeInput[] = [];
+  const verificationCalls: PaymentProviderSavedMethodVerificationInput[] = [];
   const adapter: PaymentProviderAdapter = {
     provider: "square",
     environment: "sandbox",
+    async verifySavedPaymentMethod(input) {
+      verificationCalls.push(input);
+      return {
+        ok: true,
+        providerPaymentMethodId: input.providerPaymentMethodId,
+        providerCustomerId: input.providerCustomerId,
+        enabled: true,
+      };
+    },
     async charge(input) {
       calls.push(input);
       if (result === "failed") {
@@ -305,17 +335,46 @@ function createAdapter(result: "paid" | "failed" = "paid") {
     },
   };
 
-  return { adapter, calls };
+  return { adapter, calls, verificationCalls };
 }
 
 async function callService(
   tables: MockTables,
   adapterResult: "paid" | "failed" = "paid",
   queueResult: "queued" | "failed" = "queued",
+  processResult: "sent" | "failed" | "throws" = "sent",
+  verificationResult: "available" | "unavailable" | "temporary_failure" = "available",
 ) {
   const supabase = createMockSupabase(tables);
   const adapter = createAdapter(adapterResult);
+  if (verificationResult === "unavailable") {
+    adapter.adapter.verifySavedPaymentMethod = async (input) => {
+      adapter.verificationCalls.push(input);
+      return {
+        ok: false,
+        providerPaymentMethodId: input.providerPaymentMethodId,
+        providerCustomerId: input.providerCustomerId,
+        enabled: false,
+        failureCode: "SQUARE_CARD_DISABLED",
+        failureMessage: "Square card is not available for payments.",
+      };
+    };
+  }
+  if (verificationResult === "temporary_failure") {
+    adapter.adapter.verifySavedPaymentMethod = async (input) => {
+      adapter.verificationCalls.push(input);
+      return {
+        ok: false,
+        providerPaymentMethodId: input.providerPaymentMethodId,
+        providerCustomerId: input.providerCustomerId,
+        enabled: true,
+        failureCode: "SQUARE_NETWORK_ERROR",
+        failureMessage: "Unable to reach Square.",
+      };
+    };
+  }
   const queuedEmails: QueueBookingEmailInput[] = [];
+  const processedMessageIds: string[] = [];
   const logger = {
     errors: [] as unknown[],
     warnings: [] as unknown[],
@@ -362,10 +421,101 @@ async function callService(
           sentAt: null,
         };
       },
+      processQueuedBookingMessages: async (input) => {
+        processedMessageIds.push(input.messageId ?? "");
+        if (processResult === "throws") {
+          throw new Error("Immediate processor failed.");
+        }
+
+        const charge = supabase.tables.booking_charges.find((row) => row.id === BOOKING_CHARGE_ID);
+        if (!charge) return { ok: false, processed: 0 };
+
+        if (processResult === "failed") {
+          Object.assign(charge, {
+            customer_receipt_email_status: "failed",
+            customer_receipt_email_sent_at: null,
+            customer_receipt_email_failed_at: "2026-05-29T12:04:00.000Z",
+            customer_receipt_email_error: "SES rejected the message.",
+          });
+          return { ok: true, processed: 0 };
+        }
+
+        Object.assign(charge, {
+          customer_receipt_email_status: "sent",
+          customer_receipt_email_sent_at: "2026-05-29T12:04:00.000Z",
+          customer_receipt_email_failed_at: null,
+          customer_receipt_email_error: null,
+        });
+        return { ok: true, processed: 1 };
+      },
     },
   );
 
-  return { promise, supabase, adapter, queuedEmails, logger };
+  return { promise, supabase, adapter, queuedEmails, processedMessageIds, logger };
+}
+
+async function callReceiptService(tables: MockTables) {
+  const supabase = createMockSupabase(tables);
+  const queuedEmails: QueueBookingEmailInput[] = [];
+  const processedMessageIds: string[] = [];
+  const logger = {
+    errors: [] as unknown[],
+    warnings: [] as unknown[],
+    error(...args: unknown[]) {
+      this.errors.push(args);
+    },
+    warn(...args: unknown[]) {
+      this.warnings.push(args);
+    },
+  };
+
+  const promise = sendPostBookingChargeReceipt(
+    {
+      businessId: BUSINESS_ID,
+      bookingId: BOOKING_ID,
+      bookingChargeId: BOOKING_CHARGE_ID,
+    },
+    {
+      supabase: supabase.client as unknown as PostBookingChargePaymentSupabaseClient,
+      logger,
+      queueBookingEmail: async (input) => {
+        queuedEmails.push(input);
+        return {
+          id: "message-1",
+          businessId: input.businessId,
+          bookingId: input.bookingId,
+          bookingChargeId: input.bookingChargeId ?? null,
+          channel: "email",
+          direction: "outbound",
+          template: input.template,
+          to: input.to,
+          subject: input.subject,
+          body: input.body,
+          provider: input.provider ?? "resend",
+          providerMessageId: null,
+          status: "queued",
+          error: null,
+          createdAt: "2026-05-29T12:03:00.000Z",
+          sentAt: null,
+        };
+      },
+      processQueuedBookingMessages: async (input) => {
+        processedMessageIds.push(input.messageId ?? "");
+        const charge = supabase.tables.booking_charges.find((row) => row.id === BOOKING_CHARGE_ID);
+        if (!charge) return { ok: false, processed: 0 };
+
+        Object.assign(charge, {
+          customer_receipt_email_status: "sent",
+          customer_receipt_email_sent_at: "2026-05-29T12:04:00.000Z",
+          customer_receipt_email_failed_at: null,
+          customer_receipt_email_error: null,
+        });
+        return { ok: true, processed: 1 };
+      },
+    },
+  );
+
+  return { promise, supabase, queuedEmails, processedMessageIds, logger };
 }
 
 test("chargePendingBookingChargeWithSavedCard rejects a missing charge without calling the provider", async () => {
@@ -398,6 +548,98 @@ test("chargePendingBookingChargeWithSavedCard requires an active saved card", as
   assert.equal(adapter.calls.length, 0);
 });
 
+test("chargePendingBookingChargeWithSavedCard rejects saved cards missing Square IDs before creating a payment", async () => {
+  const { promise, supabase, adapter } = await callService(
+    defaultTables({
+      customer_payment_methods: [customerPaymentMethod({ provider_payment_method_id: "" })],
+    }),
+  );
+
+  await assert.rejects(
+    promise,
+    (error) =>
+      error instanceof PostBookingChargePaymentServiceError &&
+      error.code === "SAVED_CARD_INVALID",
+  );
+  assert.equal(adapter.verificationCalls.length, 0);
+  assert.equal(adapter.calls.length, 0);
+  assert.equal(supabase.tables.booking_payments.length, 0);
+  assert.equal(supabase.tables.booking_charges[0].status, "pending");
+});
+
+test("chargePendingBookingChargeWithSavedCard rejects cards unavailable from Square before creating a payment", async () => {
+  const { promise, supabase, adapter, logger } = await callService(
+    defaultTables(),
+    "paid",
+    "queued",
+    "sent",
+    "unavailable",
+  );
+
+  await assert.rejects(
+    promise,
+    (error) =>
+      error instanceof PostBookingChargePaymentServiceError &&
+      error.code === "SAVED_CARD_UNAVAILABLE",
+  );
+  assert.equal(adapter.verificationCalls.length, 1);
+  assert.equal(adapter.calls.length, 0);
+  assert.equal(supabase.tables.booking_payments.length, 0);
+  assert.equal(supabase.tables.booking_charges[0].status, "pending");
+  assert.match(String(logger.warnings[0]?.[0]), /card unavailable from Square/);
+});
+
+test("chargePendingBookingChargeWithSavedCard keeps temporary Square verification failures retryable", async () => {
+  const { promise, supabase, adapter } = await callService(
+    defaultTables(),
+    "paid",
+    "queued",
+    "sent",
+    "temporary_failure",
+  );
+
+  await assert.rejects(
+    promise,
+    (error) =>
+      error instanceof PostBookingChargePaymentServiceError &&
+      error.code === "SAVED_CARD_VERIFICATION_FAILED",
+  );
+  assert.equal(adapter.verificationCalls.length, 1);
+  assert.equal(adapter.calls.length, 0);
+  assert.equal(supabase.tables.booking_payments.length, 0);
+  assert.equal(supabase.tables.booking_charges[0].status, "pending");
+  assert.equal(supabase.tables.customer_payment_methods[0].status, "active");
+});
+
+test("chargePendingBookingChargeWithSavedCard uses a usable saved card when a newer saved-method row is invalid", async () => {
+  const usablePaymentMethodId = "55555555-5555-4555-8555-555555555555";
+  const { promise, adapter } = await callService(
+    defaultTables({
+      customer_payment_methods: [
+        customerPaymentMethod({
+          id: "44444444-4444-4444-8444-444444444444",
+          provider_payment_method_id: "",
+          created_at: "2026-05-29T13:00:00.000Z",
+        }),
+        customerPaymentMethod({
+          id: usablePaymentMethodId,
+          provider_payment_method_id: "ccof:older-usable-card",
+          created_at: "2026-05-29T12:00:00.000Z",
+        }),
+      ],
+    }),
+  );
+
+  const result = await promise;
+
+  assert.equal(result.ok, true);
+  assert.equal(adapter.verificationCalls.length, 1);
+  assert.equal(adapter.verificationCalls[0].providerPaymentMethodId, "ccof:older-usable-card");
+  assert.equal(adapter.calls.length, 1);
+  assert.equal(adapter.calls[0].paymentSourceId, "ccof:older-usable-card");
+  assert.equal(result.customerPaymentMethodId, usablePaymentMethodId);
+});
+
 test("chargePendingBookingChargeWithSavedCard returns an existing paid payment without calling the provider", async () => {
   const { promise, adapter } = await callService(
     defaultTables({
@@ -420,8 +662,35 @@ test("chargePendingBookingChargeWithSavedCard returns an existing paid payment w
   assert.equal(adapter.calls.length, 0);
 });
 
-test("chargePendingBookingChargeWithSavedCard charges the saved card and marks charge paid", async () => {
-  const { promise, supabase, adapter, queuedEmails } = await callService(defaultTables());
+test("chargePendingBookingChargeWithSavedCard does not queue a duplicate receipt for an already tracked paid charge", async () => {
+  const { promise, adapter, queuedEmails } = await callService(
+    defaultTables({
+      booking_charges: [
+        bookingCharge({
+          status: "paid",
+          customer_receipt_email_status: "sent",
+          customer_receipt_email_message_id: "99999999-9999-4999-8999-999999999999",
+        }),
+      ],
+      booking_payments: [
+        bookingPayment({
+          status: "paid",
+          provider_payment_id: "existing-square-payment",
+          paid_at: "2026-05-29T12:00:00.000Z",
+        }),
+      ],
+    }),
+  );
+
+  const result = await promise;
+
+  assert.equal(result.ok, true);
+  assert.equal(adapter.calls.length, 0);
+  assert.equal(queuedEmails.length, 0);
+});
+
+test("chargePendingBookingChargeWithSavedCard charges the saved card and immediately sends the receipt", async () => {
+  const { promise, supabase, adapter, queuedEmails, processedMessageIds } = await callService(defaultTables());
 
   const result = await promise;
 
@@ -439,22 +708,73 @@ test("chargePendingBookingChargeWithSavedCard charges the saved card and marks c
   assert.match(adapter.calls[0].description, /^BK-123456:/);
   assert.equal(supabase.tables.booking_payments[0].status, "paid");
   assert.equal(supabase.tables.booking_payments[0].booking_charge_id, BOOKING_CHARGE_ID);
+  assert.equal(supabase.tables.booking_payments[0].payment_collection_type, "square_saved_card");
   assert.equal(supabase.tables.booking_charges[0].status, "paid");
   assert.equal(supabase.tables.booking_charges[0].customer_payment_method_id, PAYMENT_METHOD_ID);
   assert.equal(supabase.tables.booking_charges[0].provider_payment_id, "square-payment-1");
   assert.equal(queuedEmails.length, 1);
+  assert.deepEqual(processedMessageIds, ["message-1"]);
   assert.equal(queuedEmails[0].bookingId, BOOKING_ID);
   assert.equal(queuedEmails[0].bookingChargeId, BOOKING_CHARGE_ID);
   assert.equal(queuedEmails[0].template, "post_booking_charge_paid");
   assert.equal(queuedEmails[0].to, "customer@example.com");
-  assert.match(queuedEmails[0].subject, /additional charge paid/);
+  assert.equal(queuedEmails[0].provider, "ses");
+  assert.match(queuedEmails[0].subject, /Additional charge for your dumpster rental/);
   assert.match(queuedEmails[0].body, /Tan Can Man charged \$25\.00/);
   assert.match(queuedEmails[0].body, /Booking reference: BK-123456/);
   assert.match(queuedEmails[0].body, /Card: VISA ending 1111/);
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "sent");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_to, "customer@example.com");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_message_id, "message-1");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_sent_at, "2026-05-29T12:04:00.000Z");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_error, null);
+});
+
+test("sendPostBookingChargeReceipt queues and sends a receipt for a paid external charge", async () => {
+  const { promise, supabase, queuedEmails, processedMessageIds } = await callReceiptService(
+    defaultTables({
+      booking_charges: [
+        bookingCharge({
+          status: "paid",
+          provider: null,
+          provider_payment_id: null,
+          paid_at: "2026-05-29T12:01:00.000Z",
+          customer_receipt_email_status: "not_applicable",
+          customer_receipt_email_error: "External payment recorded by admin.",
+        }),
+      ],
+      booking_payments: [
+        bookingPayment({
+          provider: "external",
+          status: "paid",
+          payment_collection_type: "external",
+          external_payment_method: "cash",
+          provider_payment_id: null,
+          paid_at: "2026-05-29T12:01:00.000Z",
+        }),
+      ],
+    }),
+  );
+
+  const result = await promise;
+
+  assert.equal(result.ok, true);
+  assert.equal(queuedEmails.length, 1);
+  assert.deepEqual(processedMessageIds, ["message-1"]);
+  assert.equal(queuedEmails[0].bookingId, BOOKING_ID);
+  assert.equal(queuedEmails[0].bookingChargeId, BOOKING_CHARGE_ID);
+  assert.equal(queuedEmails[0].template, "post_booking_charge_paid");
+  assert.equal(queuedEmails[0].provider, "ses");
+  assert.match(queuedEmails[0].body, /Tan Can Man charged \$25\.00/);
+  assert.doesNotMatch(queuedEmails[0].body, /Card:/);
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "sent");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_to, "customer@example.com");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_message_id, "message-1");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_error, null);
 });
 
 test("chargePendingBookingChargeWithSavedCard skips receipt queue when customer email is missing", async () => {
-  const { promise, supabase, queuedEmails, logger } = await callService(
+  const { promise, supabase, queuedEmails, processedMessageIds, logger } = await callService(
     defaultTables({
       bookings: [booking({ customer_email: null })],
     }),
@@ -465,11 +785,34 @@ test("chargePendingBookingChargeWithSavedCard skips receipt queue when customer 
   assert.equal(result.ok, true);
   assert.equal(supabase.tables.booking_charges[0].status, "paid");
   assert.equal(queuedEmails.length, 0);
+  assert.equal(processedMessageIds.length, 0);
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "not_applicable");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_error, "Customer email missing.");
   assert.equal(logger.warnings.length, 1);
 });
 
 test("chargePendingBookingChargeWithSavedCard keeps paid charge successful when receipt queue fails", async () => {
-  const { promise, supabase, queuedEmails, logger } = await callService(defaultTables(), "paid", "failed");
+  const { promise, supabase, queuedEmails, processedMessageIds, logger } = await callService(defaultTables(), "paid", "failed");
+
+  const result = await promise;
+
+  assert.equal(result.ok, true);
+  assert.equal(supabase.tables.booking_payments[0].status, "paid");
+  assert.equal(supabase.tables.booking_charges[0].status, "paid");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "failed");
+  assert.match(String(supabase.tables.booking_charges[0].customer_receipt_email_error), /Queue insert failed/);
+  assert.equal(queuedEmails.length, 1);
+  assert.equal(processedMessageIds.length, 0);
+  assert.equal(logger.errors.length, 1);
+});
+
+test("chargePendingBookingChargeWithSavedCard keeps paid charge successful when immediate receipt send fails", async () => {
+  const { promise, supabase, queuedEmails, processedMessageIds } = await callService(
+    defaultTables(),
+    "paid",
+    "queued",
+    "failed",
+  );
 
   const result = await promise;
 
@@ -477,11 +820,13 @@ test("chargePendingBookingChargeWithSavedCard keeps paid charge successful when 
   assert.equal(supabase.tables.booking_payments[0].status, "paid");
   assert.equal(supabase.tables.booking_charges[0].status, "paid");
   assert.equal(queuedEmails.length, 1);
-  assert.equal(logger.errors.length, 1);
+  assert.deepEqual(processedMessageIds, ["message-1"]);
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "failed");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_error, "SES rejected the message.");
 });
 
 test("chargePendingBookingChargeWithSavedCard marks payment and charge failed when provider fails", async () => {
-  const { promise, supabase, adapter, queuedEmails } = await callService(defaultTables(), "failed");
+  const { promise, supabase, adapter, queuedEmails, processedMessageIds } = await callService(defaultTables(), "failed");
 
   await assert.rejects(
     promise,
@@ -499,4 +844,5 @@ test("chargePendingBookingChargeWithSavedCard marks payment and charge failed wh
   assert.equal(supabase.tables.booking_charges[0].provider, "square");
   assert.equal(supabase.tables.booking_charges[0].provider_environment, "sandbox");
   assert.equal(queuedEmails.length, 0);
+  assert.equal(processedMessageIds.length, 0);
 });

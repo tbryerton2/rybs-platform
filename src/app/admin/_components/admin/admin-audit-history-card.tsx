@@ -16,7 +16,7 @@ export function AdminAuditHistoryCard({
   formatDateTime,
 }: AdminAuditHistoryCardProps) {
   return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+    <div className="min-w-0 rounded-[14px] border border-slate-200 bg-slate-50/70 px-4 py-4">
       <div className="text-sm font-semibold text-slate-900">{title}</div>
       <div className="mt-3 space-y-1 text-sm text-slate-600">
         <div className="min-w-0">

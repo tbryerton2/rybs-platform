@@ -255,7 +255,7 @@ export default async function AdminCustomersPage({
         />
       </section>
 
-      <section className="mb-8 rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
+      <section className="mb-8 rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search customers</h2>
 
         <form className="mt-5 flex flex-col gap-3 sm:flex-row">
@@ -265,18 +265,18 @@ export default async function AdminCustomersPage({
             name="q"
             defaultValue={query}
             placeholder="Email, name, or phone"
-            className="h-12 flex-1 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+            className="h-12 flex-1 rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
           />
           <button
             type="submit"
-            className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="admin-btn admin-btn-primary h-12 px-5"
           >
             Search
           </button>
           {query ? (
             <Link
               href={buildCustomersHref(selectedView)}
-              className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="admin-btn admin-btn-secondary h-12 px-5"
             >
               Clear
             </Link>
@@ -284,7 +284,7 @@ export default async function AdminCustomersPage({
         </form>
       </section>
 
-      <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+      <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="text-lg font-semibold tracking-tight text-slate-900">Customer list</div>
@@ -299,7 +299,7 @@ export default async function AdminCustomersPage({
 
         {customers.length === 0 ? (
           <div className="px-6 py-16">
-            <div className="mx-auto max-w-xl rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
+            <div className="mx-auto max-w-xl rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
               <div className="text-lg font-semibold text-slate-900">No customers found for this search</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 Try the current email, customer name, or phone number. If you are looking from a booking, older booking contact details may differ from the current account profile.
@@ -307,13 +307,13 @@ export default async function AdminCustomersPage({
               <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                 <Link
                   href={buildCustomersHref(selectedView)}
-                  className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  className="admin-btn admin-btn-secondary h-11 px-5"
                 >
                   Clear search
                 </Link>
                 <Link
                   href="/admin/docs/customer-booking-identity"
-                  className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-11 px-5"
                 >
                   Learn more
                 </Link>

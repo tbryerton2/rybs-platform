@@ -33,6 +33,19 @@ type HoldRow = {
   status: string | null;
 };
 
+type PaymentExceptionRow = {
+  id: string;
+  created_at: string | null;
+  exception_type: string;
+  failure_reason: string;
+  provider_payment_id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  status: string | null;
+};
+
 type ActivityItem =
   | {
       type: "booking";
@@ -113,6 +126,15 @@ function formatDate(value: string | null) {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+function formatUsdFromCents(value: number | null | undefined, currency = "USD") {
+  if (value == null || !Number.isFinite(value)) return "—";
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).format(Number(value) / 100);
+}
+
 function statusPillClasses(status: string) {
   const normalized = status.toLowerCase();
 
@@ -146,7 +168,7 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+    <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
@@ -173,7 +195,7 @@ function StatusCard({
         : "bg-slate-100 text-slate-700 ring-slate-200";
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+    <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
       <div className="text-sm font-medium text-slate-500">{label}</div>
       <div className="mt-3 flex items-center gap-3">
         <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ring-1 ${toneClasses}`}>
@@ -194,7 +216,7 @@ function MetricCard({
   hint?: string;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+    <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
       <div className="text-sm font-medium text-slate-500">{label}</div>
       <div className={`mt-3 text-3xl font-semibold ${metricTone(value)}`}>{value}</div>
       {hint ? <p className="mt-2 text-sm text-slate-500">{hint}</p> : null}
@@ -204,7 +226,7 @@ function MetricCard({
 
 function ActivityRow({ item }: { item: ActivityItem }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-[14px] border border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span
@@ -256,7 +278,7 @@ function AlertRow({
       : "bg-amber-50 text-amber-700 ring-amber-200";
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-[14px] border border-slate-200 bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <div className="flex items-center gap-3">
           <div className="text-sm font-semibold text-slate-900">{label}</div>
@@ -289,7 +311,7 @@ function QuickActionCard({
   return (
     <Link
       href={href}
-      className="group rounded-3xl border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm"
+      className="group rounded-[14px] border border-slate-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm"
     >
       <div className="text-base font-semibold text-slate-900">{title}</div>
       <p className="mt-2 text-sm text-slate-500">{description}</p>
@@ -316,6 +338,8 @@ export default async function AdminSystemPage() {
     recentHoldsResult,
     expiredActiveHoldsResult,
     incompleteBookingsResult,
+    openPaymentExceptionsResult,
+    recentPaymentExceptionsResult,
   ] = await Promise.all([
     supabaseAdmin
       .from("bookings")
@@ -385,6 +409,20 @@ export default async function AdminSystemPage() {
       .eq("business_id", adminSession.business.id)
       .neq("status", "cancelled")
       .or("and(customer_first_name.is.null,customer_last_name.is.null),customer_zip.is.null,delivery_date.is.null"),
+
+    supabaseAdmin
+      .from("payment_exceptions")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", adminSession.business.id)
+      .in("status", ["open", "reviewing"]),
+
+    supabaseAdmin
+      .from("payment_exceptions")
+      .select("id, created_at, exception_type, failure_reason, provider_payment_id, amount_cents, currency, customer_name, customer_email, status")
+      .eq("business_id", adminSession.business.id)
+      .in("status", ["open", "reviewing"])
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   const queryErrors = [
@@ -398,6 +436,8 @@ export default async function AdminSystemPage() {
     recentHoldsResult.error,
     expiredActiveHoldsResult.error,
     incompleteBookingsResult.error,
+    openPaymentExceptionsResult.error,
+    recentPaymentExceptionsResult.error,
   ].filter(Boolean);
 
   const systemOperational = queryErrors.length === 0;
@@ -412,6 +452,8 @@ export default async function AdminSystemPage() {
 
   const expiredActiveHolds = expiredActiveHoldsResult.count ?? 0;
   const incompleteBookings = incompleteBookingsResult.count ?? 0;
+  const openPaymentExceptions = openPaymentExceptionsResult.count ?? 0;
+  const recentPaymentExceptions = (recentPaymentExceptionsResult.data ?? []) as PaymentExceptionRow[];
 
   const bookingItems: ActivityItem[] = ((recentBookingsResult.data ?? []) as BookingRow[]).map((row) => ({
     type: "booking",
@@ -463,7 +505,7 @@ export default async function AdminSystemPage() {
               tone={systemOperational ? "good" : "warning"}
             />
 
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
               <div className="text-sm font-medium text-slate-500">Last booking created</div>
               <div className="mt-3 text-base font-semibold text-slate-900">
                 {lastBooking ? formatDateTime(lastBooking.created_at) : "No bookings yet"}
@@ -478,7 +520,7 @@ export default async function AdminSystemPage() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+            <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
               <div className="text-sm font-medium text-slate-500">Last hold created</div>
               <div className="mt-3 text-base font-semibold text-slate-900">
                 {lastHold ? formatDateTime(lastHold.created_at) : "No holds yet"}
@@ -495,7 +537,7 @@ export default async function AdminSystemPage() {
           </div>
 
           {!systemOperational ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="mt-4 rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               One or more data queries failed while loading this page. The app may still be running, but this page could not confirm all system signals.
             </div>
           ) : null}
@@ -538,7 +580,7 @@ export default async function AdminSystemPage() {
               {recentActivity.length > 0 ? (
                 recentActivity.map((item) => <ActivityRow key={`${item.type}-${item.id}`} item={item} />)
               ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                <div className="rounded-[14px] border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
                   No recent activity found.
                 </div>
               )}
@@ -569,8 +611,51 @@ export default async function AdminSystemPage() {
                   description="Active bookings missing customer name, ZIP, or delivery date."
                   href="/admin/bookings"
                 />
+                <AlertRow
+                  label="Payment exceptions"
+                  count={openPaymentExceptions}
+                  description="Captured payments or webhook events that need staff review."
+                  href="#payment-exceptions"
+                />
               </div>
             </SectionCard>
+
+            <div id="payment-exceptions">
+              <SectionCard
+                title="Payment exceptions"
+                description="Durable records for payment issues that need manual review."
+              >
+                <div className="space-y-3">
+                  {recentPaymentExceptions.length > 0 ? (
+                    recentPaymentExceptions.map((exception) => (
+                      <div key={exception.id} className="rounded-[14px] border border-rose-200 bg-rose-50/70 px-4 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-slate-900">
+                              {exception.exception_type.replaceAll("_", " ")}
+                            </div>
+                            <div className="mt-1 text-sm text-rose-800">{exception.failure_reason}</div>
+                          </div>
+                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+                            {exception.status ?? "open"}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+                          <div>Created: {formatDateTime(exception.created_at)}</div>
+                          <div>Amount: {formatUsdFromCents(exception.amount_cents, exception.currency ?? "USD")}</div>
+                          <div>Customer: {exception.customer_name || exception.customer_email || "—"}</div>
+                          <div className="break-all">Square payment: {exception.provider_payment_id || "—"}</div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-[14px] border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                      No open payment exceptions.
+                    </div>
+                  )}
+                </div>
+              </SectionCard>
+            </div>
 
             <SectionCard
               title="Quick actions"

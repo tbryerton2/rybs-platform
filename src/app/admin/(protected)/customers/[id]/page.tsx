@@ -244,7 +244,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 <a
                   key={action.label}
                   href={action.href}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-10 px-4"
                 >
                   {action.label}
                 </a>
@@ -252,7 +252,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 <span
                   key={action.label}
                   aria-disabled="true"
-                  className="inline-flex h-10 cursor-not-allowed items-center rounded-2xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-400"
+                  className="inline-flex h-10 cursor-not-allowed items-center rounded-[14px] border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-400"
                 >
                   {action.label}
                 </span>
@@ -320,7 +320,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
       </section>
 
       <div className="mt-8 space-y-6">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="mb-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -338,14 +338,14 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
 
           <div className="space-y-3">
             {bookings.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+              <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
                 No bookings are linked to this customer yet.
               </div>
             ) : (
               <>
                 <div
                   role="row"
-                  className="hidden rounded-[22px] border border-slate-200/90 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px] lg:items-center lg:gap-4"
+                  className="hidden rounded-[14px] border border-slate-200/90 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px] lg:items-center lg:gap-4"
                 >
                   <div>ID / Status</div>
                   <div>Customer</div>
@@ -368,7 +368,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
           ) : null}
         </section>
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Saved service locations</h2>
@@ -383,12 +383,12 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
 
           <div className="mt-4 space-y-3">
             {savedLocations.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+              <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
                 No saved service locations on this customer yet.
               </div>
             ) : (
               savedLocations.map((location) => (
-                <div key={location.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                <div key={location.id} className="rounded-[14px] border border-slate-200 bg-slate-50/70 px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-semibold text-slate-900">{location.label}</div>
                     {location.is_default ? (
@@ -412,13 +412,13 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         </section>
 
         <div className="grid items-start gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Audit History</h2>
             <p className="mt-1 text-sm text-slate-500">Important identity and portal-status changes.</p>
 
             <div className="mt-4 space-y-3">
               {history.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
+                <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
                   No customer history recorded yet.
                 </div>
               ) : (
@@ -437,7 +437,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
             </div>
           </div>
 
-          <div className="self-start rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="self-start rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Portal access</h2>
               <InteractiveInfoPopover
@@ -447,7 +447,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 learnMoreHref="/admin/docs/customer-booking-identity"
               />
             </div>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="mt-4 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">{customer.portal_status ?? "invited"}</div>
               {customer.deactivated_at ? (
@@ -466,7 +466,11 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
               />
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className={
+                  customer.portal_status === "deactivated"
+                    ? "admin-btn admin-btn-primary"
+                    : "admin-btn admin-btn-destructive"
+                }
               >
                 {customer.portal_status === "deactivated" ? "Reactivate portal access" : "Deactivate portal access"}
               </button>

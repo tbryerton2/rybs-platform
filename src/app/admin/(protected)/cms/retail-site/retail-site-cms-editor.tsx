@@ -13,7 +13,9 @@ import type {
   HomeServiceAreaPopupValue,
   HomeStatsBarValue,
   PricingProductContentValue,
+  PricingSizeGuideRow,
   RetailSiteCmsState,
+  TermsAndConditionsContentValue,
 } from "@/lib/admin/cms";
 import { LoadingButton } from "@/components/ui/loading-button";
 import {
@@ -31,6 +33,7 @@ const HOME_SERVICE_AREA_LOOKUP_KEY = "content.home.service_area_lookup";
 const HOME_SERVICE_AREA_KEY = "content.home.service_area_popup";
 const HOME_FAQ_KEY = "content.faq.home";
 const PRICING_PRODUCT_KEY = "content.pricing.product_content";
+const TERMS_AND_CONDITIONS_KEY = "content.terms.rental_terms";
 const HERO_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const HERO_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -44,8 +47,9 @@ const HOME_PAGE_KEYS = [
   HOME_FAQ_KEY,
 ];
 const PRICING_PAGE_KEYS = [PRICING_PRODUCT_KEY];
+const TERMS_PAGE_KEYS = [TERMS_AND_CONDITIONS_KEY];
 
-type CmsPageId = "home" | "pricing";
+type CmsPageId = "home" | "pricing" | "terms";
 
 type RetailSiteCmsEditorProps = {
   cms: RetailSiteCmsState;
@@ -80,6 +84,21 @@ function createDefaultDumpsterSizeItem(): HomeDumpsterSizeItem {
     rentalWindowDays: null,
     badgeLabel: "",
     isFeatured: false,
+  };
+}
+
+function createSizeGuideRowId() {
+  return `size_guide_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createDefaultSizeGuideRow(sortOrder: number): PricingSizeGuideRow {
+  return {
+    id: createSizeGuideRowId(),
+    sizeLabel: "",
+    truckLoadEstimate: "",
+    description: "",
+    sortOrder,
+    active: true,
   };
 }
 
@@ -138,16 +157,16 @@ function focusFirstEditableField(container: HTMLElement | null) {
 }
 
 function inputClass() {
-  return "h-11 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10";
+  return "h-11 w-full rounded-lg border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10";
 }
 
 function textareaClass() {
-  return "min-h-[110px] w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10";
+  return "min-h-[110px] w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10";
 }
 
 function pageTabClass(active: boolean) {
   return [
-    "rounded-2xl px-4 py-2 text-sm font-semibold transition",
+    "rounded-[14px] px-4 py-2 text-sm font-semibold transition",
     active
       ? "bg-slate-900 text-white shadow-sm"
       : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-900",
@@ -156,7 +175,7 @@ function pageTabClass(active: boolean) {
 
 function sectionTabClass(active: boolean) {
   return [
-    "w-full rounded-xl px-3 py-2.5 text-left text-sm transition",
+    "w-full rounded-lg px-3 py-2.5 text-left text-sm transition",
     active
       ? "bg-slate-100 text-slate-900"
       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
@@ -174,6 +193,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
       [HOME_SERVICE_AREA_KEY]: clone(cms.home.serviceAreaPopup.value),
       [HOME_FAQ_KEY]: clone(cms.home.faq.value),
       [PRICING_PRODUCT_KEY]: clone(cms.pricing.productContent.value),
+      [TERMS_AND_CONDITIONS_KEY]: clone(cms.terms.rentalTerms.value),
     }),
     [cms],
   );
@@ -220,6 +240,11 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
         draftUpdatedAt: cms.pricing.productContent.draftUpdatedAt,
         publishedUpdatedAt: cms.pricing.productContent.publishedUpdatedAt,
       },
+      [TERMS_AND_CONDITIONS_KEY]: {
+        hasDraft: cms.terms.rentalTerms.hasDraft,
+        draftUpdatedAt: cms.terms.rentalTerms.draftUpdatedAt,
+        publishedUpdatedAt: cms.terms.rentalTerms.publishedUpdatedAt,
+      },
     }),
     [cms],
   );
@@ -261,9 +286,12 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const pricingValue =
     (valuesByKey[PRICING_PRODUCT_KEY] as PricingProductContentValue | undefined) ??
     cms.pricing.productContent.value;
+  const termsValue =
+    (valuesByKey[TERMS_AND_CONDITIONS_KEY] as TermsAndConditionsContentValue | undefined) ??
+    cms.terms.rentalTerms.value;
 
   const homeSectionOptions = [
-    { id: "hero", label: "Hero" },
+    { id: "hero", label: "Top section" },
     { id: "stats", label: "Stats Bar" },
     { id: "marketing", label: "Marketing" },
     { id: "dumpster-sizes", label: "Dumpster Sizes" },
@@ -276,11 +304,12 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
       ? activeHomeSectionId
       : homeSectionOptions[0]?.id ?? "hero";
 
-  const currentPageKeys = activePage === "home" ? HOME_PAGE_KEYS : PRICING_PAGE_KEYS;
+  const currentPageKeys =
+    activePage === "home" ? HOME_PAGE_KEYS : activePage === "pricing" ? PRICING_PAGE_KEYS : TERMS_PAGE_KEYS;
   const pageDirty = currentPageKeys.some(
     (key) => JSON.stringify(valuesByKey[key]) !== JSON.stringify(savedByKey[key]),
   );
-  const anyDirty = [...HOME_PAGE_KEYS, ...PRICING_PAGE_KEYS].some(
+  const anyDirty = [...HOME_PAGE_KEYS, ...PRICING_PAGE_KEYS, ...TERMS_PAGE_KEYS].some(
     (key) => JSON.stringify(valuesByKey[key]) !== JSON.stringify(savedByKey[key]),
   );
 
@@ -438,6 +467,19 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     updateValue(PRICING_PRODUCT_KEY, { ...pricingValue, ...patch });
   }
 
+  function updatePricingSizeGuide(patch: Partial<PricingProductContentValue["sizeGuide"]>) {
+    updatePricing({
+      sizeGuide: {
+        ...pricingValue.sizeGuide,
+        ...patch,
+      },
+    });
+  }
+
+  function updateTerms(patch: Partial<TermsAndConditionsContentValue>) {
+    updateValue(TERMS_AND_CONDITIONS_KEY, { ...termsValue, ...patch });
+  }
+
   function updateHomeSections(nextSections: HomeFlexibleSection[]) {
     updateValue(HOME_SECTIONS_KEY, nextSections);
   }
@@ -589,7 +631,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     const ok = await persistPage("save_draft");
     if (!ok) return;
 
-    const redirect = activePage === "pricing" ? "/pricing" : "/";
+    const redirect = activePage === "pricing" ? "/pricing" : activePage === "terms" ? "/confirm" : "/";
     window.open(`/admin/cms/preview?redirect=${encodeURIComponent(redirect)}`, "_blank", "noopener,noreferrer");
   }
 
@@ -598,7 +640,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
       return (
         <div className="space-y-5">
           <Field
-            label="Hero eyebrow"
+            label="Intro header"
             value={homeHeroValue.eyebrow}
             onChange={(value) => updateHero({ eyebrow: value })}
           />
@@ -618,7 +660,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             onChange={(value) => updateHero({ subheadline: value })}
           />
           <Field
-            label="Hero image URL"
+            label="Image URL"
             value={homeHeroValue.imageUrl}
             onChange={updateHeroImageUrl}
           />
@@ -632,7 +674,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             onFileSelected={(file) => void handleHeroImageUpload(file)}
           />
           <Field
-            label="Hero image alt text"
+            label="Image alt text"
             value={homeHeroValue.imageAlt}
             onChange={(value) => updateHero({ imageAlt: value })}
           />
@@ -676,7 +718,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     if (resolvedHomeSectionId === "stats") {
       return (
         <div className="space-y-6">
-          <div className="rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          <div className="rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
             <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Homepage stats bar</div>
               <div className="mt-1 text-sm text-slate-500">
@@ -702,10 +744,10 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 })}
                 onChange={updateStatsBarItems}
                 itemsClassName="space-y-5"
-                itemClassName="space-y-4 rounded-2xl border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+                itemClassName="space-y-4 rounded-[14px] border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
                 renderItem={(item, onItemChange) => (
                   <div className="grid gap-4">
-                    <div className="flex items-center gap-3 rounded-xl bg-[#1A1A1A] px-4 py-4 text-white">
+                    <div className="flex items-center gap-3 rounded-lg bg-[#1A1A1A] px-4 py-4 text-white">
                       <HomeStatsIcon
                         iconKey={normalizeHomeStatsIconKey(item.icon)}
                         className="h-7 w-7 shrink-0 text-[#F97316]"
@@ -765,7 +807,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
               loading={addingMarketingSection}
               loadingLabel="Adding..."
               spinner={false}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Add Marketing Section
             </LoadingButton>
@@ -783,7 +825,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                     marketingSectionRefs.current[section.id] = node;
                   }}
                   className={[
-                    "overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition",
+                    "overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition",
                     highlightedSectionId === section.id
                       ? "ring-2 ring-amber-200 ring-offset-2 ring-offset-white"
                       : "",
@@ -910,7 +952,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
           </div>
 
           {!homeSectionsValue.length ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+            <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
               No marketing sections yet. Add one to get started.
             </div>
           ) : null}
@@ -921,7 +963,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     if (resolvedHomeSectionId === "dumpster-sizes") {
       return (
         <div className="space-y-5">
-          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          <div className="overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
             <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Dumpster Sizes</div>
               <div className="mt-1 text-sm text-slate-500">
@@ -952,7 +994,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          <div className="overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
             <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Dumpster size items</div>
               <div className="mt-1 text-sm text-slate-500">
@@ -966,7 +1008,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 createItem={createDefaultDumpsterSizeItem}
                 onChange={(dumpsterSizes) => updateDumpsterSizes({ dumpsterSizes })}
                 itemsClassName="space-y-6"
-                itemClassName="space-y-4 rounded-2xl border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+                itemClassName="space-y-4 rounded-[14px] border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
                 renderItem={(item, onItemChange) => (
                   <div className="grid gap-4">
                     <div className="grid gap-4 md:grid-cols-2">
@@ -1038,7 +1080,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     if (resolvedHomeSectionId === "service-area-lookup") {
       return (
         <div className="space-y-5">
-          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          <div className="overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
             <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Service area lookup</div>
               <div className="mt-1 text-sm text-slate-500">
@@ -1102,7 +1144,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
         <div className="space-y-5">
           <Field label="Section heading" value={faqValue.headline} onChange={(value) => updateFaq({ headline: value })} />
           <TextAreaField label="Section intro" value={faqValue.intro} onChange={(value) => updateFaq({ intro: value })} />
-          <div className="overflow-hidden rounded-[22px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          <div className="overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
             <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">FAQ items</div>
               <div className="mt-1 text-sm text-slate-500">
@@ -1116,7 +1158,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 createItem={() => ({ question: "", answer: "" })}
                 onChange={(items) => updateFaq({ items })}
                 itemsClassName="space-y-6"
-                itemClassName="space-y-3 rounded-2xl border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+                itemClassName="space-y-3 rounded-[14px] border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
                 renderItem={(item, onItemChange) => (
                   <div className="grid gap-3">
                     <Field
@@ -1143,37 +1185,131 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
 
   function renderPricingPage() {
     return (
+      <div className="space-y-8">
+        <div className="space-y-5">
+          <Field
+            label="Section"
+            value="Product Content"
+            onChange={() => undefined}
+            readOnly
+          />
+          <TextAreaField
+            label="Product description"
+            value={pricingValue.description}
+            onChange={(value) => updatePricing({ description: value })}
+          />
+          <ArrayField
+            label="Feature bullets"
+            items={pricingValue.featureBullets}
+            onChange={(items) => updatePricing({ featureBullets: items })}
+          />
+          <Field
+            label="Included heading"
+            value={pricingValue.includedHeading}
+            onChange={(value) => updatePricing({ includedHeading: value })}
+          />
+          <ArrayField
+            label="Included items"
+            items={pricingValue.includedItems}
+            onChange={(items) => updatePricing({ includedItems: items })}
+          />
+          <TextAreaField
+            label="Bottom note"
+            value={pricingValue.bottomNote}
+            onChange={(value) => updatePricing({ bottomNote: value })}
+          />
+        </div>
+
+        <div className="overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
+          <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
+            <div className="text-sm font-semibold text-slate-900">Pricing size guide</div>
+            <div className="mt-1 text-sm text-slate-500">
+              Edit the helper shown above the dumpster pricing cards.
+            </div>
+          </div>
+          <div className="space-y-5 bg-slate-50/50 px-5 py-5">
+            <CheckboxField
+              label="Show size guide on pricing page"
+              checked={pricingValue.sizeGuide.enabled}
+              onChange={(enabled) => updatePricingSizeGuide({ enabled })}
+            />
+            <Field
+              label="Size guide button text"
+              value={pricingValue.sizeGuide.buttonText}
+              onChange={(buttonText) => updatePricingSizeGuide({ buttonText })}
+            />
+            <Field
+              label="Size guide title"
+              value={pricingValue.sizeGuide.title}
+              onChange={(title) => updatePricingSizeGuide({ title })}
+            />
+
+            <RepeatableItems<PricingSizeGuideRow>
+              label="Size guide rows"
+              items={pricingValue.sizeGuide.rows}
+              createItem={() => createDefaultSizeGuideRow(pricingValue.sizeGuide.rows.length + 1)}
+              onChange={(rows) => updatePricingSizeGuide({ rows })}
+              itemsClassName="space-y-6"
+              itemClassName="space-y-4 rounded-[14px] border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
+              renderItem={(item, onItemChange) => (
+                <div className="grid gap-4">
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_160px_120px]">
+                    <Field
+                      label="Size label"
+                      value={item.sizeLabel}
+                      onChange={(sizeLabel) => onItemChange({ ...item, sizeLabel })}
+                    />
+                    <Field
+                      label="Truck-load estimate"
+                      value={item.truckLoadEstimate}
+                      onChange={(truckLoadEstimate) => onItemChange({ ...item, truckLoadEstimate })}
+                    />
+                    <Field
+                      label="Sort order"
+                      value={String(item.sortOrder)}
+                      onChange={(value) => {
+                        const parsed = Number(value);
+                        onItemChange({
+                          ...item,
+                          sortOrder: Number.isFinite(parsed) ? parsed : item.sortOrder,
+                        });
+                      }}
+                    />
+                  </div>
+                  <TextAreaField
+                    label="Description / examples"
+                    value={item.description}
+                    onChange={(description) => onItemChange({ ...item, description })}
+                  />
+                  <CheckboxField
+                    label="Active"
+                    checked={item.active}
+                    onChange={(active) => onItemChange({ ...item, active })}
+                  />
+                </div>
+              )}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderTermsPage() {
+    return (
       <div className="space-y-5">
         <Field
           label="Section"
-          value="Product Content"
+          value="Terms & Conditions"
           onChange={() => undefined}
           readOnly
         />
         <TextAreaField
-          label="Product description"
-          value={pricingValue.description}
-          onChange={(value) => updatePricing({ description: value })}
-        />
-        <ArrayField
-          label="Feature bullets"
-          items={pricingValue.featureBullets}
-          onChange={(items) => updatePricing({ featureBullets: items })}
-        />
-        <Field
-          label="Included heading"
-          value={pricingValue.includedHeading}
-          onChange={(value) => updatePricing({ includedHeading: value })}
-        />
-        <ArrayField
-          label="Included items"
-          items={pricingValue.includedItems}
-          onChange={(items) => updatePricing({ includedItems: items })}
-        />
-        <TextAreaField
-          label="Bottom note"
-          value={pricingValue.bottomNote}
-          onChange={(value) => updatePricing({ bottomNote: value })}
+          label="Terms & Conditions text"
+          value={termsValue.body}
+          onChange={(value) => updateTerms({ body: value })}
+          helperText="This text appears on the customer confirmation page before payment/booking completion."
+          rows={16}
         />
       </div>
     );
@@ -1196,17 +1332,20 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
         <button type="button" onClick={() => switchPage("pricing")} className={pageTabClass(activePage === "pricing")}>
           Pricing
         </button>
+        <button type="button" onClick={() => switchPage("terms")} className={pageTabClass(activePage === "terms")}>
+          Terms & Conditions
+        </button>
       </div>
 
       {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+        <div className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           {error}
         </div>
       ) : null}
 
       {activePage === "home" ? (
         <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+          <aside className="rounded-[14px] border border-slate-200 bg-slate-50 p-4">
             <div className="border-b border-slate-100 pb-3">
               <div className="text-sm font-semibold text-slate-900">Home sections</div>
               <div className="mt-1 text-sm text-slate-500">Select a section to edit.</div>
@@ -1225,7 +1364,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             </div>
           </aside>
 
-          <section className="rounded-[28px] border border-slate-300 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+          <section className="rounded-[20px] border border-slate-300 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
             <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1251,7 +1390,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                   loading={saveState === "saving"}
                   loadingLabel="Saving..."
                   disabled={saveState === "publishing"}
-                  className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   Save Draft
                 </LoadingButton>
@@ -1261,7 +1400,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                   loading={saveState === "saving"}
                   loadingLabel="Preparing..."
                   disabled={saveState === "publishing"}
-                  className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
                 >
                   Preview
                 </LoadingButton>
@@ -1274,7 +1413,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                   loading={saveState === "publishing"}
                   loadingLabel="Publishing..."
                   disabled={saveState === "saving"}
-                  className="inline-flex h-10 items-center justify-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:bg-[#EA580C] disabled:opacity-60"
+                  className="admin-btn admin-btn-primary h-10 px-4"
                 >
                   Publish Page
                 </LoadingButton>
@@ -1285,7 +1424,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
           </section>
         </div>
       ) : (
-        <section className="rounded-[28px] border border-slate-300 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
+        <section className="rounded-[20px] border border-slate-300 bg-white p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
           <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -1311,7 +1450,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 loading={saveState === "saving"}
                 loadingLabel="Saving..."
                 disabled={saveState === "publishing"}
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
                 Save Draft
               </LoadingButton>
@@ -1321,7 +1460,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 loading={saveState === "saving"}
                 loadingLabel="Preparing..."
                 disabled={saveState === "publishing"}
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
                 Preview
               </LoadingButton>
@@ -1334,14 +1473,14 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
                 loading={saveState === "publishing"}
                 loadingLabel="Publishing..."
                 disabled={saveState === "saving"}
-                className="inline-flex h-10 items-center justify-center rounded-xl bg-[#F97316] px-4 text-sm font-semibold text-white transition hover:bg-[#EA580C] disabled:opacity-60"
+                className="admin-btn admin-btn-primary h-10 px-4"
               >
                 Publish Page
               </LoadingButton>
             </div>
           </div>
 
-          <div className="pt-6">{renderPricingPage()}</div>
+          <div className="pt-6">{activePage === "pricing" ? renderPricingPage() : renderTermsPage()}</div>
         </section>
       )}
     </div>
@@ -1399,8 +1538,8 @@ function HeroImageUploadField({
   const trimmedImageUrl = imageUrl.trim();
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="text-sm font-medium text-slate-700">Hero image upload</div>
+    <div className="rounded-[14px] border border-slate-200 bg-slate-50 p-4">
+      <div className="text-sm font-medium text-slate-700">Image upload</div>
       <input
         ref={inputRef}
         type="file"
@@ -1410,7 +1549,7 @@ function HeroImageUploadField({
           const file = event.target.files?.[0];
           if (file) onFileSelected(file);
         }}
-        className="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-900 file:px-4 file:py-2.5 file:text-sm file:font-semibold file:text-white hover:file:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
       />
       <p className="mt-2 text-sm text-slate-500">
         Upload a JPG, PNG, or WEBP hero image. Recommended: wide landscape image.
@@ -1418,23 +1557,23 @@ function HeroImageUploadField({
 
       {uploading ? <p className="mt-3 text-sm text-slate-500">Uploading image...</p> : null}
       {success ? (
-        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           {success}
         </div>
       ) : null}
       {error ? (
-        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
         </div>
       ) : null}
 
       {trimmedImageUrl ? (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="mt-4 overflow-hidden rounded-[14px] border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Current hero image
+            Current image
           </div>
           <div className="bg-slate-100 p-3">
-            <div className="relative aspect-[16/7] w-full overflow-hidden rounded-xl">
+            <div className="relative aspect-[16/7] w-full overflow-hidden rounded-lg">
               <Image
                 src={trimmedImageUrl}
                 alt={imageAlt || "Hero image preview"}
@@ -1455,15 +1594,25 @@ function TextAreaField({
   label,
   value,
   onChange,
+  helperText,
+  rows,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  helperText?: string;
+  rows?: number;
 }) {
   return (
     <label className="block space-y-2">
       <div className="text-sm font-medium text-slate-700">{label}</div>
-      <textarea className={textareaClass()} value={value} onChange={(event) => onChange(event.target.value)} />
+      <textarea
+        className={textareaClass()}
+        value={value}
+        rows={rows}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {helperText ? <p className="text-sm text-slate-500">{helperText}</p> : null}
     </label>
   );
 }
@@ -1478,7 +1627,7 @@ function CheckboxField({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+    <label className="flex items-center justify-between gap-4 rounded-[14px] border border-slate-200 bg-white px-4 py-3">
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <input
         type="checkbox"
@@ -1503,7 +1652,7 @@ function IconSelectField({
     <label className="block space-y-2">
       <div className="text-sm font-medium text-slate-700">{label}</div>
       <div className="flex items-center gap-3">
-        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-[#F97316]">
+        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-[#F97316]">
           <HomeStatsIcon iconKey={value} className="h-6 w-6" />
         </span>
         <select
@@ -1585,7 +1734,7 @@ function ArrayField({
             itemRefs.current[index] = node;
           }}
           className={[
-            "flex items-center gap-3 rounded-2xl transition",
+            "flex items-center gap-3 rounded-[14px] transition",
             highlightedIndex === index ? "bg-amber-50/60 ring-2 ring-amber-200 ring-offset-2 ring-offset-white" : "",
           ].join(" ")}
         >
@@ -1607,7 +1756,7 @@ function ArrayField({
                 [nextItems[index - 1], nextItems[index]] = [nextItems[index], nextItems[index - 1]];
                 onChange(nextItems);
               }}
-              className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+              className="rounded-[4px] px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
             >
               Up
             </button>
@@ -1619,7 +1768,7 @@ function ArrayField({
                 [nextItems[index + 1], nextItems[index]] = [nextItems[index], nextItems[index + 1]];
                 onChange(nextItems);
               }}
-              className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
+              className="rounded-[4px] px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
             >
               Down
             </button>
@@ -1645,7 +1794,7 @@ function RepeatableItems<TItem extends object>({
   createItem,
   onChange,
   itemsClassName = "space-y-4",
-  itemClassName = "space-y-3 rounded-2xl border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]",
+  itemClassName = "space-y-3 rounded-[14px] border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]",
   renderItem,
 }: {
   label: string;

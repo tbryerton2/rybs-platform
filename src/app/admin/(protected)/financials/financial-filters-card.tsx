@@ -69,7 +69,7 @@ export function FinancialFiltersCard({
   return (
     <section
       id="filters"
-      className="mt-8 scroll-mt-32 rounded-[28px] bg-white px-6 py-4 shadow-sm ring-1 ring-slate-200/70"
+      className="mt-8 scroll-mt-32 rounded-[20px] bg-white px-6 py-4 shadow-sm ring-1 ring-slate-200/70"
     >
       <div className={expanded ? "flex flex-col gap-5" : ""}>
         {expanded ? (
@@ -104,7 +104,7 @@ export function FinancialFiltersCard({
               type="button"
               onClick={() => setExpanded(false)}
               aria-expanded={expanded}
-              className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+              className="admin-btn admin-btn-secondary admin-btn-sm ml-auto h-8 shrink-0 gap-1 px-2"
             >
               <span>Less</span>
               <ChevronDownIcon
@@ -145,7 +145,7 @@ export function FinancialFiltersCard({
               type="button"
               onClick={() => setExpanded(true)}
               aria-expanded={false}
-              className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+              className="admin-btn admin-btn-secondary admin-btn-sm ml-auto h-8 shrink-0 gap-1 px-2"
             >
               <span>More filters</span>
               <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
@@ -178,7 +178,7 @@ export function FinancialFiltersCard({
                     type="date"
                     name="start"
                     defaultValue={startDate}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
+                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
                   />
                 </label>
 
@@ -190,7 +190,7 @@ export function FinancialFiltersCard({
                     type="date"
                     name="end"
                     defaultValue={endDate}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
+                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
                   />
                 </label>
 
@@ -201,7 +201,7 @@ export function FinancialFiltersCard({
                   <select
                     name="zip"
                     defaultValue={zipFilter}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
+                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
                   >
                     <option value="">All ZIPs</option>
                     {zipOptions.map((zip) => (
@@ -219,7 +219,7 @@ export function FinancialFiltersCard({
                   <select
                     name="status"
                     defaultValue={statusScope}
-                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
+                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
                   >
                     <option value="revenue">Completed bookings</option>
                     <option value="all-active">All active bookings</option>
@@ -229,14 +229,14 @@ export function FinancialFiltersCard({
                 <div className="flex items-end gap-2.5 xl:justify-end">
                   <button
                     type="submit"
-                    className="inline-flex h-11 items-center justify-center rounded-2xl bg-[#F97316] px-4.5 text-sm font-medium text-white shadow-sm transition hover:bg-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/30 focus-visible:ring-offset-2"
+                    className="admin-btn admin-btn-primary h-11 px-4.5 font-medium"
                   >
                     Apply filters
                   </button>
 
                   <Link
                     href={`/admin/financials?view=${currentView}&granularity=${currentGranularity}#filters`}
-                    className="inline-flex h-11 items-center justify-center rounded-2xl px-3.5 text-sm font-medium text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                    className="admin-btn admin-btn-secondary h-11 px-3.5 font-medium"
                   >
                     Reset
                   </Link>

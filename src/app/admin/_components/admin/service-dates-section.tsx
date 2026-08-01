@@ -11,9 +11,9 @@ function joinClasses(...values: Array<string | false | null | undefined>) {
 }
 
 const fieldInputClass =
-  "h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
+  "h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
 const fieldTextareaClass =
-  "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
+  "w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
 const fieldErrorClass = "border-rose-300 focus:border-rose-500 focus:ring-4 focus:ring-rose-100";
 
 function Field({
@@ -101,7 +101,7 @@ export function ServiceDatesSection({
   }
 
   return (
-    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-lg font-semibold text-slate-900">Service dates</div>
@@ -113,7 +113,7 @@ export function ServiceDatesSection({
             onClick={onAdd}
             disabled={addDisabled}
             title={addDisabledReason}
-            className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="admin-btn admin-btn-primary h-10 gap-2 px-4"
           >
             <PlusIcon className="h-4 w-4" />
             Add service date
@@ -123,7 +123,7 @@ export function ServiceDatesSection({
 
       <div className="mt-6 space-y-4">
         {records.length ? (
-          <div className="overflow-hidden rounded-[24px] border border-slate-200">
+          <div className="overflow-hidden rounded-[14px] border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50/80">
                 <tr className="text-left">
@@ -166,7 +166,7 @@ export function ServiceDatesSection({
                             <button
                               type="button"
                               onClick={() => onEdit?.(record)}
-                              className="inline-flex h-9 items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                              className="admin-btn admin-btn-secondary h-9 gap-1 px-3"
                             >
                               <PencilSquareIcon className="h-4 w-4" />
                               Edit
@@ -174,7 +174,7 @@ export function ServiceDatesSection({
                             <button
                               type="button"
                               onClick={() => onDelete?.(record)}
-                              className="inline-flex h-9 items-center gap-1 rounded-2xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                              className="admin-btn admin-btn-destructive h-9 gap-1 px-3"
                             >
                               <TrashIcon className="h-4 w-4" />
                               Delete
@@ -189,13 +189,13 @@ export function ServiceDatesSection({
             </table>
           </div>
         ) : (
-          <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/60 px-5 py-8 text-sm text-slate-500">
+          <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50/60 px-5 py-8 text-sm text-slate-500">
             {emptyMessage}
           </div>
         )}
 
         {editor ? (
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+          <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
             <div className="text-sm font-semibold text-slate-900">
               {editor.id ? "Edit service date" : "Add service date"}
             </div>
@@ -235,7 +235,7 @@ export function ServiceDatesSection({
               </div>
             </div>
             {serviceDateError ? (
-              <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div className="mt-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {serviceDateError}
               </div>
             ) : null}
@@ -243,7 +243,7 @@ export function ServiceDatesSection({
               <button
                 type="button"
                 onClick={onEditorCancel}
-                className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="admin-btn admin-btn-secondary h-10 px-4"
               >
                 Cancel
               </button>
@@ -251,7 +251,7 @@ export function ServiceDatesSection({
                 type="button"
                 onClick={onEditorSave}
                 disabled={isSaving}
-                className="inline-flex h-10 items-center rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn admin-btn-primary h-10 px-4"
               >
                 {isSaving ? "Saving..." : "Save"}
               </button>

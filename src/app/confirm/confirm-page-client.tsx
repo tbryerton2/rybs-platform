@@ -8,9 +8,10 @@ import {
   type BookingPriceQuote,
 } from "@/lib/booking-pricing";
 import {
-  RENTAL_TERMS_CONSENT_TEXT,
-  RENTAL_TERMS_VERSION,
-} from "@/lib/booking-terms";
+  HoldCountdownBanner,
+  useBookingHoldCountdown,
+} from "@/components/booking/hold-countdown-banner";
+import { RENTAL_TERMS_VERSION } from "@/lib/booking-terms";
 import { formatUsdFromCents } from "@/lib/money";
 import {
   getAccessIssueLabel,
@@ -103,13 +104,6 @@ function formatDateLong(ymd: string) {
   }).format(dt);
 }
 
-function formatMMSS(totalSeconds: number) {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const mm = String(Math.floor(s / 60)).padStart(2, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return `${mm}:${ss}`;
-}
-
 function CardShell({
   title,
   icon,
@@ -152,21 +146,32 @@ function IconChip({ children }: { children: ReactNode }) {
   );
 }
 
-function DetailRow({
+function SummaryRow({
   label,
   value,
   multiline = false,
+  helper,
+  divider = false,
+  valueClassName = "",
 }: {
   label: string;
   value: ReactNode;
   multiline?: boolean;
+  helper?: ReactNode;
+  divider?: boolean;
+  valueClassName?: string;
 }) {
   return (
-    <div className="grid gap-1 text-sm sm:grid-cols-[180px_1fr] sm:gap-4">
-      <span className="font-semibold text-slate-900">{label}:</span>
-      <span className={multiline ? "whitespace-pre-line leading-6 text-slate-700" : "text-slate-700"}>
-        {value}
-      </span>
+    <div
+      className={`flex flex-col gap-1 text-sm sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
+        divider ? "border-t border-slate-200 pt-2" : ""
+      }`}
+    >
+      <span className="text-slate-600">{label}</span>
+      <div className={`min-w-0 font-medium text-slate-900 sm:text-right ${valueClassName}`}>
+        <span className={multiline ? "whitespace-pre-line leading-6" : undefined}>{value}</span>
+        {helper ? <span className="mt-1 block text-xs font-normal text-slate-500">{helper}</span> : null}
+      </div>
     </div>
   );
 }
@@ -192,6 +197,7 @@ type ConfirmPageClientProps = {
     capLoadingText: string;
     deliveryTimeNote: string;
     pickupWindowTemplate: string;
+    rentalTermsBody: string;
   };
 };
 
@@ -204,15 +210,11 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
   const [rentalTermsAccepted, setRentalTermsAccepted] = useState(false);
   const [recordingTermsConsent, setRecordingTermsConsent] = useState(false);
 
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [error, setError] = useState<string | null>(null);
+  const { formattedTime: holdFormattedTime, holdExpired } = useBookingHoldCountdown(draft.holdExpiresAt);
 
   const deliveryDate = (draft.deliveryDate || "").trim();
   const pickupDate = (draft.pickupDate || draft.priceQuote?.effectivePickupDate || "").trim();
-  const standardRentalDays = draft.priceQuote?.standardRentalDays ?? draft.includedRentalDays ?? 1;
-  const bookedRentalDays = draft.priceQuote?.bookedRentalDays ?? null;
-  const extraDays = draft.priceQuote?.extraDays ?? 0;
-  const extraDaysChargeCents = draft.priceQuote?.extraDaysChargeCents ?? 0;
   const pickupMode = "date" as const;
   const customerDisplayName = getCustomerDisplayName(draft);
   const placementDetails = useMemo(
@@ -294,29 +296,6 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
       router.replace("/book/placement");
     }
   }, [customerDisplayName, draft, loadedDraft, router]);
-
-  // tick timer every 1s
-  useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const holdExpiresAtMs = useMemo(() => {
-    const iso = (draft.holdExpiresAt || "").trim();
-    if (!iso) return null;
-    const ms = Date.parse(iso);
-    return Number.isFinite(ms) ? ms : null;
-  }, [draft.holdExpiresAt]);
-
-  const secondsLeft = useMemo(() => {
-    if (!holdExpiresAtMs) return null;
-    return Math.floor((holdExpiresAtMs - nowMs) / 1000);
-  }, [holdExpiresAtMs, nowMs]);
-
-  const holdExpired = useMemo(() => {
-    if (secondsLeft == null) return false;
-    return secondsLeft <= 0;
-  }, [secondsLeft]);
 
   useEffect(() => {
     const bookingZip = (draft.customerZip || draft.zip || "").trim();
@@ -419,7 +398,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
           bookingHoldId: draft.holdId,
           consentType: "rental_terms",
           consentVersion: RENTAL_TERMS_VERSION,
-          consentText: RENTAL_TERMS_CONSENT_TEXT,
+          consentText: content.rentalTermsBody,
           acceptedAt: new Date().toISOString(),
           sourcePage: "confirm",
         }),
@@ -532,33 +511,25 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
               </div>
             ) : null}
 
-            {draft.holdExpiresAt && secondsLeft != null && !holdExpired && (
-              <div className="rounded-xl border border-[#FDBA74] bg-[#FFF7ED] px-4 py-3 text-sm text-slate-900">
-                <div className="font-semibold">{content.holdBannerTitle.replace("{time}", formatMMSS(secondsLeft))}</div>
-                <div className="text-slate-700">
-                  {content.holdBannerBody}
-                </div>
-              </div>
-            )}
+            <HoldCountdownBanner
+              formattedTime={holdExpired ? null : holdFormattedTime}
+            />
 
             {/* Contact */}
             <div className="space-y-6">
               <CardShell title="Contact information" icon={ContactIcon} editHref="/book/placement">
-                <div className="grid gap-y-2.5 text-sm">
-                  <div className="grid grid-cols-[72px_1fr] items-baseline gap-x-4">
-                    <span className="text-slate-500">Name:</span>
-                    <span className="font-medium text-slate-900">{customerDisplayName || "—"}</span>
-                  </div>
-
-                  <div className="grid grid-cols-[72px_1fr] items-baseline gap-x-4">
-                    <span className="text-slate-500">Email:</span>
-                    <span className="font-medium text-slate-900 break-all">{(draft.customerEmail || "").trim() || "—"}</span>
-                  </div>
-
-                  <div className="grid grid-cols-[72px_1fr] items-baseline gap-x-4">
-                    <span className="text-slate-500">Phone:</span>
-                    <span className="font-medium text-slate-900 tabular-nums">{formatPhoneUS((draft.customerPhone || "").trim())}</span>
-                  </div>
+                <div className="space-y-2 text-sm">
+                  <SummaryRow label="Name" value={customerDisplayName || "—"} />
+                  <SummaryRow
+                    label="Email"
+                    value={(draft.customerEmail || "").trim() || "—"}
+                    valueClassName="break-all"
+                  />
+                  <SummaryRow
+                    label="Phone"
+                    value={formatPhoneUS((draft.customerPhone || "").trim())}
+                    valueClassName="tabular-nums"
+                  />
                 </div>
               </CardShell>
 
@@ -573,64 +544,58 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
               </CardShell>
 
               <CardShell title="Dumpster" icon={PricingIcon}>
-                <div className="space-y-2 text-sm text-slate-700">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-600">Size</span>
-                    <span className="font-semibold text-slate-900">
-                      {(draft.dumpsterDisplayName || draft.dumpsterSize || "").trim() || "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-600">Service ZIP</span>
-                    <span className="font-semibold text-slate-900">{(draft.zip || draft.customerZip || "").trim() || "—"}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-600">Included tonnage</span>
-                    <span className="font-semibold text-slate-900">
-                      {typeof draft.includedWeightTons === "number"
+                <div className="space-y-2 text-sm">
+                  <SummaryRow
+                    label="Size"
+                    value={(draft.dumpsterDisplayName || draft.dumpsterSize || "").trim() || "—"}
+                  />
+                  <SummaryRow
+                    label="Included weight allowance"
+                    value={
+                      typeof draft.includedWeightTons === "number"
                         ? `${draft.includedWeightTons} ton${draft.includedWeightTons === 1 ? "" : "s"}`
-                        : "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-slate-600">Per-ton overage</span>
-                    <span className="font-semibold text-slate-900">
-                      {typeof draft.tonOveragePrice === "number"
+                        : "—"
+                    }
+                  />
+                  <SummaryRow
+                    label="Extra weight fee"
+                    value={
+                      typeof draft.tonOveragePrice === "number"
                         ? `${formatUsdFromCents(Math.round(draft.tonOveragePrice * 100))} per ton`
-                        : "—"}
-                    </span>
-                  </div>
+                        : "—"
+                    }
+                  />
                 </div>
               </CardShell>
 
               <CardShell title="Placement and access" icon={PlacementIcon} editHref="/book/placement">
                 <div className="space-y-3">
-                  <DetailRow
+                  <SummaryRow
                     label="Placement Preference"
                     value={getPlacementPreferenceLabel(placementDetails.placementPreference)}
                   />
                   {placementDetails.placementDetails ? (
-                    <DetailRow label="Exact Placement" value={placementDetails.placementDetails} multiline />
+                    <SummaryRow label="Exact Placement" value={placementDetails.placementDetails} multiline />
                   ) : null}
-                  <DetailRow
+                  <SummaryRow
                     label="Delivery Presence"
                     value={getDeliveryPresenceLabel(placementDetails.deliveryPresence)}
                   />
                   {placementDetails.accessIssues.length ? (
-                    <DetailRow
+                    <SummaryRow
                       label="Driveway / Access Notes"
                       value={placementDetails.accessIssues.map(getAccessIssueLabel).join(", ")}
                       multiline
                     />
                   ) : null}
                   {placementDetails.gateInstructions ? (
-                    <DetailRow label="Gated Property Details" value={placementDetails.gateInstructions} multiline />
+                    <SummaryRow label="Gated Property Details" value={placementDetails.gateInstructions} multiline />
                   ) : null}
                   {placementDetails.accessIssues.includes("other_concern") && draft.otherConcernDetails ? (
-                    <DetailRow label="Other Concern" value={draft.otherConcernDetails} multiline />
+                    <SummaryRow label="Other Concern" value={draft.otherConcernDetails} multiline />
                   ) : null}
                   {placementDetails.alternateContactName || placementDetails.alternateContactPhone ? (
-                    <DetailRow
+                    <SummaryRow
                       label="Delivery Contact"
                       value={[placementDetails.alternateContactName, formatPhoneUS(placementDetails.alternateContactPhone || "")]
                         .filter((value) => value && value !== "—")
@@ -639,7 +604,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
                     />
                   ) : null}
                   {placementDetails.specialDeliveryInstructions ? (
-                    <DetailRow
+                    <SummaryRow
                       label="Special Instructions"
                       value={placementDetails.specialDeliveryInstructions}
                       multiline
@@ -661,83 +626,42 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
               </CardShell>
 
               <CardShell title="Rental schedule" icon={PickupIcon} editHref="/book/date">
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-                    <div>
-                      <span className="text-slate-500">Delivery date:</span>{" "}
-                      <span className="font-semibold text-slate-900">
-                        {isYMD(deliveryDate) ? formatDateLong(deliveryDate) : "—"}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">{content.deliveryTimeNote}</div>
-                    <div>
-                      <span className="font-semibold text-slate-900">
-                        This rental includes {standardRentalDays} day{standardRentalDays === 1 ? "" : "s"}.
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <span className="text-slate-500">Pickup date:</span>{" "}
-                      <span className="font-semibold text-slate-900">
-                        {isYMD(pickupDate) ? formatDateLong(pickupDate) : "—"}
-                      </span>
-                    </div>
-                    {bookedRentalDays ? (
-                      <div className="mt-2">
-                        <span className="text-slate-500">Rental length:</span>{" "}
-                        <span className="font-semibold text-slate-900">
-                          {bookedRentalDays} day{bookedRentalDays === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                    ) : null}
-                    {extraDays > 0 && draft.priceQuote ? (
-                      <div className="mt-2">
-                        <span className="text-slate-500">Extra days:</span>{" "}
-                        <span className="font-semibold text-slate-900">
-                          {extraDays} x {formatUsdFromCents(draft.priceQuote.dailyOveragePriceCents)}
-                        </span>
-                        {" = "}
-                        <span className="font-semibold text-slate-900">
-                          {formatUsdFromCents(extraDaysChargeCents)}
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
+                <div className="space-y-2 text-sm">
+                  <SummaryRow
+                    label="Delivery date"
+                    value={isYMD(deliveryDate) ? formatDateLong(deliveryDate) : "—"}
+                    helper={content.deliveryTimeNote}
+                  />
+                  <SummaryRow
+                    label="Pickup date"
+                    value={isYMD(pickupDate) ? formatDateLong(pickupDate) : "—"}
+                    divider
+                  />
                 </div>
               </CardShell>
 
               {draft.priceQuote ? (
                 <CardShell title="Price summary" icon={PricingIcon}>
                   <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-600">Base price</span>
-                      <span className="font-semibold text-slate-900">
-                        {formatUsdFromCents(draft.priceQuote.rentalPriceCents)}
-                      </span>
-                    </div>
+                    <SummaryRow
+                      label="Base price"
+                      value={formatUsdFromCents(draft.priceQuote.rentalPriceCents)}
+                    />
                     {draft.priceQuote.extraDays > 0 ? (
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-slate-600">
-                          Extra days ({draft.priceQuote.extraDays} x {formatUsdFromCents(draft.priceQuote.dailyOveragePriceCents)})
-                        </span>
-                        <span className="font-semibold text-slate-900">
-                          {formatUsdFromCents(draft.priceQuote.extraDaysChargeCents)}
-                        </span>
-                      </div>
+                      <SummaryRow
+                        label={`Extra days (${draft.priceQuote.extraDays} x ${formatUsdFromCents(draft.priceQuote.dailyOveragePriceCents)})`}
+                        value={formatUsdFromCents(draft.priceQuote.extraDaysChargeCents)}
+                      />
                     ) : null}
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-600">
-                        Sales tax ({Math.round(draft.priceQuote.salesTaxRate * 100)}%)
-                      </span>
-                      <span className="font-semibold text-slate-900">
-                        {formatUsdFromCents(draft.priceQuote.salesTaxCents)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 border-t border-slate-200 pt-2">
-                      <span className="font-semibold text-slate-900">Total</span>
-                      <span className="font-semibold text-slate-900">
-                        {formatUsdFromCents(draft.priceQuote.totalCents)}
-                      </span>
-                    </div>
+                    <SummaryRow
+                      label={`Sales tax (${Math.round(draft.priceQuote.salesTaxRate * 100)}%)`}
+                      value={formatUsdFromCents(draft.priceQuote.salesTaxCents)}
+                    />
+                    <SummaryRow
+                      label="Total"
+                      value={formatUsdFromCents(draft.priceQuote.totalCents)}
+                      divider
+                    />
                     <div className="text-xs text-slate-500">
                       {`Includes up to ${draft.priceQuote.standardRentalDays} days. `}
                       {`${formatUsdFromCents(draft.priceQuote.dailyOveragePriceCents)} per extra day after day ${draft.priceQuote.standardRentalDays}.`}
@@ -770,10 +694,10 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
 
                 <details className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                   <summary className="cursor-pointer font-semibold text-[#F97316]">
-                    View Rental Terms
+                    View Terms & Conditions
                   </summary>
                   <div className="mt-3 whitespace-pre-line leading-6 text-slate-700">
-                    {RENTAL_TERMS_CONSENT_TEXT}
+                    {content.rentalTermsBody}
                   </div>
                 </details>
 

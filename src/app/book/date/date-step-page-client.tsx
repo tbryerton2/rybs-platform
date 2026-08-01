@@ -356,6 +356,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
   const displayRentalWindowDeliveryDate = isYmd(normalizedDate) ? normalizedDate : "";
   const displayRentalWindowPickupDate = isYmd(normalizedDate) ? standardPickupDate : "";
   const hasSelectedDeliveryDate = isYmd(normalizedDate);
+  const hasLaterPickupDate = Boolean(standardPickupDate) && isYmd(pickupDate) && pickupDate > standardPickupDate;
   const pricingMaxPickupDate = useMemo(() => {
     if (!isYmd(normalizedDate) || !rentalTimingPolicy) return "";
     return (
@@ -1205,12 +1206,9 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                   </button>
                 ) : null}
 
-                <p className="mt-5 text-sm leading-6 text-slate-600">
-                  Available dates show when a full rental window can be scheduled.
-                </p>
                 {standardRentalDays ? (
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    This dumpster includes a {standardRentalDays}-day rental. Available delivery dates must also have an open pickup date.
+                  <p className="mt-5 text-sm leading-6 text-slate-600">
+                    Only dates with an open {standardRentalDays}-day rental window are shown.
                   </p>
                 ) : null}
 
@@ -1223,7 +1221,6 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                     loadError={calendarError}
                     nextAvailableDate={nextAvailableDate}
                     loadingMessage="Checking delivery availability..."
-                    availabilityNote={content.footerNote}
                     onRetry={() => {
                       void loadCalendarRange(calendarRangeStart);
                     }}
@@ -1248,8 +1245,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                         return context.date === standardPickupDate ? "Pickup" : "Included";
                       }
                       if (!entry || entry.state === "past") return "Past";
-                      if (entry.state === "unavailable") return "Unavailable";
-                      return `${entry.remaining} left`;
+                      return null;
                     }}
                     getAriaLabel={(entry, date) => {
                       const baseDate = formatDateLong(date);
@@ -1278,17 +1274,23 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
                 {displayRentalWindowDeliveryDate && displayRentalWindowPickupDate && draftQuote ? (
                   <div className="max-w-full rounded-2xl border border-[#FDBA74]/60 bg-[#FFF7ED] px-4 py-4 text-sm text-[#9A3412]">
-                    <div className="mb-3 text-sm font-semibold text-slate-950">
-                      Selected rental window
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div>
-                        <span className="font-semibold text-slate-950">Delivery:</span>{" "}
-                        {formatDateShort(displayRentalWindowDeliveryDate)}
+                    <div className="relative grid gap-4 sm:grid-cols-2 sm:gap-0">
+                      <div className="hidden sm:block absolute left-1/2 top-2 bottom-2 w-px -translate-x-1/2 bg-orange-200" aria-hidden="true" />
+                      <div className="min-w-0 text-center sm:pr-5">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#9A3412]">
+                          Delivery
+                        </div>
+                        <div className="mt-1.5 text-lg font-bold leading-tight text-[#7C2D12]">
+                          {formatDateShort(displayRentalWindowDeliveryDate)}
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-semibold text-slate-950">Pickup:</span>{" "}
-                        {formatDateShort(displayRentalWindowPickupDate)}
+                      <div className="min-w-0 border-t border-orange-200 pt-4 text-center sm:border-t-0 sm:pl-5 sm:pt-0">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#9A3412]">
+                          Pickup
+                        </div>
+                        <div className="mt-1.5 text-lg font-bold leading-tight text-[#7C2D12]">
+                          {formatDateShort(displayRentalWindowPickupDate)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1316,24 +1318,23 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
               {isYmd(normalizedDate) && draftQuote ? (
                 <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="space-y-1">
+                  <div>
                     <h3 className="text-lg font-semibold text-slate-900">Rental timing</h3>
-                    <p className="text-sm leading-6 text-slate-600">
-                      Your rental includes{" "}
-                      <span className="font-semibold text-slate-900">
-                        {standardRentalDays} day{standardRentalDays === 1 ? "" : "s"}
-                      </span>
-                      .
-                    </p>
                   </div>
 
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-                    <div>
-                      Pickup is scheduled for{" "}
-                      <span className="font-semibold text-slate-900">
-                        {standardPickupDate ? formatDateLong(standardPickupDate) : "Checking..."}
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 text-sm">
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <span className="text-slate-600">Rental period</span>
+                      <span className="text-right font-semibold text-slate-900">
+                        {standardRentalDays} day{standardRentalDays === 1 ? "" : "s"}
                       </span>
-                      .
+                    </div>
+                    <div className="border-t border-slate-200" />
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <span className="text-slate-600">Extra day rate</span>
+                      <span className="text-right font-semibold text-slate-900">
+                        {formatUsdFromCents(dailyOveragePriceCents)} / day
+                      </span>
                     </div>
                   </div>
 
@@ -1422,12 +1423,13 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                               }
 
                               if (context.date >= normalizedDate && context.date <= standardPickupDate) {
-                                return context.date === standardPickupDate ? "rental-pickup" : "rental-day";
+                                return context.date === standardPickupDate && !hasLaterPickupDate
+                                  ? "rental-pickup"
+                                  : "rental-day";
                               }
 
                               if (
-                                isYmd(pickupDate) &&
-                                pickupDate > standardPickupDate &&
+                                hasLaterPickupDate &&
                                 context.date > standardPickupDate &&
                                 context.date < pickupDate
                               ) {
@@ -1441,20 +1443,16 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                               if (isYmd(normalizedDate) && context.date < normalizedDate) return null;
                               if (isYmd(pickupDate) && context.date === pickupDate) return "Pickup";
                               if (
-                                isYmd(pickupDate) &&
-                                pickupDate > standardPickupDate &&
-                                context.date > standardPickupDate &&
+                                hasLaterPickupDate &&
+                                context.date >= standardPickupDate &&
                                 context.date < pickupDate
                               ) {
                                 return "Extra";
                               }
                               if (!entry || entry.state === "past") return "Past";
-                              if (entry.label) return entry.label;
-                              if (entry.state === "available") return "Open";
-                              if (entry.state === "limited") {
-                                return entry.remaining > 0 ? `${entry.remaining} left` : "Open";
-                              }
-                              return "Unavailable";
+                              if (entry.label === "Included" || entry.label === "Pickup") return entry.label;
+                              if (entry.state === "available" || entry.state === "limited") return null;
+                              return null;
                             }}
                             legendItems={[
                               { label: "Available pickup date", shortLabel: "Available", dotClassName: "bg-emerald-500" },
@@ -1473,14 +1471,11 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                                     ? "Unavailable for pickup"
                                     : isYmd(normalizedDate) && date >= normalizedDate && date < standardPickupDate
                                       ? "Included rental day"
+                                      : hasLaterPickupDate && date >= standardPickupDate && date < pickupDate
+                                        ? "Extra rental day"
                                       : date === standardPickupDate
                                         ? "Scheduled pickup date"
-                                        : isYmd(pickupDate) &&
-                                            pickupDate > standardPickupDate &&
-                                            date > standardPickupDate &&
-                                            date < pickupDate
-                                          ? "Extra rental day"
-                                          : !entry || entry.state === "past"
+                                        : !entry || entry.state === "past"
                                             ? "Past"
                                             : entry.state === "available"
                                               ? "Open for pickup"
@@ -1503,23 +1498,6 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
                           {formatDateLong(selectedPickupDate)}
                         </span>
                       </div>
-                      {extraDays > 0 ? (
-                        <>
-                          <div className="mt-2">
-                            You added{" "}
-                            <span className="font-semibold text-slate-900">
-                              {extraDays} extra day{extraDays === 1 ? "" : "s"}
-                            </span>{" "}
-                            at {formatUsdFromCents(dailyOveragePriceCents)} per day.
-                          </div>
-                          <div className="mt-2">
-                            Extra days total:{" "}
-                            <span className="font-semibold text-slate-900">
-                              {formatUsdFromCents(extraDaysChargeCents)}
-                            </span>
-                          </div>
-                        </>
-                      ) : null}
                     </div>
                   ) : null}
 

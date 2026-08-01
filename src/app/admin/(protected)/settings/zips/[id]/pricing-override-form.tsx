@@ -72,7 +72,7 @@ export function PricingOverrideForm({
                     step="1"
                     defaultValue={override.priceOverride ?? ""}
                     placeholder="Leave blank to use default"
-                    className="w-full rounded-2xl border border-slate-300 bg-white py-3 pl-8 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+                    className="w-full rounded-[14px] border border-slate-300 bg-white py-3 pl-8 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                   />
                 </div>
               </label>

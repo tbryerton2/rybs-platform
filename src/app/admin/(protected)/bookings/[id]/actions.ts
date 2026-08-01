@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdminOwner } from "@/lib/admin/auth";
@@ -9,7 +10,15 @@ import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
 import {
   chargePendingBookingChargeWithSavedCard,
   PostBookingChargePaymentServiceError,
+  sendPostBookingChargeReceipt,
+  validateSavedCardForBookingCharge,
 } from "@/lib/payments/post-booking-charge-payment-service";
+import {
+  ExternalBookingChargePaymentServiceError,
+  recordExternalBookingChargePayment,
+  type ExternalBookingChargePaymentSupabaseClient,
+  type ExternalPaymentMethod,
+} from "@/lib/payments/external-booking-charge-payment-service";
 import {
   sanitizePlacementDetails,
   validatePlacementDetails,
@@ -38,6 +47,14 @@ const BOOKING_CHARGE_TYPES = new Set<BookingChargeType>([
   "trip_fee",
   "prohibited_material",
   "manual_adjustment",
+]);
+
+const EXTERNAL_PAYMENT_METHODS = new Set<ExternalPaymentMethod>([
+  "cash",
+  "check",
+  "square_invoice",
+  "manually_processed_card",
+  "other",
 ]);
 
 type OperationalFieldName =
@@ -86,6 +103,14 @@ function redirectWithChargeError(id: string, error: string): never {
   redirect(`/admin/bookings/${id}?chargeError=${encodeURIComponent(error)}#charges-adjustments`);
 }
 
+function formatAdminNoteEntry(input: {
+  author: string;
+  body: string;
+  createdAt: string;
+}) {
+  return `[${input.createdAt}] ${input.author}\n${input.body}`;
+}
+
 function getSavedCardChargeErrorMessage(error: unknown) {
   if (!(error instanceof PostBookingChargePaymentServiceError)) {
     return error instanceof Error ? error.message : "Unable to charge the saved card.";
@@ -97,7 +122,11 @@ function getSavedCardChargeErrorMessage(error: unknown) {
     case "SAVED_CARD_MISSING":
       return "No active saved card is available for this customer.";
     case "SAVED_CARD_INVALID":
-      return "The saved card record is missing provider references.";
+      return "The saved card record is missing provider references or does not match this booking customer.";
+    case "SAVED_CARD_UNAVAILABLE":
+      return "The saved card is no longer available. Collect payment another way.";
+    case "SAVED_CARD_VERIFICATION_FAILED":
+      return "Unable to verify the saved card. Try again.";
     case "CHARGE_NOT_PENDING":
       return "Only charges marked ready to charge can be charged.";
     case "PAYMENT_ALREADY_PENDING":
@@ -111,6 +140,21 @@ function getSavedCardChargeErrorMessage(error: unknown) {
     default:
       return error.message;
   }
+}
+
+function shouldRestoreChargeToNeedsApproval(error: unknown) {
+  return (
+    error instanceof PostBookingChargePaymentServiceError &&
+    [
+      "CARD_ON_FILE_CONSENT_MISSING",
+      "SAVED_CARD_MISSING",
+      "SAVED_CARD_INVALID",
+      "SAVED_CARD_UNAVAILABLE",
+      "SAVED_CARD_VERIFICATION_FAILED",
+      "PAYMENT_ALREADY_EXISTS",
+      "PAYMENT_ALREADY_PENDING",
+    ].includes(error.code)
+  );
 }
 
 function normalizeBookingChargeType(value: string): BookingChargeType | null {
@@ -133,6 +177,19 @@ function parseAmountCents(rawDollars: string, rawCents: string) {
   if (!Number.isSafeInteger(dollars)) return null;
 
   return dollars * 100 + Number(centsPart.padEnd(2, "0"));
+}
+
+function normalizeExternalPaymentMethod(value: string) {
+  return EXTERNAL_PAYMENT_METHODS.has(value as ExternalPaymentMethod)
+    ? (value as ExternalPaymentMethod)
+    : null;
+}
+
+function parsePaymentDate(value: string) {
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const parsed = new Date(`${trimmed}T12:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : trimmed;
 }
 
 function normalizeOperationalFieldValue(fieldName: OperationalFieldName, value: unknown) {
@@ -166,9 +223,26 @@ export async function updateNotesAction(formData: FormData) {
   const adminSession = await requireAdminOwner();
 
   const id = asString(formData.get("id"));
-  const notes = emptyToNull(asString(formData.get("notes")));
+  const note = emptyToNull(asString(formData.get("note")));
 
   if (!id) throw new Error("Missing booking id");
+  if (!note) redirect(`/admin/bookings/${id}#notes`);
+
+  const current = await supabaseAdmin
+    .from("bookings")
+    .select("notes")
+    .eq("id", id)
+    .eq("business_id", adminSession.business.id)
+    .single<{ notes: string | null }>();
+
+  if (current.error) throw new Error(current.error.message);
+
+  const entry = formatAdminNoteEntry({
+    author: adminSession.user.email ?? "Admin",
+    body: note,
+    createdAt: new Date().toISOString(),
+  });
+  const notes = [current.data?.notes?.trim(), entry].filter(Boolean).join("\n\n---\n\n");
 
   const { error } = await supabaseAdmin
     .from("bookings")
@@ -357,6 +431,16 @@ export async function approveAndChargeBookingChargeAction(formData: FormData) {
     redirectWithChargeError(bookingId, "Charge description is required before it can be approved.");
   }
 
+  try {
+    await validateSavedCardForBookingCharge({
+      businessId: adminSession.business.id,
+      bookingId,
+      bookingChargeId,
+    });
+  } catch (error) {
+    redirectWithChargeError(bookingId, getSavedCardChargeErrorMessage(error));
+  }
+
   const statusUpdate = await supabaseAdmin
     .from("booking_charges")
     .update({ status: "pending" })
@@ -376,17 +460,7 @@ export async function approveAndChargeBookingChargeAction(formData: FormData) {
       bookingChargeId,
     });
   } catch (error) {
-    const shouldRestoreNeedsApproval =
-      error instanceof PostBookingChargePaymentServiceError &&
-      [
-        "CARD_ON_FILE_CONSENT_MISSING",
-        "SAVED_CARD_MISSING",
-        "SAVED_CARD_INVALID",
-        "PAYMENT_ALREADY_EXISTS",
-        "PAYMENT_ALREADY_PENDING",
-      ].includes(error.code);
-
-    if (shouldRestoreNeedsApproval) {
+    if (shouldRestoreChargeToNeedsApproval(error)) {
       const restore = await supabaseAdmin
         .from("booking_charges")
         .update({ status: "draft" })
@@ -428,6 +502,20 @@ export async function chargeBookingChargeSavedCardAction(formData: FormData) {
       bookingChargeId,
     });
   } catch (error) {
+    if (shouldRestoreChargeToNeedsApproval(error)) {
+      const restore = await supabaseAdmin
+        .from("booking_charges")
+        .update({ status: "draft" })
+        .eq("id", bookingChargeId)
+        .eq("booking_id", bookingId)
+        .eq("business_id", adminSession.business.id)
+        .eq("status", "pending");
+
+      if (restore.error) {
+        console.error("[admin-booking-charge] failed to restore charge approval status", restore.error);
+      }
+    }
+
     redirectWithChargeError(bookingId, getSavedCardChargeErrorMessage(error));
   }
 
@@ -436,6 +524,119 @@ export async function chargeBookingChargeSavedCardAction(formData: FormData) {
   revalidatePath("/admin");
 
   redirect(`/admin/bookings/${bookingId}?saved=charge-paid#charges-adjustments`);
+}
+
+export async function recordExternalBookingChargePaymentAction(formData: FormData) {
+  const adminSession = await requireAdminOwner();
+  const correlationId = randomUUID();
+
+  const bookingId = asString(formData.get("bookingId"));
+  const bookingChargeId = asString(formData.get("bookingChargeId"));
+  const externalPaymentMethod = normalizeExternalPaymentMethod(asString(formData.get("externalPaymentMethod")));
+  const amountCents = parseAmountCents(
+    asString(formData.get("amount")),
+    asString(formData.get("amountCents")),
+  );
+  const paymentDate = parsePaymentDate(asString(formData.get("paymentDate")));
+  const reference = emptyToNull(asString(formData.get("reference")));
+  const notes = emptyToNull(asString(formData.get("notes")));
+  const confirmed = asString(formData.get("confirmExternalPayment")) === "on";
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!bookingChargeId) {
+    redirectWithChargeError(bookingId, "Missing charge id.");
+  }
+  if (!externalPaymentMethod) {
+    redirectWithChargeError(bookingId, "Choose a valid external payment method.");
+  }
+  if (!amountCents || amountCents <= 0) {
+    redirectWithChargeError(bookingId, "Enter an external payment amount greater than $0.00.");
+  }
+  if (!paymentDate) {
+    redirectWithChargeError(bookingId, "Enter a valid external payment date.");
+  }
+  if (!confirmed) {
+    redirectWithChargeError(bookingId, "Confirm that the external payment has already been collected.");
+  }
+
+  try {
+    await recordExternalBookingChargePayment(
+      {
+        businessId: adminSession.business.id,
+        bookingId,
+        bookingChargeId,
+        operatorUserId: adminSession.user.id,
+        paymentMethod: externalPaymentMethod,
+        amountCents,
+        paymentDate,
+        reference,
+        notes,
+        providerEnvironment: process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
+      },
+      { supabase: supabaseAdmin as unknown as ExternalBookingChargePaymentSupabaseClient },
+    );
+  } catch (error) {
+    console.error("[admin-booking-charge] external payment recording failed", {
+      correlationId,
+      bookingId,
+      bookingChargeId,
+      businessId: adminSession.business.id,
+      operatorUserId: adminSession.user.id,
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+              cause: error instanceof ExternalBookingChargePaymentServiceError ? error.cause : undefined,
+            }
+          : error,
+    });
+
+    if (error instanceof ExternalBookingChargePaymentServiceError) {
+      redirectWithChargeError(bookingId, `${error.message} Reference: ${correlationId}`);
+    }
+
+    redirectWithChargeError(
+      bookingId,
+      `The external payment could not be recorded. No changes were saved. Reference: ${correlationId}`,
+    );
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=external-payment#charges-adjustments`);
+}
+
+export async function sendPostBookingChargeReceiptAction(formData: FormData) {
+  const adminSession = await requireAdminOwner();
+  const bookingId = asString(formData.get("bookingId"));
+  const bookingChargeId = asString(formData.get("bookingChargeId"));
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!bookingChargeId) {
+    redirectWithChargeError(bookingId, "Missing charge id.");
+  }
+
+  try {
+    await sendPostBookingChargeReceipt({
+      businessId: adminSession.business.id,
+      bookingId,
+      bookingChargeId,
+    });
+  } catch (error) {
+    redirectWithChargeError(
+      bookingId,
+      error instanceof Error ? error.message : "Unable to send the customer receipt.",
+    );
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=receipt-sent#charges-adjustments`);
 }
 
 export async function updateBookingStatusAction(formData: FormData) {
@@ -647,13 +848,11 @@ export async function updateOperationalControlsAction(formData: FormData) {
   const adminSession = await requireAdminOwner();
 
   const id = asString(formData.get("id"));
-  const status = asString(formData.get("status")) as BookingStatus;
   const delivery_date = emptyToNull(asString(formData.get("delivery_date")));
   const pickup_date = emptyToNull(asString(formData.get("pickup_date")));
   const placementSchemaAvailable = asString(formData.get("placement_schema_available")) === "true";
 
   if (!id) throw new Error("Missing booking id");
-  if (!status) throw new Error("Missing status");
 
   const placement = placementSchemaAvailable
     ? sanitizePlacementDetails({
@@ -693,6 +892,7 @@ export async function updateOperationalControlsAction(formData: FormData) {
   const currentData: OperationalBookingData = current.data;
 
   const pickup_mode = pickup_date ? "schedule" : "request";
+  const status: BookingStatus = pickup_date ? "picked_up" : delivery_date ? "delivered" : "confirmed";
   const updates: Partial<Record<OperationalFieldName, unknown>> = {
     status,
     delivery_date,

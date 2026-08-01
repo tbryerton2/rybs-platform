@@ -6,5 +6,5 @@ export default function AdminRootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <div className="tcm-admin">{children}</div>;
 }

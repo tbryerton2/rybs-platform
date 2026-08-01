@@ -92,7 +92,7 @@ function Input({
       maxLength={maxLength}
       disabled={disabled}
       className={[
-        "h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50",
+        "h-11 w-full rounded-[14px] border bg-white px-4 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50",
         error ? "border-rose-300 focus:border-rose-400" : "border-slate-300 focus:border-[#F97316]",
       ].join(" ")}
     />
@@ -118,7 +118,7 @@ function Select({
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}
       className={[
-        "h-11 w-full rounded-2xl border bg-white px-4 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50",
+        "h-11 w-full rounded-[14px] border bg-white px-4 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-50",
         error ? "border-rose-300 focus:border-rose-400" : "border-slate-300 focus:border-[#F97316]",
       ].join(" ")}
     >
@@ -142,7 +142,7 @@ function Textarea({
       onChange={(event) => onChange(event.target.value)}
       rows={4}
       disabled={disabled}
-      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+      className="w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
     />
   );
 }
@@ -313,7 +313,7 @@ export function EmployeeDetailClient({
                 type="button"
                 onClick={toggleEmployeeStatus}
                 disabled={isPending}
-                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                className="admin-btn admin-btn-secondary h-10 gap-2 px-4 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
                 {draft.active ? <UserMinusIcon className="h-4 w-4" /> : <UserPlusIcon className="h-4 w-4" />}
                 {draft.active ? "Deactivate" : "Reactivate"}
@@ -323,7 +323,7 @@ export function EmployeeDetailClient({
                   type="button"
                   onClick={resetDraft}
                   disabled={isPending}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-10 px-4 disabled:cursor-not-allowed disabled:bg-slate-50"
                 >
                   Reset changes
                 </button>
@@ -332,7 +332,7 @@ export function EmployeeDetailClient({
                 type="button"
                 onClick={saveDraft}
                 disabled={isPending}
-                className="inline-flex h-10 items-center rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="admin-btn admin-btn-primary h-10 px-4"
               >
                 {isPending ? "Saving..." : "Save changes"}
               </button>
@@ -342,18 +342,18 @@ export function EmployeeDetailClient({
       ) : null}
 
       {panelError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {panelError}
         </div>
       ) : null}
 
       {!draft.active ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           This employee is inactive. The record stays available for history, compliance review, and future reactivation.
         </div>
       ) : null}
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <SectionTitle title="Employee details" />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="First name" required error={errors.firstName}>
@@ -439,7 +439,7 @@ export function EmployeeDetailClient({
         </div>
       </section>
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <SectionTitle title="Contact and address" />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Street address" required error={errors.streetAddress}>
@@ -523,7 +523,7 @@ export function EmployeeDetailClient({
         </div>
       </section>
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <SectionTitle title="Driver's license and notes" />
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="License number" error={errors.licenseNumber}>
@@ -578,7 +578,7 @@ export function EmployeeDetailClient({
                 type="button"
                 onClick={resetDraft}
                 disabled={isPending}
-                className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                className="admin-btn admin-btn-secondary h-11 px-5 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
                 Cancel
               </button>
@@ -586,7 +586,7 @@ export function EmployeeDetailClient({
                 type="button"
                 onClick={saveDraft}
                 disabled={isPending}
-                className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="admin-btn admin-btn-primary h-11 px-5"
               >
                 {isPending ? "Saving..." : "Create employee"}
               </button>
@@ -603,7 +603,7 @@ export function EmployeeDetailClient({
                 type="button"
                 onClick={resetDraft}
                 disabled={isPending}
-                className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50"
+                className="admin-btn admin-btn-secondary h-11 px-5 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
                 Reset changes
               </button>
@@ -612,7 +612,7 @@ export function EmployeeDetailClient({
               type="button"
               onClick={saveDraft}
               disabled={isPending}
-              className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="admin-btn admin-btn-primary h-11 px-5"
             >
               {isPending ? "Saving..." : "Save changes"}
             </button>

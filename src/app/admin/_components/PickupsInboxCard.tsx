@@ -40,7 +40,7 @@ export function PickupsInboxCard(props: {
       actionHref="/admin/bookings"
       actionLabel="View all"
     >
-      <div className="mt-2 rounded-2xl bg-slate-50 ring-1 ring-slate-200">
+      <div className="mt-2 rounded-[14px] bg-slate-50 ring-1 ring-slate-200">
         {props.items.length === 0 ? (
           <div className="px-5 py-5 text-sm text-slate-600">
             No pickups waiting.
@@ -88,7 +88,7 @@ export function PickupsInboxCard(props: {
 
                       <Link
                         href={`/admin/bookings?bookingId=${encodeURIComponent(item.id)}`}
-                        className="rounded-lg px-2 py-1 text-xs font-medium text-slate-700 hover:bg-white"
+                        className="admin-btn admin-btn-secondary admin-btn-sm"
                       >
                         View
                       </Link>
@@ -97,7 +97,7 @@ export function PickupsInboxCard(props: {
                         <input type="hidden" name="id" value={item.id} />
                         <FormSubmitButton
                           loadingLabel="Marking..."
-                          className="rounded-lg bg-slate-900 px-2 py-1 text-xs font-semibold text-white hover:bg-slate-800"
+                          className="admin-btn admin-btn-primary admin-btn-sm"
                         >
                           Mark picked up
                         </FormSubmitButton>

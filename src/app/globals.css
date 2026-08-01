@@ -4,6 +4,7 @@
   --background: #ffffff;
   --foreground: #171717;
   --display: "Playfair Display", "Iowan Old Style", Georgia, serif;
+  --radius: 4px;
 }
 
 @theme inline {
@@ -29,6 +30,185 @@ body {
 
 .font-display {
   font-family: var(--display);
+}
+
+.tcm-admin {
+  --admin-radius-panel: 20px;
+  --admin-radius-card: 14px;
+  --admin-radius-control: 8px;
+  --admin-radius-nested: 12px;
+  --admin-action-orange: #f97316;
+  --admin-action-orange-hover: #ea580c;
+  --admin-action-orange-active: #c2410c;
+  --admin-danger-text: #dc2626;
+  --admin-danger-text-hover: #b91c1c;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+}
+
+.tcm-admin :is(button, input, select, textarea, label).rounded-xl,
+.tcm-admin :is(button, input, select, textarea, label).rounded-\[14px\],
+.tcm-admin a.inline-flex.rounded-\[14px\] {
+  border-radius: var(--admin-radius-control);
+}
+
+.tcm-admin .rounded-xl {
+  border-radius: var(--admin-radius-nested);
+}
+
+.tcm-admin .admin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  border-radius: var(--admin-radius-control);
+  border: 0.5px solid transparent;
+  padding-inline: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease,
+    transform 100ms ease,
+    box-shadow 150ms ease;
+}
+
+.tcm-admin .admin-btn-sm {
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.tcm-admin .admin-btn-lg {
+  min-height: 3rem;
+  padding-inline: 1.25rem;
+}
+
+.tcm-admin .admin-btn-icon {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  padding-inline: 0;
+}
+
+.tcm-admin .admin-btn-icon.admin-btn-sm {
+  width: 2rem;
+  min-width: 2rem;
+}
+
+.tcm-admin .admin-btn:active {
+  transform: scale(0.99);
+}
+
+.tcm-admin .admin-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px rgb(249 115 22 / 0.35);
+}
+
+.tcm-admin .admin-btn:disabled,
+.tcm-admin .admin-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.tcm-admin .admin-btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.tcm-admin .admin-btn-primary,
+.tcm-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\],
+.tcm-admin :is(button, a):not(.rounded-full).bg-orange-500,
+.tcm-admin :is(button, a):not(.rounded-full).bg-orange-600,
+.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-600,
+.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-700,
+.tcm-admin :is(button, a):not(.rounded-full).bg-green-600,
+.tcm-admin :is(button, a):not(.rounded-full).bg-green-700 {
+  border-color: transparent;
+  background-color: var(--admin-action-orange);
+  color: #fff;
+}
+
+.tcm-admin .admin-btn-primary:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\]:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-orange-500:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-orange-600:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-600:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-700:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-green-600:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-green-700:hover {
+  background-color: var(--admin-action-orange-hover);
+  color: #fff;
+}
+
+.tcm-admin .admin-btn-primary:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\]:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-orange-500:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-orange-600:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-600:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-700:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-green-600:active,
+.tcm-admin :is(button, a):not(.rounded-full).bg-green-700:active {
+  background-color: var(--admin-action-orange-active);
+  color: #fff;
+}
+
+.tcm-admin .admin-btn-secondary,
+.tcm-admin input[type="file"]::file-selector-button {
+  border-color: var(--border-strong);
+  background-color: transparent;
+  color: var(--text-secondary);
+}
+
+.tcm-admin .admin-btn-secondary:hover,
+.tcm-admin input[type="file"]::file-selector-button:hover {
+  border-color: var(--border-strong);
+  background-color: rgb(248 250 252 / 0.9);
+  color: #334155;
+}
+
+.tcm-admin .admin-btn-secondary:active {
+  background-color: rgb(241 245 249 / 0.95);
+  color: #1e293b;
+}
+
+.tcm-admin .admin-btn-destructive,
+.tcm-admin :is(button, a):not(.rounded-full).bg-red-600,
+.tcm-admin :is(button, a):not(.rounded-full).bg-red-700,
+.tcm-admin :is(button, a):not(.rounded-full).bg-rose-600,
+.tcm-admin :is(button, a):not(.rounded-full).bg-rose-700,
+.tcm-admin :is(button, a):not(.rounded-full).border-red-200,
+.tcm-admin :is(button, a):not(.rounded-full).border-rose-200 {
+  border-color: var(--border);
+  background-color: transparent;
+  color: var(--admin-danger-text);
+}
+
+.tcm-admin .admin-btn-destructive:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-red-600:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-red-700:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-rose-600:hover,
+.tcm-admin :is(button, a):not(.rounded-full).bg-rose-700:hover,
+.tcm-admin :is(button, a):not(.rounded-full).border-red-200:hover,
+.tcm-admin :is(button, a):not(.rounded-full).border-rose-200:hover {
+  border-color: var(--border);
+  background-color: rgb(248 250 252 / 0.9);
+  color: var(--admin-danger-text-hover);
+}
+
+.tcm-admin .admin-btn-destructive:active {
+  background-color: rgb(241 245 249 / 0.95);
+  color: #991b1b;
 }
 
 .tcm-zip-tooltip {

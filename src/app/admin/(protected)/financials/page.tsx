@@ -216,7 +216,7 @@ function summaryCardShell(
             ? "border-amber-200/70 bg-amber-50/55"
             : "border-teal-200/70 bg-teal-50/55";
 
-  return `rounded-[28px] border shadow-sm ${toneClasses} ${extra}`;
+  return `rounded-[14px] border shadow-sm ${toneClasses} ${extra}`;
 }
 
 function summaryCardIconClasses(tone: "green" | "blue" | "violet" | "amber" | "teal") {
@@ -627,7 +627,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
           <div key={card.label} className={summaryCardShell(card.tone, "h-full p-5")}>
             <div className="flex gap-4">
               <span
-                className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${summaryCardIconClasses(card.tone)}`}
+                className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset ${summaryCardIconClasses(card.tone)}`}
               >
                 <card.icon className="h-6 w-6" />
               </span>
@@ -758,10 +758,10 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         currentGranularity={currentGranularity}
         granularityOptions={
           [
-            { key: "daily" as const, label: "Daily" },
-            { key: "weekly" as const, label: "Weekly" },
-            { key: "monthly" as const, label: "Monthly" },
-            { key: "annual" as const, label: "Annual" },
+            { key: "daily" as const, label: "Day" },
+            { key: "weekly" as const, label: "Week" },
+            { key: "monthly" as const, label: "Month" },
+            { key: "annual" as const, label: "Year" },
           ].map((option) => ({
             ...option,
             href: `${buildHref({
@@ -780,18 +780,9 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         totalValueLabel={formatUsd(totalChartValue, { maximumFractionDigits: 0 })}
         bookingsLabel={numberFmt(tableRows.length)}
         averageValueLabel={formatUsd(averageChartValue, { maximumFractionDigits: 0 })}
-        bucketLabel={
-          currentGranularity === "daily"
-            ? "Daily"
-            : currentGranularity === "weekly"
-              ? "Weekly"
-              : currentGranularity === "monthly"
-                ? "Monthly"
-                : "Annual"
-        }
       />
 
-      <div className="mt-6 rounded-[24px] border border-orange-100 bg-orange-50/70 px-5 py-4 text-sm text-slate-700">
+      <div className="mt-6 rounded-[14px] border border-orange-100 bg-orange-50/70 px-5 py-4 text-sm text-slate-700">
         V1 financials are based on the booking total stored on each job record and
         use <span className="font-semibold">delivery_date</span> for reporting.
         This is operational revenue visibility, not finalized accounting or payment

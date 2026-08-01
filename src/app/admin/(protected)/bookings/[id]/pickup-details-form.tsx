@@ -37,7 +37,7 @@ export default function PickupDetailsForm({
                 setPickupDate("");
               }
             }}
-            className="h-12 w-full rounded-2xl border border-slate-300 px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+            className="h-12 w-full rounded-[14px] border border-slate-300 px-4 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
           >
             <option value="request">Request</option>
             <option value="schedule">Scheduled</option>
@@ -49,7 +49,7 @@ export default function PickupDetailsForm({
             Pickup date
           </span>
 
-          <div className="h-12 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+          <div className="h-12 overflow-hidden rounded-[14px] border border-slate-300 bg-white shadow-sm">
             {pickupMode === "schedule" ? (
               <input
                 type="date"
@@ -72,7 +72,7 @@ export default function PickupDetailsForm({
 
       <FormSubmitButton
         loadingLabel="Saving pickup details..."
-        className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+        className="admin-btn admin-btn-primary"
       >
         Save pickup details
       </FormSubmitButton>

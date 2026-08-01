@@ -72,7 +72,6 @@ export function buildPostBookingChargePaidEmail(
   const businessName = clean(input.businessName) ?? "Our team";
   const customerName = clean(input.customerName);
   const bookingReference = clean(input.bookingReference);
-  const chargeDescription = clean(input.chargeDescription) ?? "Additional rental charge";
   const currency = normalizeCurrency(input.currency);
   const amount = formatAmount(input.amountCents, currency);
   const paidDate = formatDateTimeET(input.paidAt);
@@ -85,13 +84,14 @@ export function buildPostBookingChargePaidEmail(
     ? `Questions? Contact ${businessName} at ${contactParts.join(" or ")}.`
     : `Questions? Contact ${businessName}.`;
 
-  const subjectReference = bookingReference ? ` for booking ${bookingReference}` : "";
   const greeting = customerName ? `Hi ${customerName},` : "Hi,";
   const referenceLine = bookingReference ? [`Booking reference: ${bookingReference}`] : [];
   const cardLines = cardLine ? [cardLine] : [];
 
   return {
-    subject: `${businessName} receipt: additional charge paid${subjectReference}`,
+    subject: bookingReference
+      ? `Additional charge for your dumpster rental ${bookingReference}`
+      : "Additional charge for your dumpster rental",
     body: [
       greeting,
       "",
@@ -99,7 +99,6 @@ export function buildPostBookingChargePaidEmail(
       "",
       ...referenceLine,
       `Charge type: ${chargeTypeLabel}`,
-      `Description: ${chargeDescription}`,
       `Amount: ${amount}`,
       `Paid: ${paidDate}`,
       ...cardLines,

@@ -301,7 +301,7 @@ export default async function ZipMapPage({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div
             id="zip-map"
-            className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-sm"
+            className="overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-sm"
           >
             <div className="border-b border-slate-200 px-6 py-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -333,7 +333,7 @@ export default async function ZipMapPage({
           </div>
 
           <div className="space-y-6">
-            <div className="rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-sm">
+            <div className="rounded-[20px] border border-slate-200/80 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">How to read the map</h2>
               <div className="mt-4 space-y-3 text-sm text-slate-600">
                 <p>

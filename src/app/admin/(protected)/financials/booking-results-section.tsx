@@ -51,7 +51,6 @@ type BookingResultsSectionProps = {
   totalValueLabel: string;
   bookingsLabel: string;
   averageValueLabel: string;
-  bucketLabel: string;
 };
 
 export function BookingResultsSection({
@@ -66,7 +65,6 @@ export function BookingResultsSection({
   totalValueLabel,
   bookingsLabel,
   averageValueLabel,
-  bucketLabel,
 }: BookingResultsSectionProps) {
   const maxValue = Math.max(...chartPoints.map((point) => point.value), 0);
   const hasRows = rows.length > 0;
@@ -101,7 +99,7 @@ export function BookingResultsSection({
   return (
     <section
       id="booking-results"
-      className="mt-6 scroll-mt-24 overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200/70"
+      className="mt-6 scroll-mt-24 overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-slate-200/70"
     >
       <div className="flex items-center justify-between gap-4 border-b border-slate-200/80 px-6 py-5">
         <h2 className="text-lg font-semibold text-slate-900">Booking results</h2>
@@ -210,24 +208,6 @@ export function BookingResultsSection({
         )
       ) : hasRows ? (
         <div className="space-y-6 px-6 py-6">
-          <div className="flex items-center justify-end">
-            <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 p-1">
-              {granularityOptions.map((option) => (
-                <Link
-                  key={option.key}
-                  href={option.href}
-                  className={`inline-flex h-8 items-center rounded-full px-3 text-sm font-medium transition ${
-                    currentGranularity === option.key
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  {option.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-
           <div className="grid gap-3 md:grid-cols-3">
             {[
               { label: "Total value", value: totalValueLabel },
@@ -236,7 +216,7 @@ export function BookingResultsSection({
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3"
+                className="rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-3"
               >
                 <div className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
                   {stat.label}
@@ -248,11 +228,26 @@ export function BookingResultsSection({
             ))}
           </div>
 
-          <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-5">
-            <div className="mb-5 flex items-center justify-between gap-4">
+          <div className="rounded-[14px] border border-slate-200 bg-white px-4 py-5">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm font-medium text-slate-600">Revenue over time</div>
-              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
-                {bucketLabel}
+              <div className="inline-flex items-center gap-2 sm:justify-end">
+                <span className="text-sm font-medium text-slate-500">Group by:</span>
+                <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 p-1">
+                  {granularityOptions.map((option) => (
+                    <Link
+                      key={option.key}
+                      href={option.href}
+                      className={`inline-flex h-8 items-center rounded-full px-3 text-sm font-medium transition ${
+                        currentGranularity === option.key
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {option.label}
+                    </Link>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -298,7 +293,7 @@ export function BookingResultsSection({
                               className={`absolute left-[8%] right-[8%] top-[2px] h-px rounded-full ${palette.highlight}`}
                             />
                           </div>
-                          <div className="pointer-events-none absolute bottom-full mb-2 rounded-xl bg-slate-900 px-2.5 py-1.5 text-center text-xs font-medium text-white opacity-0 shadow-lg transition group-hover:opacity-100">
+                          <div className="pointer-events-none absolute bottom-full mb-2 rounded-lg bg-slate-900 px-2.5 py-1.5 text-center text-xs font-medium text-white opacity-0 shadow-lg transition group-hover:opacity-100">
                             <div>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(point.value)}</div>
                             <div className="text-[11px] text-slate-300">
                               {point.bookings} {point.bookings === 1 ? "booking" : "bookings"}

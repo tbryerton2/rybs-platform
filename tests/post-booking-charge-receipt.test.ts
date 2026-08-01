@@ -31,7 +31,7 @@ function baseInput(overrides: Partial<BuildPostBookingChargePaidEmailInput> = {}
 test("buildPostBookingChargePaidEmail formats amount correctly", () => {
   const email = buildPostBookingChargePaidEmail(baseInput({ amountCents: 51300 }));
 
-  assert.match(email.subject, /additional charge paid/);
+  assert.match(email.subject, /Additional charge for your dumpster rental/);
   assert.match(email.body, /charged \$513\.00/);
   assert.match(email.body, /Amount: \$513\.00/);
 });
@@ -39,7 +39,7 @@ test("buildPostBookingChargePaidEmail formats amount correctly", () => {
 test("buildPostBookingChargePaidEmail includes booking reference when present", () => {
   const email = buildPostBookingChargePaidEmail(baseInput({ bookingReference: "BK-ABC123" }));
 
-  assert.match(email.subject, /booking BK-ABC123/);
+  assert.match(email.subject, /BK-ABC123/);
   assert.match(email.body, /Booking reference: BK-ABC123/);
 });
 
@@ -85,4 +85,13 @@ test("BuildPostBookingChargePaidEmailInput does not accept evidence or internal 
 
   assert.doesNotMatch(email.body, /Internal staff note/);
   assert.doesNotMatch(email.body, /evidence/i);
+});
+
+test("buildPostBookingChargePaidEmail does not expose admin charge description", () => {
+  const email = buildPostBookingChargePaidEmail(
+    baseInput({ chargeDescription: "Scale ticket note for internal staff review." }),
+  );
+
+  assert.doesNotMatch(email.body, /Scale ticket note/);
+  assert.doesNotMatch(email.body, /Description:/);
 });

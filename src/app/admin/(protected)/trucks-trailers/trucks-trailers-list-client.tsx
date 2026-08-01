@@ -166,7 +166,7 @@ export function TrucksTrailersListClient({
         />
       </section>
 
-      <section className="rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
+      <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search trucks & trailers</h2>
         </div>
@@ -177,10 +177,10 @@ export function TrucksTrailersListClient({
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, type, VIN, plate, or tracker ID"
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
+              className="h-12 w-full rounded-[14px] border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
             />
           </label>
-          <label className="inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700">
+          <label className="inline-flex h-12 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700">
             <input
               type="checkbox"
               checked={includeInactive}
@@ -197,14 +197,14 @@ export function TrucksTrailersListClient({
               setSummaryFilterWithUrl("all");
             }}
             disabled={!hasActiveFilters}
-            className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-12 items-center justify-center rounded-[14px] border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Clear filters
           </button>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+      <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="text-lg font-semibold tracking-tight text-slate-900">Trucks & trailers</div>
@@ -216,14 +216,14 @@ export function TrucksTrailersListClient({
 
         {loadError ? (
           <div className="px-6 py-10 sm:px-8">
-            <div className="rounded-[24px] border border-rose-200 bg-rose-50/80 p-5">
+            <div className="rounded-[14px] border border-rose-200 bg-rose-50/80 p-5">
               <div className="text-sm font-semibold text-rose-900">Unable to load trucks and trailers</div>
               <p className="mt-1 text-sm leading-6 text-rose-800">{loadError}</p>
             </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-6 py-12 sm:px-8">
-            <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+            <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
               {records.length === 0
                 ? "No trucks or trailers have been added yet."
                 : "No trucks or trailers match the current filters."}

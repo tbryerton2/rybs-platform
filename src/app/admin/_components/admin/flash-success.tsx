@@ -54,7 +54,7 @@ export function FlashSuccess({ show, message, children }: FlashSuccessProps) {
   return (
     <div
       className={[
-        "mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800",
+        "mb-5 rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800",
         "transition-all duration-500 ease-out",
         visible ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
       ].join(" ")}

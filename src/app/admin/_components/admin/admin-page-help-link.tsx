@@ -13,7 +13,7 @@ export function AdminPageHelpLink({
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-700"
+      className="inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 transition hover:bg-white hover:text-slate-700"
     >
       <BookOpenIcon className="h-4 w-4" />
       <span>{label}</span>

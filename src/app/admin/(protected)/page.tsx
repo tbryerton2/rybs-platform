@@ -244,7 +244,7 @@ function statusTone(status: BookingStatus | null) {
 
 function sectionShell(extra?: string) {
   return joinClasses(
-    "rounded-[30px] border border-slate-200/80 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)]",
+    "rounded-[20px] border border-slate-200/80 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.05)]",
     extra,
   );
 }
@@ -281,7 +281,7 @@ function SectionCard({
                 <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute left-0 top-7 z-50 w-64 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                  className="pointer-events-none absolute left-0 top-7 z-50 w-64 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                 >
                   {tooltip}
                 </span>
@@ -318,7 +318,7 @@ function MiniRevenueChart({
 
   if (!hasChartData || meaningfulPoints < 2) {
     return (
-      <div className="rounded-[22px] bg-slate-50/60 px-4 py-6 text-center">
+      <div className="rounded-[14px] bg-slate-50/60 px-4 py-6 text-center">
         <div className="text-sm font-semibold text-slate-900">Not enough recent revenue to chart yet</div>
         <div className="mt-1 text-xs leading-5 text-slate-500">
           This view will show a trend once multiple recent periods have booked revenue.
@@ -328,7 +328,7 @@ function MiniRevenueChart({
   }
 
   return (
-    <div className="rounded-[22px] bg-slate-50/60 px-4 py-4">
+    <div className="rounded-[14px] bg-slate-50/60 px-4 py-4">
       <div className="mb-4 flex items-center justify-between">
         <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Last 30 Days</div>
         <div className="text-xs font-medium text-slate-500">Booked revenue by period</div>
@@ -393,7 +393,7 @@ function FunnelBarRow({
 
   return (
     <div className="py-[5px] first:pt-0 last:pb-0">
-      <div className={joinClasses("rounded-2xl p-px", toneClasses.track)}>
+      <div className={joinClasses("rounded-[14px] p-px", toneClasses.track)}>
         <div
           className={joinClasses(
             "flex min-h-9 items-center justify-between rounded-[15px] px-4 py-2 shadow-[inset_0_-1px_0_rgba(15,23,42,0.06),0_1px_1px_rgba(15,23,42,0.04)]",
@@ -817,14 +817,14 @@ export default async function AdminDashboardPage() {
         >
           <div>
             {latestBookingActivity.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
+              <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
                 <div className="font-medium text-slate-700">No bookings yet</div>
                 <div className="mt-1">New customer bookings will appear here.</div>
               </div>
             ) : (
               <div className="space-y-5">
                 {!hasNewBookingsLast7Days ? (
-                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
+                  <div className="rounded-[14px] border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
                     No new bookings in the last 7 days
                   </div>
                 ) : null}
@@ -934,7 +934,7 @@ export default async function AdminDashboardPage() {
               <div
                 key={metric.label}
                 className={joinClasses(
-                  "flex min-h-[132px] flex-col rounded-[22px] border px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+                  "flex min-h-[132px] flex-col rounded-[14px] border px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
                   metric.tones,
                 )}
               >
@@ -997,7 +997,7 @@ export default async function AdminDashboardPage() {
         >
           <div className="divide-y divide-slate-200/80">
             {topAreas.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
+              <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
                 No recent ZIP activity yet.
               </div>
             ) : (
@@ -1040,7 +1040,7 @@ export default async function AdminDashboardPage() {
 
                 return (
                   <div key={area.zip} className="py-[5px] first:pt-0 last:pb-0">
-                    <div className={joinClasses("rounded-2xl p-px", rankClasses.track)}>
+                    <div className={joinClasses("rounded-[14px] p-px", rankClasses.track)}>
                       <div
                         className={joinClasses(
                           "flex min-h-9 items-center justify-between rounded-[15px] px-4 py-2 shadow-[inset_0_-1px_0_rgba(15,23,42,0.06),0_1px_1px_rgba(15,23,42,0.04)]",

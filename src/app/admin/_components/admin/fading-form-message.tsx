@@ -60,7 +60,7 @@ export function FadingFormMessage({
   return (
     <div
       className={[
-        "mb-5 rounded-2xl border px-4 py-3 text-sm font-medium",
+        "mb-5 rounded-[14px] border px-4 py-3 text-sm font-medium",
         "transition-all duration-500 ease-out",
         visible ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
         styles,

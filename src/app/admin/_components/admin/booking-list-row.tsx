@@ -81,7 +81,7 @@ export function BookingListRow({ booking }: BookingListRowProps) {
     <Link
       href={`/admin/bookings/${encodeURIComponent(booking.id)}`}
       aria-label={`Open booking ${getCustomerFacingBookingLabel(booking.booking_ref)}`}
-      className="group block rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+      className="group block rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
     >
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px]">
         <div className="space-y-3">

@@ -24,9 +24,9 @@ type DumpsterErrors = Partial<Record<keyof DumpsterRecord, string>>;
 type DetailMode = "review" | "edit" | "create";
 type TrackerSectionMode = "view" | "edit";
 const fieldInputClass =
-  "h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
+  "h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
 const fieldTextareaClass =
-  "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
+  "w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316] disabled:text-slate-900 disabled:opacity-100";
 const fieldErrorClass = "border-rose-300 focus:border-rose-500 focus:ring-4 focus:ring-rose-100";
 const requiredFieldOrder: Array<"displayName" | "size" | "tracker"> = [
   "displayName",
@@ -156,7 +156,7 @@ function FieldLabel({ label, tooltip, required = false }: { label: string; toolt
           <InformationCircleIcon className="h-4 w-4" aria-hidden="true" />
           <span
             role="tooltip"
-            className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+            className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
           >
             {tooltip}
           </span>
@@ -503,7 +503,7 @@ export function DumpsterDetailClient({
     <>
       {mode === "review" && dumpster ? (
         <div className="space-y-6">
-          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-semibold text-slate-900">Dumpster details</div>
@@ -512,14 +512,14 @@ export function DumpsterDetailClient({
                 <button
                   type="button"
                   onClick={beginEdit}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-10 px-4"
                 >
                   Edit dumpster
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsDeleteDialogOpen(true)}
-                  className="inline-flex h-10 items-center rounded-2xl border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                  className="admin-btn admin-btn-destructive h-10 px-4"
                 >
                   Delete dumpster
                 </button>
@@ -527,7 +527,7 @@ export function DumpsterDetailClient({
                   type="button"
                   onClick={toggleActive}
                   disabled={isToggling}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="admin-btn admin-btn-secondary h-10 px-4 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isToggling ? "Saving..." : dumpster.active ? "Deactivate" : "Reactivate"}
                 </button>
@@ -552,13 +552,13 @@ export function DumpsterDetailClient({
                   ["Model", dumpster.model || "—"],
                   ["Last updated", formatDateTimeLabelET(dumpster.updatedAt)],
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <div key={label} className="rounded-[14px] border border-slate-200 bg-white p-4">
                     <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt>
                     <dd className="mt-2 text-sm font-medium text-slate-900">{value}</dd>
                   </div>
                 ))}
               </dl>
-              <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+              <div className="rounded-[14px] border border-slate-200 bg-white p-5">
                 <div className="text-sm font-semibold text-slate-900">Notes</div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   {dumpster.notes || "No notes added yet."}
@@ -568,7 +568,7 @@ export function DumpsterDetailClient({
           </section>
         </div>
       ) : (
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-lg font-semibold text-slate-900">
@@ -580,7 +580,7 @@ export function DumpsterDetailClient({
                 <button
                   type="button"
                   onClick={() => setIsDeleteDialogOpen(true)}
-                  className="inline-flex h-10 items-center rounded-2xl border border-rose-200 bg-rose-50 px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+                  className="admin-btn admin-btn-destructive h-10 px-4"
                 >
                   Delete dumpster
                 </button>
@@ -588,7 +588,7 @@ export function DumpsterDetailClient({
                   type="button"
                   onClick={toggleActive}
                   disabled={isToggling}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="admin-btn admin-btn-secondary h-10 px-4 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isToggling ? "Saving..." : dumpster.active ? "Deactivate" : "Reactivate"}
                 </button>
@@ -599,7 +599,7 @@ export function DumpsterDetailClient({
           <div className="mt-6 space-y-6">
             {hasSubmitted && Object.keys(errors).length > 0 ? (
               <div
-                className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+                className="rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
                 role="alert"
               >
                 <div className="font-semibold">Please fix the highlighted fields.</div>
@@ -760,7 +760,7 @@ export function DumpsterDetailClient({
                     setTrackerSectionMode("view");
                     setMode("review");
                   }}
-                  className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-11 px-5"
                 >
                   Cancel
                 </button>
@@ -768,7 +768,7 @@ export function DumpsterDetailClient({
                   type="button"
                   onClick={saveDraft}
                   disabled={isSaving}
-                  className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="admin-btn admin-btn-primary h-11 px-5"
                 >
                   {isSaving ? "Saving..." : mode === "create" ? "Create dumpster" : "Save changes"}
                 </button>
@@ -841,7 +841,7 @@ export function DumpsterDetailClient({
 
       {isDeleteDialogOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4">
-          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-[14px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="text-lg font-semibold text-slate-900">Delete dumpster</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Are you sure you want to delete this dumpster?
@@ -851,7 +851,7 @@ export function DumpsterDetailClient({
                 type="button"
                 onClick={() => setIsDeleteDialogOpen(false)}
                 disabled={isDeleting}
-                className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn admin-btn-secondary h-11 px-5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -859,7 +859,7 @@ export function DumpsterDetailClient({
                 type="button"
                 onClick={deleteDumpster}
                 disabled={isDeleting}
-                className="inline-flex h-11 items-center rounded-2xl bg-rose-600 px-5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn admin-btn-destructive h-11 px-5"
               >
                 {isDeleting ? "Deleting..." : "Confirm delete"}
               </button>
@@ -870,7 +870,7 @@ export function DumpsterDetailClient({
 
       {serviceDateToDelete ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4">
-          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-[14px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="text-lg font-semibold text-slate-900">Delete service date</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Are you sure you want to delete the {serviceDateToDelete.serviceType.toLowerCase()} record from{" "}
@@ -881,7 +881,7 @@ export function DumpsterDetailClient({
                 type="button"
                 onClick={() => setServiceDateToDelete(null)}
                 disabled={isDeletingServiceDate}
-                className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn admin-btn-secondary h-11 px-5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -889,7 +889,7 @@ export function DumpsterDetailClient({
                 type="button"
                 onClick={deleteServiceDate}
                 disabled={isDeletingServiceDate}
-                className="inline-flex h-11 items-center rounded-2xl bg-rose-600 px-5 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="admin-btn admin-btn-destructive h-11 px-5"
               >
                 {isDeletingServiceDate ? "Deleting..." : "Confirm delete"}
               </button>

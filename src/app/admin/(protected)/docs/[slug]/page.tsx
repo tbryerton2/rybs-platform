@@ -76,7 +76,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
         <article className="min-w-0 space-y-6">
-          <header className="overflow-hidden rounded-[32px] border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-8 shadow-sm sm:p-10">
+          <header className="overflow-hidden rounded-[20px] border border-slate-200 bg-gradient-to-br from-white via-white to-slate-50 p-8 shadow-sm sm:p-10">
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-3">
                 {doc.badge ? (
@@ -103,7 +103,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 {doc.summaryCards.map((card) => (
                   <section
                     key={card.label}
-                    className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+                    className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm"
                   >
                     <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                       {card.label}
@@ -121,7 +121,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           </header>
 
           {doc.quickAnswer ? (
-            <section className="rounded-[32px] border border-sky-200 bg-sky-50/80 p-6 shadow-sm sm:p-8">
+            <section className="rounded-[20px] border border-sky-200 bg-sky-50/80 p-6 shadow-sm sm:p-8">
               <div className="max-w-4xl">
                 <div className="inline-flex rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">
                   {doc.quickAnswer.label}
@@ -137,7 +137,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           ) : null}
 
           {doc.relationshipDiagram ? (
-            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
               <div className="mb-5">
                 <h2 className="text-xl font-semibold text-slate-900">
                   Relationship map
@@ -149,7 +149,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.9fr)_auto_minmax(0,1.2fr)] lg:items-center">
-                <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                <div className="rounded-[20px] border border-slate-200 bg-slate-50 p-5">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Customer account
                   </div>
@@ -167,7 +167,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                   </div>
                 </div>
 
-                <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                <div className="rounded-[20px] border border-slate-200 bg-white p-5">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Each booking keeps
                   </div>
@@ -175,7 +175,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                     {doc.relationshipDiagram.bookingDetails.map((detail) => (
                       <div
                         key={detail}
-                        className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm font-medium text-slate-700"
+                        className="rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm font-medium text-slate-700"
                       >
                         {detail}
                       </div>
@@ -187,7 +187,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           ) : null}
 
           {doc.comparisonTable ? (
-            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
               <div className="mb-5">
                 <h2 className="text-xl font-semibold text-slate-900">
                   Comparison guide
@@ -198,7 +198,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-[24px] border border-slate-200">
+              <div className="overflow-hidden rounded-[14px] border border-slate-200">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
                     <thead className="bg-slate-50">
@@ -247,7 +247,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 <section
                   key={section.heading}
                   id={sectionId}
-                  className="scroll-mt-24 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+                  className="scroll-mt-24 rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
                 >
                   <div className="max-w-3xl">
                     <h2 className="text-xl font-semibold text-slate-900">
@@ -278,7 +278,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                       {section.bullets.map((bullet, index) => (
                         <div
                           key={`${section.heading}-b-${index}`}
-                          className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700"
+                          className="rounded-[14px] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700"
                         >
                           {bullet}
                         </div>
@@ -288,7 +288,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
 
                   {section.callout ? (
                     <div
-                      className={`mt-5 rounded-3xl border px-5 py-4 ${calloutToneClasses(section.callout.tone)}`}
+                      className={`mt-5 rounded-[14px] border px-5 py-4 ${calloutToneClasses(section.callout.tone)}`}
                     >
                       <div className="text-sm font-semibold">
                         {section.callout.title}
@@ -306,7 +306,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           {doc.scenarios?.length ? (
             <section
               id="common-real-world-scenarios"
-              className="scroll-mt-24 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+              className="scroll-mt-24 rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
             >
               <div className="mb-5 max-w-3xl">
                 <h2 className="text-xl font-semibold text-slate-900">
@@ -322,7 +322,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 {doc.scenarios.map((scenario) => (
                   <section
                     key={scenario.title}
-                    className="rounded-[28px] border border-slate-200 bg-slate-50/70 p-5"
+                    className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-5"
                   >
                     <h3 className="text-base font-semibold text-slate-900">
                       {scenario.title}
@@ -330,7 +330,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                     <p className="mt-2 text-sm leading-6 text-slate-600">
                       {scenario.summary}
                     </p>
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-700">
+                    <div className="mt-4 rounded-[14px] border border-slate-200 bg-white px-4 py-4 text-sm leading-6 text-slate-700">
                       {scenario.guidance}
                     </div>
                   </section>
@@ -342,7 +342,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           {doc.faq?.length ? (
             <section
               id="faq"
-              className="scroll-mt-24 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+              className="scroll-mt-24 rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
             >
               <div className="mb-5 max-w-3xl">
                 <h2 className="text-xl font-semibold text-slate-900">FAQ</h2>
@@ -356,7 +356,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 {doc.faq.map((item) => (
                   <details
                     key={item.question}
-                    className="group rounded-[24px] border border-slate-200 bg-slate-50/70 px-5 py-4"
+                    className="group rounded-[14px] border border-slate-200 bg-slate-50/70 px-5 py-4"
                   >
                     <summary className="cursor-pointer list-none pr-8 text-sm font-semibold text-slate-900">
                       {item.question}
@@ -373,7 +373,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
           {doc.checklist ? (
             <section
               id="staff-checklist"
-              className="scroll-mt-24 rounded-[32px] border border-slate-200 bg-slate-950 p-6 text-white shadow-sm sm:p-8"
+              className="scroll-mt-24 rounded-[20px] border border-slate-200 bg-slate-950 p-6 text-white shadow-sm sm:p-8"
             >
               <div className="max-w-3xl">
                 <h2 className="text-xl font-semibold">{doc.checklist.title}</h2>
@@ -387,7 +387,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 {doc.checklist.items.map((item) => (
                   <div
                     key={item}
-                    className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm leading-6 text-slate-100"
+                    className="rounded-[14px] border border-white/10 bg-white/5 px-4 py-4 text-sm leading-6 text-slate-100"
                   >
                     {item}
                   </div>
@@ -398,7 +398,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
         </article>
 
         <aside className="hidden xl:block">
-          <div className="sticky top-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="sticky top-6 rounded-[20px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               On this page
             </div>
@@ -407,7 +407,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
                 <a
                   key={anchor.id}
                   href={`#${anchor.id}`}
-                  className="block rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="block rounded-[14px] px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   {anchor.label}
                 </a>
@@ -415,7 +415,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
               {doc.scenarios?.length ? (
                 <a
                   href="#common-real-world-scenarios"
-                  className="block rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="block rounded-[14px] px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   Common real-world scenarios
                 </a>
@@ -423,7 +423,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
               {doc.faq?.length ? (
                 <a
                   href="#faq"
-                  className="block rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="block rounded-[14px] px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   FAQ
                 </a>
@@ -431,7 +431,7 @@ export default async function AdminDocDetailPage({ params }: PageProps) {
               {doc.checklist ? (
                 <a
                   href="#staff-checklist"
-                  className="block rounded-2xl px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="block rounded-[14px] px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   Staff checklist
                 </a>

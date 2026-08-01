@@ -91,7 +91,7 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
 
       <EmployeeDetailClient mode="edit" initialEmployee={employee} />
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">Recent activity</h2>
           <div className="text-sm text-slate-500">
@@ -100,7 +100,7 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
         </div>
 
         {history.length === 0 ? (
-          <div className="mt-5 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
+          <div className="mt-5 rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-600">
             No employee history entries yet.
           </div>
         ) : (

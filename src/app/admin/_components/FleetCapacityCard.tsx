@@ -11,7 +11,7 @@ export function FleetCapacityCard(props: {
   return (
     <Card title="Fleet Capacity" subtitle="Current utilization + today">
       <div className="mt-2 space-y-3">
-        <div className="rounded-2xl bg-slate-50 px-5 py-5 ring-1 ring-slate-200">
+        <div className="rounded-[14px] bg-slate-50 px-5 py-5 ring-1 ring-slate-200">
           <div className="space-y-4 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-slate-600">Fleet Size</span>
@@ -38,7 +38,7 @@ export function FleetCapacityCard(props: {
           </div>
         </div>
 
-        <div className="rounded-2xl bg-slate-50 px-5 py-4 ring-1 ring-slate-200">
+        <div className="rounded-[14px] bg-slate-50 px-5 py-4 ring-1 ring-slate-200">
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-slate-600">Deliveries today</span>

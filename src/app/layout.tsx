@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
-import { EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
+import { headers } from "next/headers";
+import Link from "next/link";
+import { ArrowRightOnRectangleIcon, EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
 import { getRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
 import { getBrandSettings, getRuntimeSettings, getSupportSettings } from "@/lib/tenant/server";
 import "./globals.css";
@@ -109,6 +111,9 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headerStore = await headers();
+  const currentPathname = headerStore.get("x-current-pathname") ?? "";
+  const isAdminPage = currentPathname === "/admin" || currentPathname.startsWith("/admin/");
   const [brand, support, runtime, retailSiteSettings] = await Promise.all([
     getBrandSettings(),
     getSupportSettings(),
@@ -131,9 +136,24 @@ export default async function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}>
         <div className="min-h-screen bg-[#F8FAFC]">
           {/* Global Header */}
-          <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-[#f5f4f0]/95 backdrop-blur">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-              <div className="flex min-w-0 items-center gap-3">
+          <header
+            className={[
+              "sticky top-0 z-50 border-b border-slate-200/70 backdrop-blur",
+              isAdminPage ? "bg-slate-100/95" : "bg-[#f5f4f0]/95",
+            ].join(" ")}
+          >
+            <div
+              className={
+                isAdminPage
+                  ? "flex w-full items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-5 xl:px-6 2xl:px-8"
+                  : "mx-auto flex max-w-6xl items-center justify-between px-6 py-3"
+              }
+            >
+              <Link
+                href="/"
+                aria-label="Go to homepage"
+                className="flex min-w-0 items-center gap-3 transition hover:text-[#EA580C] focus:outline-none focus:ring-4 focus:ring-[#F97316]/20"
+              >
                 {showHeaderLogo ? (
                   <img
                     src={retailSiteSettings.header.logoUrl}
@@ -145,8 +165,18 @@ export default async function RootLayout({
                 <div className={`truncate font-semibold tracking-tight text-[#0F172A] ${businessNameTextClass}`}>
                   {brand.name}
                 </div>
-              </div>
-              {emailHref || (phoneHref && phoneDisplay) ? (
+              </Link>
+              {isAdminPage ? (
+                <a
+                  href="/admin/logout"
+                  target="_self"
+                  data-no-prefetch
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white/75 px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/40 focus-visible:ring-offset-2"
+                >
+                  <ArrowRightOnRectangleIcon className="h-4 w-4" aria-hidden="true" />
+                  <span>Sign out</span>
+                </a>
+              ) : emailHref || (phoneHref && phoneDisplay) ? (
                 <div className="ml-4 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm font-medium text-slate-700">
                   {emailHref ? (
                     <a

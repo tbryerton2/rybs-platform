@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { requireAdminOwner } from "@/lib/admin/auth";
 import {
+  getHighestActiveIncludedRentalDays,
+  getMaxRentalDaysIncludedPeriodError,
+  getPricingSettingsSaveErrorMessage,
+  isMaxRentalDaysConstraintError,
+} from "@/lib/admin/pricing-settings-validation";
+import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
+import {
   isMissingPricingSettingsIncludedServicesBlurbColumnError,
   isMissingPricingSettingsRentalPeriodColumnsError,
 } from "@/lib/pricing-settings";
@@ -306,6 +313,19 @@ export async function updatePricingSettingsAction(
     return invalidState(values, fieldErrors);
   }
 
+  const productSettings = await getEditableDumpsterProductSettings(adminSession.business.id);
+  const highestActiveIncludedRentalDays = getHighestActiveIncludedRentalDays(productSettings);
+  const maxRentalDaysIncludedPeriodError = getMaxRentalDaysIncludedPeriodError(
+    maxRentalDays,
+    highestActiveIncludedRentalDays,
+  );
+
+  if (maxRentalDaysIncludedPeriodError) {
+    return invalidState(values, {
+      maxRentalDays: maxRentalDaysIncludedPeriodError,
+    });
+  }
+
   const { error } = await supabaseAdmin
     .from("pricing_settings")
     .update({
@@ -343,11 +363,12 @@ export async function updatePricingSettingsAction(
   }
 
   if (error) {
+    const message = getPricingSettingsSaveErrorMessage(error, highestActiveIncludedRentalDays);
     return {
       success: false,
       message: "",
-      error: error.message,
-      fieldErrors: {},
+      error: message,
+      fieldErrors: isMaxRentalDaysConstraintError(error) ? { maxRentalDays: message } : {},
       values,
       messageKey: Date.now(),
     };
@@ -454,7 +475,7 @@ export async function updateDumpsterProductSettingAction(
     return {
       success: false,
       message: "",
-      error: error.message,
+      error: "We couldn't save dumpster product settings. Please review the fields and try again.",
       fieldErrors: {},
       values,
       messageKey: Date.now(),

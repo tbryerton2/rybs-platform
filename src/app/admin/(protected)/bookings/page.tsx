@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ClockIcon,
+  ExclamationTriangleIcon,
   HomeIcon,
   InformationCircleIcon,
   TruckIcon,
@@ -15,6 +16,7 @@ import { AdminSummaryCard, type SummaryCardTone } from "@/app/admin/_components/
 import { ClickableTableRow } from "@/app/admin/(protected)/analytics/zip-heatmap/clickable-table-row";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
+import { ShowCaption } from "@/app/admin/_components/admin/show-caption";
 import { CopyBookingRefButton } from "@/app/admin/(protected)/bookings/CopyBookingRefButton";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
 import { isRecentlyCreated } from "@/lib/admin/booking-recency";
@@ -27,10 +29,10 @@ import {
   sanitizePlacementDetails,
 } from "@/lib/placement";
 import { buildPickupPlanningModel } from "@/lib/pickup-planning";
-import { getActiveDumpsterFilterOptions } from "@/lib/admin/dumpster-inventory";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { combineCustomerNameParts } from "@/lib/customer-name";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { getBusinessTimeZone } from "@/lib/time";
 import type { ComponentType, SVGProps } from "react";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -105,22 +107,13 @@ type BookingSummaryCard = {
   label: string;
   value: number;
   href: string;
+  clearHref?: string;
+  clearLabel?: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   shellTone: SummaryCardTone;
   active: boolean;
   detail?: string;
 };
-
-function SearchAlertIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <circle cx="11" cy="11" r="6" />
-      <path d="m20 20-4.2-4.2" />
-      <path d="M11 8.5v3" />
-      <path d="M11 14h.01" />
-    </svg>
-  );
-}
 
 function Undo2Icon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -131,14 +124,12 @@ function Undo2Icon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function ClockFadingIcon(props: SVGProps<SVGSVGElement>) {
+function OctagonAlertIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
-      <path d="M12 6v6l3 1.5" />
-      <path d="M8.6 3.7A8 8 0 1 1 4 11.5" />
-      <path d="M2 9h2" />
-      <path d="M2.7 5.7 4.1 7.1" />
-      <path d="M6 3 7 4" />
+      <path d="M9.2 2.8h5.6a2 2 0 0 1 1.4.6l5.2 5.2a2 2 0 0 1 .6 1.4v4.1a2 2 0 0 1-.6 1.4l-5.2 5.2a2 2 0 0 1-1.4.6H9.2a2 2 0 0 1-1.4-.6l-5.2-5.2a2 2 0 0 1-.6-1.4V9.9a2 2 0 0 1 .6-1.4l5.2-5.2a2 2 0 0 1 1.4-.5Z" />
+      <path d="M12 7.8v5.4" />
+      <path d="M12 16.3h.01" />
     </svg>
   );
 }
@@ -265,20 +256,12 @@ function summarizeStatusSelection(selected: string[]) {
   return `${selected.length} selected`;
 }
 
-function summarizeDumpsterSelection(selected: string[], options: Array<{ id: string; label: string }>) {
-  if (selected.length === 0) return "All dumpsters";
-  if (selected.length === 1) {
-    return options.find((option) => option.id === selected[0])?.label ?? "1 selected";
-  }
-  return `${selected.length} selected`;
-}
-
 function pillBase(className: string) {
   return `inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset leading-5 ${className}`;
 }
 
 function cardShell(extra = "") {
-  return `rounded-[28px] bg-white shadow-sm ring-1 ring-slate-200/70 ${extra}`;
+  return `rounded-[20px] bg-white shadow-sm ring-1 ring-slate-200/70 ${extra}`;
 }
 
 function logAdminBookingsError(context: string, error: unknown) {
@@ -348,18 +331,23 @@ function formatDateTimeLabel(value?: string | null) {
   }).format(date);
 }
 
-function formatAssignedDumpsterSummary(
-  booking: Pick<BookingRow, "assigned_dumpster">,
-  fallback: "unassigned" | "assign" = "unassigned",
-) {
-  const displayName = booking.assigned_dumpster?.display_name?.trim();
-  const equipmentId = booking.assigned_dumpster?.equipment_id?.trim();
+function formatTableDateLabel(value?: string | null) {
+  if (!value) return "—";
 
-  if (!displayName && !equipmentId) {
-    return fallback === "assign" ? "Plan on booking detail" : "Unplanned";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    }).format(parseYmd(value));
   }
 
-  return [displayName, equipmentId].filter(Boolean).join(" • ");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: getBusinessTimeZone(),
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 function normalizePhone(value: string | null | undefined) {
@@ -400,7 +388,8 @@ function statusPillClass(status: string | null | undefined) {
   if (s === "confirmed" || s === "paid") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   if (s === "scheduled") return "bg-blue-50 text-blue-700 ring-blue-200";
   if (s === "cancelled") return "bg-rose-50 text-rose-700 ring-rose-200";
-  if (s === "delivered" || s === "picked_up") return "bg-slate-900 text-white ring-slate-900/10";
+  if (s === "picked_up") return "bg-sky-50 text-sky-700 ring-sky-200";
+  if (s === "delivered") return "bg-amber-50 text-amber-700 ring-amber-200";
   return "bg-slate-100 text-slate-700 ring-slate-200";
 }
 
@@ -806,20 +795,20 @@ function getPickupDateCell(vm: Pick<BookingViewModel, "booking" | "pickupPlannin
   if (booking.status === "picked_up") {
     return {
       label: "Pickup",
-      value: booking.pickup_date ? formatDateLabel(booking.pickup_date) : "Completed",
+      value: booking.pickup_date ? formatTableDateLabel(booking.pickup_date) : "Completed",
     };
   }
 
   if (pickupPlanning.pickupStatus === "scheduled" && pickupPlanning.scheduledPickupDate) {
     return {
       label: "Pickup",
-      value: formatDateLabel(pickupPlanning.scheduledPickupDate),
+      value: formatTableDateLabel(pickupPlanning.scheduledPickupDate),
     };
   }
 
   if (pickupPlanning.pickupStatus === "requested") {
     return {
-      label: "Pickup requested",
+      label: "Pickup",
       value: "Awaiting schedule",
     };
   }
@@ -991,6 +980,24 @@ function matchesSelectedStatus(vm: BookingViewModel, selected: string[]) {
   });
 }
 
+function getOverdueStatusPill(vm: Pick<BookingViewModel, "isOverdueConfirmed" | "isOverduePickup">) {
+  if (vm.isOverdueConfirmed) {
+    return {
+      label: "Overdue delivery",
+      className: "gap-1.5 bg-violet-600 text-white ring-violet-600",
+    };
+  }
+
+  if (vm.isOverduePickup) {
+    return {
+      label: "Overdue pickup",
+      className: "gap-1.5 bg-rose-600 text-white ring-rose-600",
+    };
+  }
+
+  return null;
+}
+
 function filterByQuickView(vm: BookingViewModel, quickView: string) {
   const next7Range = getExplicitDateRange("next_7_days", "", "");
 
@@ -1115,6 +1122,30 @@ function buildScopeMeta(filters: Filters, totalCount: number) {
   return { label: "Showing all bookings" };
 }
 
+function getBookingTableViewTitle(filters: Filters) {
+  if (filters.q) return "Search Results";
+
+  switch (filters.quickView) {
+    case "upcoming_deliveries":
+      return "Upcoming Deliveries";
+    case "upcoming_pickups":
+      return "Upcoming Pickups";
+    case "overdue_confirmed":
+      return "Overdue Deliveries";
+    case "overdue_pickups":
+      return "Overdue Pickups";
+    case "active":
+      return "Active / On-site";
+    case "all":
+    default:
+      return "All Bookings";
+  }
+}
+
+function formatBookingCountLabel(count: number) {
+  return `${count} ${count === 1 ? "booking" : "bookings"}`;
+}
+
 function hasActiveFilters(filters: Filters) {
   return Boolean(
       filters.q ||
@@ -1189,17 +1220,40 @@ function getQuickViewHref(
   return buildScopedHref(buildQuickViewPresetFilters(filters, quickView), {}, page, keepPanelOpen);
 }
 
+function getClearQuickViewHref(pageSize: Filters["pageSize"], keepPanelOpen: boolean | "closed" = false) {
+  return getQuickViewHref(
+    {
+      q: "",
+      quickView: "all",
+      status: [],
+      dumpster: [],
+      dateField: "delivery_date",
+      city: "",
+      zip: "",
+      sort: "updated_desc",
+      pageSize,
+      dateFrom: "",
+      dateTo: "",
+    },
+    "all",
+    keepPanelOpen,
+    1,
+  );
+}
+
 function getSummaryHref(
-  kind: "needs_attention" | "active" | "upcoming" | "upcoming_pickups" | "recent" | "holds",
+  kind: "active" | "upcoming" | "upcoming_pickups" | "overdue_deliveries" | "overdue_pickups" | "holds",
   pageSize: Filters["pageSize"] = 50,
   keepPanelOpen: boolean | "closed" = false,
 ) {
   const presetKey =
     kind === "upcoming"
       ? "upcoming_deliveries"
-      : kind === "recent"
-        ? "recently_created"
-        : kind;
+      : kind === "overdue_deliveries"
+        ? "overdue_confirmed"
+        : kind === "overdue_pickups"
+          ? "overdue_pickups"
+          : kind;
   const baseFilters = buildQuickViewPresetFilters(
     {
       q: "",
@@ -1258,7 +1312,7 @@ function EmptyState({
   secondaryCopy?: string;
 }) {
   return (
-    <div className="rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
+    <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
       <div className="mx-auto max-w-xl">
         <div className="text-lg font-semibold text-slate-900">{title}</div>
         <p className="mt-2 text-sm leading-6 text-slate-600">{copy}</p>
@@ -1280,7 +1334,7 @@ export default async function AdminBookingsPage({
     q: clean(sp(spObj, "q")),
     quickView: (clean(sp(spObj, "view")) || "all") as Filters["quickView"],
     status: normalizeMultiSelect(spAll(spObj, "status"), "all"),
-    dumpster: normalizeMultiSelect(spAll(spObj, "dumpster"), "all"),
+    dumpster: [],
     dateField: (clean(sp(spObj, "dateField")) || "delivery_date") as DateField,
     city: clean(sp(spObj, "city")),
     zip: clean(sp(spObj, "zip")).replace(/[^\d]/g, "").slice(0, 5),
@@ -1294,7 +1348,7 @@ export default async function AdminBookingsPage({
   const page = Math.max(1, Number.parseInt(clean(sp(spObj, "page")) || "1", 10) || 1);
   const filtersPanelState = clean(sp(spObj, "filtersPanel"));
 
-  const [baseBookings, supplementalSearchBookings, activeHolds, futureDeliveries, dumpsterOptions, zipRows] = await Promise.all([
+  const [baseBookings, supplementalSearchBookings, activeHolds, futureDeliveries, zipRows] = await Promise.all([
     getBookings(adminSession.business.id),
     filters.q ? getSearchSupplementalBookings(filters.q, adminSession.business.id) : Promise.resolve([] as BookingRow[]),
     getActiveHolds(adminSession.business.id),
@@ -1306,7 +1360,6 @@ export default async function AdminBookingsPage({
       .gte("delivery_date", todayISOET())
       .order("delivery_date", { ascending: true })
       .limit(500),
-    getActiveDumpsterFilterOptions(adminSession.business.id),
     supabaseAdmin
       .from("service_area_zips")
       .select("zip")
@@ -1468,14 +1521,22 @@ export default async function AdminBookingsPage({
   const pageStart = (currentPage - 1) * filters.pageSize;
   const results = filteredResults.slice(pageStart, pageStart + filters.pageSize);
   const pagedHolds = filteredHolds.slice(pageStart, pageStart + filters.pageSize);
-  const visibleResultsCount = showingHolds ? pagedHolds.length : results.length;
   const hasFiltersApplied = hasActiveFilters(filters);
-  const filtersExpanded =
-    filtersPanelState === "open" ? true : filtersPanelState === "closed" ? false : hasFiltersApplied;
-  const resetFiltersHref = "/admin/bookings?filtersPanel=open";
+  const filtersExpanded = filtersPanelState === "open";
+  const resetFiltersHref = `/admin/bookings?filtersPanel=${filtersExpanded ? "open" : "closed"}`;
   const scopeMeta = buildScopeMeta(filters, allViewModels.length);
+  const bookingTableTitle = getBookingTableViewTitle(filters);
+  const bookingTableHeading = `${bookingTableTitle} · ${formatBookingCountLabel(totalFilteredResults)}`;
+  const clearQuickViewHref = getClearQuickViewHref(filters.pageSize, filtersExpanded);
+  const hasTopCardQuickViewActive = [
+    "active",
+    "holds",
+    "upcoming_deliveries",
+    "upcoming_pickups",
+    "overdue_confirmed",
+    "overdue_pickups",
+  ].includes(filters.quickView);
   const next7Range = getExplicitDateRange("next_7_days", "", "");
-  const visibleNeedsAttention = allViewModels.filter((vm) => vm.needsAttention).length;
   const activeOnSiteCount = allViewModels.filter((vm) => vm.activeBucket === "active").length;
   const upcomingDeliveriesCount = allViewModels.filter(
     (vm) =>
@@ -1493,7 +1554,8 @@ export default async function AdminBookingsPage({
       vm.booking.pickup_date >= todayISOET() &&
       vm.booking.pickup_date <= next7Range.to,
   ).length;
-  const recentlyCreatedCount = allViewModels.filter((vm) => isRecentlyCreated(vm.booking.created_at)).length;
+  const overdueDeliveriesCount = allViewModels.filter((vm) => vm.isOverdueConfirmed).length;
+  const overduePickupsCount = allViewModels.filter((vm) => vm.isOverduePickup).length;
   const activeHoldCount = activeHolds.length;
   const activeHoldSummaryCards: BookingSummaryCard[] =
     activeHoldCount > 0
@@ -1501,7 +1563,11 @@ export default async function AdminBookingsPage({
           {
             label: "Active holds",
             value: activeHoldCount,
-            href: getSummaryHref("holds", filters.pageSize, filtersExpanded),
+            href: isQuickViewPresetActive(filters, "holds")
+              ? clearQuickViewHref
+              : getSummaryHref("holds", filters.pageSize, filtersExpanded),
+            clearHref: clearQuickViewHref,
+            clearLabel: "Clear Active holds filter",
             icon: ClockIcon,
             shellTone: "violet",
             detail: "Temporary inventory reservations in progress",
@@ -1513,7 +1579,11 @@ export default async function AdminBookingsPage({
     {
       label: "Active / on-site",
       value: activeOnSiteCount,
-      href: getSummaryHref("active", filters.pageSize, filtersExpanded),
+      href: isQuickViewPresetActive(filters, "active")
+        ? clearQuickViewHref
+        : getSummaryHref("active", filters.pageSize, filtersExpanded),
+      clearHref: clearQuickViewHref,
+      clearLabel: "Clear Active / On-site filter",
       icon: HomeIcon,
       shellTone: "amber",
       active: isQuickViewPresetActive(filters, "active"),
@@ -1521,7 +1591,11 @@ export default async function AdminBookingsPage({
     {
       label: "Upcoming deliveries",
       value: upcomingDeliveriesCount,
-      href: getSummaryHref("upcoming", filters.pageSize, filtersExpanded),
+      href: isQuickViewPresetActive(filters, "upcoming_deliveries")
+        ? clearQuickViewHref
+        : getSummaryHref("upcoming", filters.pageSize, filtersExpanded),
+      clearHref: clearQuickViewHref,
+      clearLabel: "Clear Upcoming Deliveries filter",
       icon: TruckIcon,
       shellTone: "green",
       active: isQuickViewPresetActive(filters, "upcoming_deliveries"),
@@ -1529,43 +1603,54 @@ export default async function AdminBookingsPage({
     {
       label: "Upcoming pickups",
       value: upcomingPickupsCount,
-      href: getSummaryHref("upcoming_pickups", filters.pageSize, filtersExpanded),
+      href: isQuickViewPresetActive(filters, "upcoming_pickups")
+        ? clearQuickViewHref
+        : getSummaryHref("upcoming_pickups", filters.pageSize, filtersExpanded),
+      clearHref: clearQuickViewHref,
+      clearLabel: "Clear Upcoming Pickups filter",
       icon: Undo2Icon,
       shellTone: "blue",
       active: isQuickViewPresetActive(filters, "upcoming_pickups"),
     },
     {
-      label: "Recently created",
-      value: recentlyCreatedCount,
-      href: getSummaryHref("recent", filters.pageSize, filtersExpanded),
-      icon: ClockFadingIcon,
+      label: "Overdue deliveries",
+      value: overdueDeliveriesCount,
+      href: isQuickViewPresetActive(filters, "overdue_confirmed")
+        ? clearQuickViewHref
+        : getSummaryHref("overdue_deliveries", filters.pageSize, filtersExpanded),
+      clearHref: clearQuickViewHref,
+      clearLabel: "Clear Overdue Deliveries filter",
+      icon: OctagonAlertIcon,
       shellTone: "indigo",
-      active: isQuickViewPresetActive(filters, "recently_created"),
+      active: isQuickViewPresetActive(filters, "overdue_confirmed"),
     },
     {
-      label: "Needs attention",
-      value: visibleNeedsAttention,
-      href: getSummaryHref("needs_attention", filters.pageSize, filtersExpanded),
-      icon: SearchAlertIcon,
+      label: "Overdue pickups",
+      value: overduePickupsCount,
+      href: isQuickViewPresetActive(filters, "overdue_pickups")
+        ? clearQuickViewHref
+        : getSummaryHref("overdue_pickups", filters.pageSize, filtersExpanded),
+      clearHref: clearQuickViewHref,
+      clearLabel: "Clear Overdue Pickups filter",
+      icon: ExclamationTriangleIcon,
       shellTone: "rose",
-      active: isQuickViewPresetActive(filters, "needs_attention"),
+      active: isQuickViewPresetActive(filters, "overdue_pickups"),
     },
     ...activeHoldSummaryCards,
   ] satisfies BookingSummaryCard[];
   const statusSummary = summarizeStatusSelection(filters.status);
-  const dumpsterSummary = summarizeDumpsterSelection(filters.dumpster, dumpsterOptions);
   const advancedFiltersContent = (
     <>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Status</label>
-          <details className="group rounded-2xl border border-slate-300 bg-white shadow-sm">
+          <details className="group rounded-[14px] border border-slate-300 bg-white shadow-sm">
             <summary className="flex h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm text-slate-900 outline-none transition group-open:border-b group-open:border-slate-200">
               <div className="min-w-0 truncate font-medium text-slate-900">{statusSummary}</div>
               <ChevronDownIcon className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
             </summary>
             <div className="space-y-2 border-t border-slate-200 px-4 py-3">
-              <label className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
+              <label className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
                 <input
                   type="checkbox"
                   name="status"
@@ -1576,7 +1661,7 @@ export default async function AdminBookingsPage({
                 <span className="font-medium">All</span>
               </label>
               {BOOKING_STATUS_OPTIONS.map((option) => (
-                <label key={option.value} className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                <label key={option.value} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
                   <input
                     type="checkbox"
                     name="status"
@@ -1591,45 +1676,12 @@ export default async function AdminBookingsPage({
           </details>
         </div>
         <div>
-          <label className="mb-2 block text-sm font-semibold text-slate-700">Dumpster</label>
-          <details className="group rounded-2xl border border-slate-300 bg-white shadow-sm">
-            <summary className="flex h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm text-slate-900 outline-none transition group-open:border-b group-open:border-slate-200">
-              <div className="min-w-0 truncate font-medium text-slate-900">{dumpsterSummary}</div>
-              <ChevronDownIcon className="h-4 w-4 shrink-0 text-slate-400 transition group-open:rotate-180" />
-            </summary>
-            <div className="max-h-72 space-y-2 overflow-y-auto border-t border-slate-200 px-4 py-3">
-              <label className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  name="dumpster"
-                  value="all"
-                  defaultChecked={filters.dumpster.length === 0}
-                  className="h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]"
-                />
-                <span className="font-medium">All dumpsters</span>
-              </label>
-              {dumpsterOptions.map((option) => (
-                <label key={option.id} className="flex items-start gap-3 rounded-xl px-2 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                  <input
-                    type="checkbox"
-                    name="dumpster"
-                    value={option.id}
-                    defaultChecked={filters.dumpster.includes(option.id)}
-                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-[#F97316]"
-                  />
-                  <span className="min-w-0 break-words">{option.label}</span>
-                </label>
-              ))}
-            </div>
-          </details>
-        </div>
-        <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">City</label>
-          <input name="city" defaultValue={filters.city} placeholder="City" className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10" />
+          <input name="city" defaultValue={filters.city} placeholder="City" className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">ZIP</label>
-          <select name="zip" defaultValue={filters.zip || "all"} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
+          <select name="zip" defaultValue={filters.zip || "all"} className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
             <option value="all">All ZIP codes</option>
             {zipOptions.map((zip) => (
               <option key={zip} value={zip}>
@@ -1641,12 +1693,12 @@ export default async function AdminBookingsPage({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+        <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-4">
           <div className="mb-3 text-sm font-semibold text-slate-900">Filter by date</div>
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">Date type</label>
-              <select name="dateField" defaultValue={filters.dateField} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
+              <select name="dateField" defaultValue={filters.dateField} className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
                 <option value="delivery_date">Delivery date</option>
                 <option value="pickup_date">Pickup date</option>
                 <option value="created_at">Created date</option>
@@ -1655,38 +1707,29 @@ export default async function AdminBookingsPage({
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700">Date range</label>
               <div className="grid gap-3 sm:grid-cols-2">
-                <input type="date" name="from" defaultValue={filters.dateFrom} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10" />
-                <input type="date" name="to" defaultValue={filters.dateTo} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10" />
+                <input type="date" name="from" defaultValue={filters.dateFrom} className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10" />
+                <input type="date" name="to" defaultValue={filters.dateTo} className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10" />
               </div>
               <div className="mt-2 text-xs text-slate-500">The selected range applies to the chosen date type.</div>
             </div>
           </div>
         </div>
-        <div className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4">
+        <div className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-4">
           <div className="mb-3 text-sm font-semibold text-slate-900">Display options</div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Sort</label>
-              <select
-                name="sort"
-                defaultValue={filters.sort}
-                className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
-              >
-                {SORT_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Page size</label>
-              <select name="pageSize" defaultValue={String(filters.pageSize)} className="h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10">
-                <option value="25">25 per page</option>
-                <option value="50">50 per page</option>
-                <option value="100">100 per page</option>
-              </select>
-            </div>
+          <div>
+            <input type="hidden" name="pageSize" value={String(filters.pageSize)} />
+            <label className="mb-2 block text-sm font-semibold text-slate-700">Sort</label>
+            <select
+              name="sort"
+              defaultValue={filters.sort}
+              className="h-12 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -1706,25 +1749,30 @@ export default async function AdminBookingsPage({
           }
         />
 
-        <section className={`grid gap-4 ${activeHoldCount > 0 ? "md:grid-cols-2 xl:grid-cols-6" : "md:grid-cols-2 xl:grid-cols-5"}`}>
-          {summaryCards.map((card) => {
-            return (
-              <AdminSummaryCard
-                key={card.label}
-                label={card.label}
-                value={card.value}
-                icon={card.icon}
-                tone={card.shellTone}
-                href={card.href}
-                active={card.active}
-                layout="pricing"
-                stretch
-              />
-            );
-          })}
+        <section>
+          <ShowCaption />
+          <div className={`grid gap-4 ${activeHoldCount > 0 ? "md:grid-cols-2 xl:grid-cols-6" : "md:grid-cols-2 xl:grid-cols-5"}`}>
+            {summaryCards.map((card) => {
+              return (
+                <AdminSummaryCard
+                  key={card.label}
+                  label={card.label}
+                  value={card.value}
+                  icon={card.icon}
+                  tone={card.shellTone}
+                  href={card.href}
+                  clearHref={card.clearHref}
+                  clearLabel={card.clearLabel}
+                  active={card.active}
+                  layout="pricing"
+                  stretch
+                />
+              );
+            })}
+          </div>
         </section>
 
-        <section className="mb-8 rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
+        <section className="mb-8 rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search bookings</h2>
 
           <form action="/admin/bookings" method="GET" className="mt-5 space-y-5">
@@ -1734,9 +1782,6 @@ export default async function AdminBookingsPage({
               <>
                 {filters.status.map((status) => (
                   <input key={`status-${status}`} type="hidden" name="status" value={status} />
-                ))}
-                {filters.dumpster.map((dumpster) => (
-                  <input key={`dumpster-${dumpster}`} type="hidden" name="dumpster" value={dumpster} />
                 ))}
                 <input type="hidden" name="dateField" value={filters.dateField} />
                 <input type="hidden" name="city" value={filters.city} />
@@ -1754,18 +1799,18 @@ export default async function AdminBookingsPage({
                 name="q"
                 defaultValue={filters.q}
                 placeholder="Booking ref, email, phone, contact name, or address"
-                className="h-12 flex-1 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+                className="h-12 flex-1 rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
               />
               <button
                 type="submit"
-                className="inline-flex h-12 items-center justify-center rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+                className="admin-btn admin-btn-primary h-12 px-5"
               >
                 Search
               </button>
               {hasFiltersApplied ? (
                 <Link
                   href={resetFiltersHref}
-                  className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="admin-btn admin-btn-secondary h-12 px-5"
                 >
                   Clear
                 </Link>
@@ -1794,16 +1839,23 @@ export default async function AdminBookingsPage({
           <div className="border-b border-slate-200 px-6 py-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <div className="text-lg font-semibold text-slate-900">Dumpster Bookings</div>
+                <div className="text-lg font-semibold text-slate-900">{bookingTableHeading}</div>
                 {scopeMeta.label !== "Showing all bookings" ? (
                   <div className="mt-1 text-sm text-slate-500">{scopeMeta.label}</div>
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
-                {visibleResultsCount > 0 ? (
-                  <div className="text-sm font-medium text-slate-500">
-                    {visibleResultsCount} {visibleResultsCount === 1 ? "booking" : "bookings"}
-                  </div>
+                {hasTopCardQuickViewActive ? (
+                  <Link
+                    href={clearQuickViewHref}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+                    aria-label="Clear active quick-view filter"
+                  >
+                    <span aria-hidden="true" className="text-base leading-none">
+                      ×
+                    </span>
+                    Clear filter
+                  </Link>
                 ) : null}
                 {filters.q ? (
                   <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
@@ -1845,6 +1897,7 @@ export default async function AdminBookingsPage({
                     {results.map((vm) => {
                       const booking = vm.booking;
                       const pickupDateCell = getPickupDateCell(vm);
+                      const overdueStatusPill = getOverdueStatusPill(vm);
 
                       return (
                         <ClickableTableRow
@@ -1867,11 +1920,14 @@ export default async function AdminBookingsPage({
                                 {booking.reordered_from_booking_id ? (
                                   <span className={pillBase("bg-orange-50 text-orange-700 ring-orange-200")}>Reorder</span>
                                 ) : null}
-                                {vm.needsAttention ? (
-                                  <span className={pillBase("bg-rose-50 text-rose-700 ring-rose-200")}>Needs attention</span>
+                                {overdueStatusPill ? (
+                                  <span className={pillBase(overdueStatusPill.className)}>
+                                    <ExclamationTriangleIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                    {overdueStatusPill.label}
+                                  </span>
                                 ) : null}
                               </div>
-                              {vm.rowAlertTone !== "none" && vm.rowAlertSummary && booking.status !== "picked_up" ? (
+                              {vm.rowAlertTone !== "none" && vm.rowAlertSummary && !vm.isOverdueConfirmed && booking.status !== "picked_up" ? (
                                 <div className="text-xs text-slate-600">{vm.rowAlertSummary}</div>
                               ) : null}
                             </div>
@@ -1894,7 +1950,7 @@ export default async function AdminBookingsPage({
                                     <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
                                     <span
                                       role="tooltip"
-                                      className="pointer-events-none absolute left-1/2 top-7 z-50 w-72 -translate-x-1/2 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-3 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover/tooltip:pointer-events-auto group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100"
+                                      className="pointer-events-none absolute left-1/2 top-7 z-50 w-72 -translate-x-1/2 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-3 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover/tooltip:pointer-events-auto group-hover/tooltip:translate-y-0 group-hover/tooltip:opacity-100"
                                     >
                                       <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
                                         Placement notes
@@ -1911,24 +1967,21 @@ export default async function AdminBookingsPage({
                               <div className="mt-1 text-sm text-slate-600">
                                 {[booking.customer_city, booking.customer_zip].filter(Boolean).join(", ") || "No city or ZIP on file"}
                               </div>
-                              <div className="mt-1 text-xs text-slate-500">
-                                Planned dumpster: {formatAssignedDumpsterSummary(booking, "assign")}
-                              </div>
                             </div>
                           </td>
 
                           <td className="px-4 py-5 align-top">
                             <dl className="space-y-2 text-sm">
                               <div className="flex items-baseline gap-2">
-                                <dt className="shrink-0 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">Created:</dt>
-                                <dd className="min-w-0 font-medium text-slate-900">{formatDateTimeLabel(booking.created_at)}</dd>
+                                <dt className="shrink-0 text-xs font-medium text-slate-400">Created:</dt>
+                                <dd className="min-w-0 font-medium text-slate-900">{formatTableDateLabel(booking.created_at)}</dd>
                               </div>
                               <div className="flex items-baseline gap-2">
-                                <dt className="shrink-0 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">Delivery:</dt>
-                                <dd className="min-w-0 font-medium text-slate-900">{formatDateLabel(booking.delivery_date)}</dd>
+                                <dt className="shrink-0 text-xs font-medium text-slate-400">Delivery:</dt>
+                                <dd className="min-w-0 font-medium text-slate-900">{formatTableDateLabel(booking.delivery_date)}</dd>
                               </div>
                               <div className="flex items-baseline gap-2">
-                                <dt className="shrink-0 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">{pickupDateCell.label}:</dt>
+                                <dt className="shrink-0 text-xs font-medium text-slate-400">{pickupDateCell.label}:</dt>
                                 <dd className="min-w-0 font-medium text-slate-900">{pickupDateCell.value}</dd>
                               </div>
                               {vm.daysOnSite !== null ? (
@@ -1961,7 +2014,7 @@ export default async function AdminBookingsPage({
           <div className="space-y-3 px-6 py-5">
             {showingHolds
               ? pagedHolds.map((hold) => (
-                  <div key={hold.id} className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                  <div key={hold.id} className="rounded-[14px] border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                     <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)_minmax(150px,0.7fr)]">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -2001,7 +2054,7 @@ export default async function AdminBookingsPage({
                           <input type="hidden" name="redirectTo" value={buildPageHref(filters, currentPage, filtersExpanded)} />
                           <button
                             type="submit"
-                            className="inline-flex h-10 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 xl:min-w-[150px]"
+                            className="admin-btn admin-btn-destructive h-10 w-full px-4 xl:min-w-[150px]"
                           >
                             Delete hold
                           </button>
@@ -2050,10 +2103,10 @@ export default async function AdminBookingsPage({
                 <div className="flex items-center gap-2">
                   <Link
                     href={buildPageHref(filters, Math.max(1, currentPage - 1), filtersExpanded)}
-                    className={`inline-flex h-10 items-center rounded-2xl border px-4 text-sm font-semibold transition ${
+                    className={`admin-btn admin-btn-secondary h-10 px-4 ${
                       currentPage === 1
-                        ? "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        ? "pointer-events-none opacity-55"
+                        : ""
                     }`}
                   >
                     Previous
@@ -2063,10 +2116,10 @@ export default async function AdminBookingsPage({
                   </div>
                   <Link
                     href={buildPageHref(filters, Math.min(totalPages, currentPage + 1), filtersExpanded)}
-                    className={`inline-flex h-10 items-center rounded-2xl border px-4 text-sm font-semibold transition ${
+                    className={`admin-btn admin-btn-secondary h-10 px-4 ${
                       currentPage === totalPages
-                        ? "pointer-events-none border-slate-200 bg-slate-100 text-slate-400"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        ? "pointer-events-none opacity-55"
+                        : ""
                     }`}
                   >
                     Next

@@ -84,7 +84,7 @@ export function SnapshotCard({
         <div className="flex min-w-0 gap-4">
           <span
             className={joinClasses(
-              "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset",
+              "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset",
               colorClasses.iconChip,
             )}
           >
@@ -116,7 +116,7 @@ export function SnapshotCard({
                 <InformationCircleIcon className="h-5 w-5" aria-hidden="true" />
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute right-0 top-8 z-50 w-64 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                  className="pointer-events-none absolute right-0 top-8 z-50 w-64 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
                 >
                   {tooltip}
                 </span>

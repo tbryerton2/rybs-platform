@@ -20,13 +20,13 @@ export function UpcomingDeliveriesCard(props: { items: UpcomingItem[] }) {
       actionHref="/admin/bookings"
       actionLabel="View all"
     >
-      <div className="mt-2 rounded-2xl bg-slate-50 ring-1 ring-slate-200">
+      <div className="mt-2 rounded-[14px] bg-slate-50 ring-1 ring-slate-200">
         {props.items.length === 0 ? (
           <div className="px-5 py-5 text-sm text-slate-600">
             No upcoming deliveries in the next 7 days.
           </div>
         ) : (
-          <ul className="divide-y divide-slate-200 overflow-hidden rounded-2xl">
+          <ul className="divide-y divide-slate-200 overflow-hidden rounded-[14px]">
             {props.items.slice(0, 10).map((b) => (
               <li key={b.id} className="px-4 py-4">
                 <div className="flex items-start justify-between gap-3">
@@ -46,7 +46,7 @@ export function UpcomingDeliveriesCard(props: { items: UpcomingItem[] }) {
 
                   <Link
                     href={`/admin/bookings?bookingId=${encodeURIComponent(b.id)}`}
-                    className="shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 hover:bg-white"
+                    className="shrink-0 admin-btn admin-btn-secondary admin-btn-sm"
                   >
                     View
                   </Link>

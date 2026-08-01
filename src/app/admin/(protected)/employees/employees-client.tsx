@@ -177,7 +177,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
             <div className="flex gap-4">
               <span
                 className={[
-                  "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset transition",
+                  "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset transition",
                   stat.tone === "blue"
                     ? "bg-sky-100/95 text-sky-700 ring-sky-200/90"
                     : stat.tone === "amber"
@@ -197,7 +197,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
         ))}
       </section>
 
-      <section className="rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-6">
+      <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-6">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search Employees</h2>
         </div>
@@ -210,13 +210,13 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by name, title, phone, or email"
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+              className="h-12 w-full rounded-[14px] border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
             />
           </label>
 
           <label
             className={[
-              "inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium transition",
+              "inline-flex h-12 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium transition",
               isQuickFilterActive ? "cursor-not-allowed text-slate-400" : "text-slate-700",
             ].join(" ")}
           >
@@ -234,7 +234,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
             <button
               type="button"
               onClick={clearRosterFilters}
-              className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="admin-btn admin-btn-secondary h-12 px-4"
             >
               Clear view
             </button>
@@ -242,12 +242,12 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
         </div>
 
         {loadError ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             <div>Employee records could not be loaded from Supabase: {loadError}</div>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-800 transition hover:bg-rose-100"
+              className="admin-btn admin-btn-destructive px-3"
             >
               Refresh page
             </button>
@@ -255,7 +255,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+      <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex items-center justify-between gap-3">
             <div className="text-lg font-semibold tracking-tight text-slate-900">Employees</div>
@@ -267,7 +267,7 @@ export function EmployeesClient({ initialEmployees, loadError }: EmployeesClient
 
         {filteredEmployees.length === 0 ? (
           <div className="px-6 py-16">
-            <div className="mx-auto max-w-xl rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
+            <div className="mx-auto max-w-xl rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
               <div className="text-lg font-semibold text-slate-900">
                 {hasNoEmployees ? "No employees yet" : "No employees match this view"}
               </div>

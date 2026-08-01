@@ -52,7 +52,7 @@ export function LocationDetailsForm({ id, town, county, stateCode }: Props) {
               name="town"
               defaultValue={town ?? ""}
               placeholder="Enter town"
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+              className="w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
             />
           </label>
 
@@ -63,7 +63,7 @@ export function LocationDetailsForm({ id, town, county, stateCode }: Props) {
               name="county"
               defaultValue={county ?? ""}
               placeholder="Enter county"
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+              className="w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
             />
           </label>
 
@@ -78,7 +78,7 @@ export function LocationDetailsForm({ id, town, county, stateCode }: Props) {
               onInput={(event) => {
                 event.currentTarget.value = event.currentTarget.value.trim().toUpperCase();
               }}
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
+              className="w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
             />
             {state.fieldErrors?.state ? (
               <div className="mt-2 text-sm text-red-700">{state.fieldErrors.state}</div>

@@ -12,6 +12,7 @@ import { adminSummaryCardShell } from "@/app/admin/_components/AdminSummaryCard"
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { DumpsterProductSettingsForm } from "@/app/admin/(protected)/settings/pricing/dumpster-product-settings-form";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { getHighestActiveIncludedRentalDays } from "@/lib/admin/pricing-settings-validation";
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import {
   isMissingPricingSettingsIncludedServicesBlurbColumnError,
@@ -75,7 +76,7 @@ function SummaryMetricCard({
       <div className="flex gap-4">
         <span
           className={joinClasses(
-            "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset",
+            "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset",
             statTileClasses(tone),
           )}
         >
@@ -259,6 +260,7 @@ export default async function AdminPricingSettingsPage() {
   ]);
   const maxRentalSummary =
     pricing.max_rental_days == null ? "No hard cap" : `${pricing.max_rental_days} days`;
+  const highestActiveIncludedRentalDays = getHighestActiveIncludedRentalDays(productSettings);
 
   return (
     <AdminPage>
@@ -274,7 +276,7 @@ export default async function AdminPricingSettingsPage() {
               <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
               <span
                 role="tooltip"
-                className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
               >
                 Control global booking rules here. Size-specific price, included days, and included weight now live in the dumpster product settings below.
               </span>
@@ -314,6 +316,7 @@ export default async function AdminPricingSettingsPage() {
           includedServicesBlurb: pricing.included_services_blurb,
           tonOveragePrice: pricing.ton_overage_price,
         }}
+        highestActiveIncludedRentalDays={highestActiveIncludedRentalDays}
       />
 
       <section className="mt-8">
@@ -330,7 +333,7 @@ export default async function AdminPricingSettingsPage() {
               <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
               <span
                 role="tooltip"
-                className="pointer-events-none absolute left-0 top-7 z-50 w-80 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+                className="pointer-events-none absolute left-0 top-7 z-50 w-80 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
               >
                 Edit the customer-facing display, pricing, and rental details for each offered
                 dumpster size. Active sizes from the dumpsters table appear here automatically,

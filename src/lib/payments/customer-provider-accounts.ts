@@ -25,9 +25,12 @@ type CustomerProviderAccountRow = {
 };
 
 export class CustomerProviderAccountServiceError extends Error {
-  constructor(message: string, public readonly cause?: unknown) {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
     super(message);
     this.name = "CustomerProviderAccountServiceError";
+    this.cause = cause;
   }
 }
 

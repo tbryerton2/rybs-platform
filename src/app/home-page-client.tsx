@@ -113,6 +113,7 @@ type HomePageClientProps = {
     showServiceAreaPopup: boolean;
     showFaq: boolean;
   };
+  servedZipCodes: string[];
 };
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
@@ -508,6 +509,7 @@ export default function HomePageClient({
   faqContent,
   supportMarketingContent,
   visibilitySettings,
+  servedZipCodes,
 }: HomePageClientProps) {
   const [zipUnsupported, setZipUnsupported] = useState(false);
   const [serviceAreaOpen, setServiceAreaOpen] = useState(false);
@@ -556,6 +558,19 @@ export default function HomePageClient({
       });
     });
   }, [scrollToZipErrorTick, zipUnsupported]);
+
+  useEffect(() => {
+    if (!serviceAreaOpen) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setServiceAreaOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [serviceAreaOpen]);
 
   const zipDigits = useMemo(() => zip.replace(/\D/g, "").slice(0, 5), [zip]);
   const zipValid = zipDigits.length === 5;
@@ -736,7 +751,8 @@ export default function HomePageClient({
                     className="fixed inset-0 z-50 flex items-center justify-center p-4"
                     role="dialog"
                     aria-modal="true"
-                    aria-label={serviceAreaContent.modalTitle}
+                    aria-labelledby="service-area-modal-title"
+                    aria-describedby="service-area-modal-description"
                     onClick={() => setServiceAreaOpen(false)}
                   >
                     <div className="absolute inset-0 bg-black/40" />
@@ -747,29 +763,36 @@ export default function HomePageClient({
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <h3 className="text-lg font-semibold text-slate-900">
-                            {serviceAreaContent.modalTitle}
+                          <h3 id="service-area-modal-title" className="text-lg font-semibold text-slate-900">
+                            Service area
                           </h3>
-                          <p className="mt-1 text-sm text-slate-600">
-                            {serviceAreaContent.modalIntro}
+                          <p id="service-area-modal-description" className="mt-1 text-sm text-slate-600">
+                            We currently serve the following ZIP codes in Central New York.
                           </p>
                         </div>
                       </div>
 
                       <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <div className="text-sm font-semibold text-slate-900">
-                          {serviceAreaContent.coverageHeading}
+                          Currently covered ZIP codes
                         </div>
 
-                        <ul className="mt-2 space-y-1 text-sm text-slate-700">
-                          {serviceAreaContent.regionList.map((region) => (
-                            <li key={region}>• {region}</li>
-                          ))}
-                        </ul>
-
-                        <p className="mt-3 text-xs text-slate-500">
-                          {serviceAreaContent.coverageFootnote}
-                        </p>
+                        {servedZipCodes.length > 0 ? (
+                          <ul className="mt-3 grid max-h-[min(50vh,360px)] grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-2 overflow-y-auto pr-1 text-sm text-slate-700">
+                            {servedZipCodes.map((servedZip) => (
+                              <li
+                                key={servedZip}
+                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center font-semibold text-slate-800 shadow-sm"
+                              >
+                                {servedZip}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-3 text-sm text-slate-600">
+                            Service area details are being updated. Please contact us for availability.
+                          </p>
+                        )}
                       </div>
 
                       <div className="mt-6 flex justify-center">

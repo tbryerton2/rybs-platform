@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { LoadingButton } from "@/components/ui/loading-button";
+import { adminButtonClassName } from "./admin-button";
 
 type FormSubmitButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
@@ -11,7 +12,7 @@ type FormSubmitButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const defaultClassName =
-  "inline-flex items-center rounded-2xl bg-[#F97316] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-60";
+  adminButtonClassName({ variant: "primary" });
 
 export function FormSubmitButton({
   children,

@@ -66,7 +66,7 @@ function Field({
             <InformationCircleIcon className="h-4 w-4" aria-hidden="true" />
             <span
               role="tooltip"
-              className="pointer-events-none absolute left-0 top-7 z-50 w-64 translate-y-1 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
+              className="pointer-events-none absolute left-0 top-7 z-50 w-64 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
             >
               {tooltip}
             </span>
@@ -85,7 +85,7 @@ function Field({
           value={value}
           onChange={(event) => onChange(name, event.target.value)}
           className={[
-            "h-12 w-full rounded-2xl border bg-white text-sm text-slate-900 outline-none transition",
+            "h-12 w-full rounded-[14px] border bg-white text-sm text-slate-900 outline-none transition",
             "focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
             prefix ? "pl-8 pr-4" : "px-4",
             suffix ? "pr-20" : "",
@@ -127,7 +127,7 @@ function TextareaField({
         onChange={(event) => onChange(name, event.target.value)}
         rows={name === "customerBulletPoints" ? 4 : name === "shortDescription" ? 3 : 2}
         className={[
-          "w-full rounded-2xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
+          "w-full rounded-[14px] border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
           "focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
           error ? "border-red-300" : "border-slate-300",
         ].join(" ")}
@@ -181,7 +181,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
   const errors: DumpsterProductSettingsFieldErrors = state.fieldErrors;
 
   return (
-    <form action={formAction} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <form action={formAction} className="rounded-[14px] border border-slate-200 bg-white p-6 shadow-sm">
       <input type="hidden" name="id" value={setting.id} />
       <input type="hidden" name="dumpsterSize" value={setting.dumpsterSize} />
       <input type="hidden" name="dumpsterProductId" value={setting.dumpsterProductId} />
@@ -289,7 +289,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
       </div>
 
       {!state.success && state.error ? (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="mt-4 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {state.error}
         </div>
       ) : null}

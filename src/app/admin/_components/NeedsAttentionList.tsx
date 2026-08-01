@@ -86,7 +86,7 @@ function AttentionRowLink({ row }: { row: NeedsAttentionRow }) {
   const content = (
     <>
       <div className="flex min-w-0 items-center gap-3">
-        <span className={joinClasses("flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl", toneClasses.iconChip)}>
+        <span className={joinClasses("flex h-8 w-8 shrink-0 items-center justify-center rounded-[14px]", toneClasses.iconChip)}>
           <Icon className="h-4 w-4" />
         </span>
         <div className="text-sm font-semibold text-slate-900">{row.label}</div>
@@ -101,14 +101,14 @@ function AttentionRowLink({ row }: { row: NeedsAttentionRow }) {
     return (
       <Link
         href={row.href}
-        className="flex items-center justify-between gap-4 rounded-2xl px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
+        className="flex items-center justify-between gap-4 rounded-[14px] px-2 py-3 transition-colors duration-150 hover:bg-orange-50/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
       >
         {content}
       </Link>
     );
   }
 
-  return <div className="flex items-center justify-between gap-4 rounded-2xl px-2 py-3">{content}</div>;
+  return <div className="flex items-center justify-between gap-4 rounded-[14px] px-2 py-3">{content}</div>;
 }
 
 export function NeedsAttentionList({
@@ -122,7 +122,7 @@ export function NeedsAttentionList({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
+      <div className="rounded-[14px] border border-dashed border-slate-300 bg-slate-50/70 px-5 py-10 text-sm text-slate-500">
         No items need attention right now.
       </div>
     );
@@ -142,7 +142,7 @@ export function NeedsAttentionList({
         <button
           type="button"
           onClick={() => setExpanded((current) => !current)}
-          className="flex w-full items-center justify-between gap-4 rounded-2xl px-2 py-3 text-left text-sm font-semibold text-[#F97316] transition hover:bg-orange-50/55 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
+          className="flex w-full items-center justify-between gap-4 rounded-[14px] px-2 py-3 text-left text-sm font-semibold text-[#F97316] transition hover:bg-orange-50/55 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/25 focus-visible:ring-offset-2"
         >
           <span>{expanded ? "Show fewer" : `View ${remainingCount} more →`}</span>
         </button>

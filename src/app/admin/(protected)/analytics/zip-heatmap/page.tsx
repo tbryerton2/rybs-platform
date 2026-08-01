@@ -463,7 +463,7 @@ export default async function ZipHeatMapPage({
         </div>
       </section>
 
-      <div className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-6 py-5">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <h2 className="text-lg font-semibold text-slate-900">ZIP performance</h2>

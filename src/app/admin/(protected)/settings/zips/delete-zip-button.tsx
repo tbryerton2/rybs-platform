@@ -17,7 +17,7 @@ export function DeleteZipButton({ zip, className }: DeleteZipButtonProps) {
         type="button"
         className={
           className ??
-          "inline-flex h-10 items-center justify-center rounded-2xl border border-rose-200 bg-white px-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+          "admin-btn admin-btn-destructive h-10 px-4"
         }
         onClick={() => setOpen(true)}
       >
@@ -26,7 +26,7 @@ export function DeleteZipButton({ zip, className }: DeleteZipButtonProps) {
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-          <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-[14px] border border-slate-200 bg-white p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-slate-900">Delete ZIP {zip}?</h3>
 
             <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -37,7 +37,7 @@ export function DeleteZipButton({ zip, className }: DeleteZipButtonProps) {
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
                 type="button"
-                className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                className="admin-btn admin-btn-secondary h-11 px-4"
                 onClick={() => setOpen(false)}
               >
                 Cancel
@@ -45,7 +45,7 @@ export function DeleteZipButton({ zip, className }: DeleteZipButtonProps) {
 
               <FormSubmitButton
                 loadingLabel="Deleting..."
-                className="inline-flex h-11 items-center justify-center rounded-2xl bg-red-600 px-4 text-sm font-medium text-white transition hover:bg-red-700"
+                className="admin-btn admin-btn-destructive h-11 px-4"
               >
                 Delete ZIP
               </FormSubmitButton>

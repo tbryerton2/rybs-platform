@@ -28,11 +28,13 @@ export function PortalLoginForm({
   initialEmail,
   initialCooldownSeconds,
   blocked,
+  mode = "default",
 }: {
   action: (formData: FormData) => void | Promise<void>;
   initialEmail?: string;
   initialCooldownSeconds?: number;
   blocked?: boolean;
+  mode?: "default" | "resend";
 }) {
   const [email, setEmail] = useState(initialEmail ?? "");
   const [cooldownUntil] = useState(() => {
@@ -46,7 +48,9 @@ export function PortalLoginForm({
     persistCooldown(next);
     return next;
   });
-  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState(() =>
+    Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000)),
+  );
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -63,9 +67,16 @@ export function PortalLoginForm({
 
   const inCooldown = secondsRemaining > 0;
   const isDisabled = blocked || inCooldown;
+  const isResend = mode === "resend";
   const helperText = useMemo(() => {
     if (blocked) {
       return "Portal access is disabled for this account, so a secure access link cannot be sent.";
+    }
+
+    if (isResend) {
+      return inCooldown
+        ? `You can request another link in ${secondsRemaining} seconds.`
+        : "You can request another link now.";
     }
 
     if (!inCooldown) {
@@ -73,7 +84,31 @@ export function PortalLoginForm({
     }
 
     return `To prevent spam and Supabase rate-limit issues, you can request another link in ${secondsRemaining}s.`;
-  }, [blocked, inCooldown, secondsRemaining]);
+  }, [blocked, inCooldown, isResend, secondsRemaining]);
+
+  if (isResend) {
+    return (
+      <form action={action} className="mt-8">
+        <input name="email" type="hidden" value={email} />
+        <p className="text-xs leading-5 text-slate-500">{helperText}</p>
+
+        {!inCooldown ? (
+          <button
+            type="submit"
+            disabled={blocked}
+            className={[
+              "mt-4 inline-flex w-full items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition",
+              blocked
+                ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                : "border border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            {blocked ? "Portal access disabled" : "Send another link"}
+          </button>
+        ) : null}
+      </form>
+    );
+  }
 
   return (
     <form action={action} className="mt-8 space-y-5">

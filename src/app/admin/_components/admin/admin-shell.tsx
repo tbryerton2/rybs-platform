@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRightOnRectangleIcon, Bars3Icon } from "@heroicons/react/24/outline";
+import { Bars3Icon } from "@heroicons/react/24/outline";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { adminNavGroups, getActiveAdminNavItem, isAdminNavItemActive } from "./admin-nav";
@@ -17,25 +17,14 @@ function MobileNav({ pathname }: { pathname: string }) {
     <div className="border-b border-slate-200 bg-white lg:hidden">
       <div className="px-4 pb-3 pt-4 sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-slate-900 p-2 text-white">
+          <div className="rounded-lg bg-slate-900 p-2 text-white">
             <Bars3Icon className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
               Tan Can Man
             </p>
-            <div className="flex items-center gap-3">
-              <p className="text-base font-semibold text-slate-900">Admin</p>
-              <a
-                href="/admin/logout"
-                target="_self"
-                data-no-prefetch
-                className="relative z-10 inline-flex items-center gap-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
-              >
-                <ArrowRightOnRectangleIcon className="h-4 w-4" />
-                Sign out
-              </a>
-            </div>
+            <p className="text-base font-semibold text-slate-900">Admin</p>
           </div>
         </div>
       </div>
@@ -117,7 +106,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         >
           <div className="min-w-0 px-4 sm:px-6 lg:px-7 xl:px-8 2xl:px-10">
             {showShellHeader ? (
-              <div className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 lg:rounded-[28px] lg:border lg:px-8 lg:py-5">
+              <div className="border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur sm:px-6 lg:rounded-[20px] lg:border lg:px-8 lg:py-5">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
@@ -127,15 +116,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                       {activeItem?.label ?? "Admin"}
                     </p>
                   </div>
-                  <a
-                    href="/admin/logout"
-                    target="_self"
-                    data-no-prefetch
-                    className="relative z-10 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                  >
-                    <ArrowRightOnRectangleIcon className="h-4 w-4" />
-                    Sign out
-                  </a>
                 </div>
               </div>
             ) : null}

@@ -159,7 +159,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
         actions={
           <Link
             href="/admin/expenses/new"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="admin-btn admin-btn-primary h-11 gap-2 px-5"
           >
             <PlusIcon className="h-4 w-4" />
             Add expense
@@ -183,7 +183,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
             ].join(" ")}
           >
             <div className="flex gap-4">
-              <div className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset ${stat.iconClassName}`}>
+              <div className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset ${stat.iconClassName}`}>
                 <stat.icon className="h-6 w-6" />
               </div>
               <div className="min-w-0">
@@ -197,7 +197,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
         ))}
       </section>
 
-      <section className="rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
+      <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
         <div className="flex flex-col gap-2">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">Expense search</h2>
@@ -212,13 +212,13 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search category, vendor, description, or asset"
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+              className="h-12 w-full rounded-[14px] border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
             />
           </label>
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilterWithUrl(event.target.value as typeof statusFilter)}
-            className="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
+            className="h-12 rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316]"
           >
             <option value="All">All statuses</option>
             {paymentStatuses.map((status) => (
@@ -231,7 +231,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
             <button
               type="button"
               onClick={clearFilters}
-              className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="admin-btn admin-btn-secondary h-12 px-4"
             >
               Clear view
             </button>
@@ -239,12 +239,12 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
         </div>
 
         {loadError ? (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             <div>Expense records could not be loaded from Supabase: {loadError}</div>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="inline-flex items-center rounded-xl border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-800 transition hover:bg-rose-100"
+              className="admin-btn admin-btn-destructive px-3"
             >
               Refresh page
             </button>
@@ -252,7 +252,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+      <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex items-center justify-between gap-3">
             <div className="text-lg font-semibold tracking-tight text-slate-900">Expenses</div>
@@ -264,7 +264,7 @@ export function ExpensesClient({ initialExpenses, initialStatusFilter, loadError
 
         {filteredExpenses.length === 0 ? (
           <div className="px-6 py-16">
-            <div className="mx-auto max-w-xl rounded-[28px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
+            <div className="mx-auto max-w-xl rounded-[14px] border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
               <div className="text-lg font-semibold text-slate-900">
                 {hasNoExpenses ? "No expenses yet" : "No expenses match this view"}
               </div>

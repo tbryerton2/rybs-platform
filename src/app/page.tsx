@@ -1,4 +1,5 @@
 import HomePageClient from "@/app/home-page-client";
+import { getActiveServiceAreaZipCodes } from "@/lib/service-area";
 import { getRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
 import {
   getHomeFaqContent,
@@ -30,6 +31,7 @@ export default async function HomePage({
     faqContent,
     supportMarketingContent,
     retailSiteSettings,
+    servedZipCodes,
   ] = await Promise.all([
     getHomeHeroContent({ preview }),
     getHomeServiceAreaContent({ preview }),
@@ -40,6 +42,7 @@ export default async function HomePage({
     getHomeFaqContent({ preview }),
     getSupportMarketingContent({ preview }),
     getRetailSiteSettings(),
+    getActiveServiceAreaZipCodes(),
   ]);
 
   return (
@@ -54,6 +57,7 @@ export default async function HomePage({
       faqContent={faqContent}
       supportMarketingContent={supportMarketingContent}
       visibilitySettings={retailSiteSettings.home.visibility}
+      servedZipCodes={servedZipCodes}
     />
   );
 }

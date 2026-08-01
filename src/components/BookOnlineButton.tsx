@@ -153,7 +153,7 @@ export default function BookOnlineButton({
         loadingLabel="Loading..."
         className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-[#F97316] px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-[#EA580C] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
       >
-        Book Online
+        Book Now
       </LoadingButton>
       {error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">

@@ -74,16 +74,18 @@ function SummaryCard({
       onClick={onClick}
       aria-pressed={active}
       className={[
-        adminSummaryCardShell(
-          tone,
-          "h-full w-full p-5 text-left ring-1 transition duration-200 ease-out",
-        ),
+        tone === "green"
+          ? "h-full w-full rounded-[14px] border border-slate-200 bg-white p-5 text-left shadow-sm ring-1 transition duration-200 ease-out"
+          : adminSummaryCardShell(
+              tone,
+              "h-full w-full p-5 text-left ring-1 transition duration-200 ease-out",
+            ),
         "cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300",
         active
           ? tone === "blue"
             ? "ring-sky-300/90 shadow-[0_0_0_1px_rgba(125,211,252,0.5)] shadow-md"
             : tone === "green"
-              ? "ring-emerald-300/90 shadow-[0_0_0_1px_rgba(110,231,183,0.45)] shadow-md"
+              ? "ring-slate-300/90 shadow-[0_0_0_1px_rgba(203,213,225,0.55)] shadow-md"
               : "ring-amber-300/90 shadow-[0_0_0_1px_rgba(252,211,77,0.4)] shadow-md"
           : "ring-white/50 hover:ring-slate-200/80",
       ].join(" ")}
@@ -91,11 +93,11 @@ function SummaryCard({
       <div className="flex gap-4">
         <span
           className={[
-            "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset transition",
+            "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset transition",
             tone === "blue"
               ? "bg-sky-100/95 text-sky-700 ring-sky-200/90"
               : tone === "green"
-                ? "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90"
+                ? "bg-slate-100/95 text-slate-600 ring-slate-200/90"
                 : "bg-amber-100/95 text-amber-700 ring-amber-200/90",
             active ? "scale-[1.02]" : "",
           ].join(" ")}
@@ -176,7 +178,7 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
         />
       </section>
 
-      <section className="rounded-[32px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-6">
+      <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-6">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">
             Search Zip Codes
@@ -193,11 +195,11 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search ZIP, town, or county"
-              className="h-12 w-full rounded-2xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+              className="h-12 w-full rounded-[14px] border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
             />
           </label>
 
-          <label className="inline-flex h-12 items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700 transition">
+          <label className="inline-flex h-12 items-center gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700 transition">
             <input
               type="checkbox"
               checked={includeDisabled}
@@ -211,7 +213,7 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[32px] bg-white shadow-xl ring-1 ring-slate-200/70">
+      <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">
@@ -228,7 +230,7 @@ export function ZipList({ rows }: { rows: ServiceZipRow[] }) {
             {rows.length === 0 ? (
               <EmptyState />
             ) : (
-              <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center">
+              <div className="rounded-[14px] border border-dashed border-slate-300 bg-white p-10 text-center">
                 <div className="text-base font-semibold text-slate-900">No matching ZIP codes</div>
                 <div className="mt-2 text-sm text-slate-500">
                   Try a different ZIP, town, or county search, or include disabled ZIP codes.

@@ -66,8 +66,8 @@ export function ZipStatusToggleForm({
         disabled={pending}
         className={
           active
-            ? "inline-flex h-10 items-center justify-center rounded-2xl border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-            : "inline-flex h-10 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+            ? "admin-btn admin-btn-destructive h-10 px-4"
+            : "admin-btn admin-btn-primary h-10 px-4"
         }
       >
         {pending ? (active ? "Deactivating..." : "Activating...") : active ? "Deactivate" : "Activate"}

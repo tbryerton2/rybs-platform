@@ -86,7 +86,7 @@ function insightToneClasses(tone: Insight["tone"]) {
 }
 
 function sectionCardClasses(extra = "") {
-  return `rounded-[32px] border border-slate-200/80 bg-white shadow-sm ${extra}`;
+  return `rounded-[20px] border border-slate-200/80 bg-white shadow-sm ${extra}`;
 }
 
 function FilterBar({ filters }: { filters: AnalyticsFilters }) {
@@ -147,13 +147,13 @@ function FilterBar({ filters }: { filters: AnalyticsFilters }) {
           <div className="flex min-w-0 items-end gap-3 md:justify-start 2xl:col-span-3 2xl:justify-end">
             <button
               type="submit"
-              className="inline-flex h-11 min-w-[132px] items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+              className="admin-btn admin-btn-primary h-11 min-w-[132px] px-5"
             >
               Apply filters
             </button>
             <Link
               href="/admin/analytics/conversion?range=30d"
-              className="inline-flex h-11 min-w-[96px] items-center justify-center rounded-2xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="admin-btn admin-btn-secondary h-11 min-w-[96px] px-5"
             >
               Reset
             </Link>
@@ -181,7 +181,7 @@ function FilterField({
       <select
         name={name}
         defaultValue={value}
-        className="h-11 w-full min-w-0 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400"
+        className="h-11 w-full min-w-0 rounded-[14px] border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -219,7 +219,7 @@ function KpiCard({ metric }: { metric: KpiMetric }) {
   const isPositive = metric.tone === "success";
 
   return (
-    <div className={`rounded-[24px] border p-5 shadow-sm ${cardToneClasses(metric.tone)}`}>
+    <div className={`rounded-[14px] border p-5 shadow-sm ${cardToneClasses(metric.tone)}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="text-sm font-medium text-slate-500">{metric.label}</div>
@@ -250,7 +250,7 @@ function FunnelStageCard({ step, maxSessions }: { step: FunnelStep; maxSessions:
   const width = maxSessions > 0 ? Math.max(14, Math.round((step.sessions / maxSessions) * 100)) : 0;
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+    <div className="rounded-[14px] border border-slate-200 bg-slate-50/80 p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-900">{step.label}</div>
@@ -585,7 +585,7 @@ function ValuePanel({
       <p className="mt-1 text-sm leading-6 text-slate-500">The directional measures most likely to reflect time saved and support deflection.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         {rows.map((row) => (
-          <div key={row.label} className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
+          <div key={row.label} className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
             <div className="text-sm font-medium text-slate-500">{row.label}</div>
             <div className="mt-2 text-[30px] font-semibold leading-none tracking-tight text-slate-900">{row.value}</div>
             <p className="mt-3 text-sm leading-6 text-slate-600">{row.helper}</p>
@@ -610,7 +610,7 @@ export default async function ConversionAnalyticsPage({
     <AdminPage className="min-w-0 pt-8">
       <FilterBar filters={filters} />
 
-      <section className="mt-10 rounded-[36px] border border-slate-200/80 bg-white/80 p-6 shadow-sm lg:p-8">
+      <section className="mt-10 rounded-[20px] border border-slate-200/80 bg-white/80 p-6 shadow-sm lg:p-8">
         <SectionHeading
           eyebrow="Website Analytics"
           title="Where customers are falling out of the booking flow"
@@ -713,7 +713,7 @@ export default async function ConversionAnalyticsPage({
         </div>
       </section>
 
-      <section className="mt-14 rounded-[36px] border border-slate-200/80 bg-slate-50/70 p-6 shadow-sm lg:p-8">
+      <section className="mt-14 rounded-[20px] border border-slate-200/80 bg-slate-50/70 p-6 shadow-sm lg:p-8">
         <SectionHeading
           eyebrow="Portal adoption & self-service"
           title="Whether the portal is creating real operational value"

@@ -44,6 +44,12 @@ const BASE_SCHEDULE_JOB_SELECT = `
         created_at
         `;
 
+type ScheduleQueryError = { message?: string | null };
+type ScheduleQueryResult = {
+  data: Record<string, unknown>[] | null;
+  error: ScheduleQueryError | null;
+};
+
 export async function getScheduleJobs(weekStartISO: string, weekEndISO: string) {
   const tenant = await getCurrentTenant();
   const buildQuery = (selectClause: string) =>
@@ -79,4 +85,57 @@ export async function getScheduleJobs(weekStartISO: string, weekEndISO: string) 
   }
 
   return data ?? [];
+}
+
+async function getScheduleRows(
+  buildQuery: (selectClause: string) => PromiseLike<unknown>,
+) {
+  const { data, error } = (await buildQuery(SCHEDULE_JOB_SELECT)) as ScheduleQueryResult;
+
+  if (error && isBookingSchemaError(error)) {
+    const fallback = (await buildQuery(BASE_SCHEDULE_JOB_SELECT)) as ScheduleQueryResult;
+    if (fallback.error) {
+      throw new Error(fallback.error.message ?? "Failed to load schedule jobs.");
+    }
+
+    return (fallback.data ?? []).map((row) => ({
+      ...((row as unknown as Record<string, unknown>) ?? {}),
+      dumpster_id: null,
+      dumpster_size: null,
+      assigned_dumpster: null,
+      ...EMPTY_BOOKING_PLACEMENT_FIELDS,
+    }));
+  }
+
+  if (error) {
+    throw new Error(error.message ?? "Failed to load schedule jobs.");
+  }
+
+  return data ?? [];
+}
+
+export async function getOverdueScheduleJobs(todayISO: string) {
+  const tenant = await getCurrentTenant();
+  const [overdueDeliveries, overduePickups] = await Promise.all([
+    getScheduleRows((selectClause) =>
+      supabaseAdmin
+        .from("bookings")
+        .select(selectClause)
+        .eq("business_id", tenant.id)
+        .in("status", ["confirmed", "scheduled"])
+        .lt("delivery_date", todayISO)
+        .order("delivery_date", { ascending: true }),
+    ),
+    getScheduleRows((selectClause) =>
+      supabaseAdmin
+        .from("bookings")
+        .select(selectClause)
+        .eq("business_id", tenant.id)
+        .eq("status", "delivered")
+        .lt("pickup_date", todayISO)
+        .order("pickup_date", { ascending: true }),
+    ),
+  ]);
+
+  return [...overdueDeliveries, ...overduePickups];
 }

@@ -1,9 +1,11 @@
 import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
-import { getPricingIntroContent } from "@/lib/tenant/content";
+import { getPricingIntroContent, getPricingSizeGuideContent } from "@/lib/tenant/content";
 import BookOnlineButton from "@/components/BookOnlineButton";
 import { parseCustomerBulletPoints } from "@/lib/product-card-content";
+import PricingZipSwitcher from "./pricing-zip-switcher";
+import PricingSizeGuide from "./pricing-size-guide";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +34,14 @@ export default async function PricingPage({
   const zipValid = zip.length === 5;
   const preview = sp?.preview === "1";
 
-  const [pricingIntro, inventoryProducts, pricingSettings] = await Promise.all([
+  const [pricingIntro, inventoryProducts, pricingSettings, sizeGuideContent] = await Promise.all([
     getPricingIntroContent({ preview }),
     getPublicDumpsterProducts(zip),
     getPricingSettingsSnapshot(),
+    getPricingSizeGuideContent({ preview }),
   ]);
   const includedServicesBlurb = pricingSettings.includedServicesBlurb?.trim() || "";
+  const showSizeGuide = sizeGuideContent.enabled && sizeGuideContent.rows.length > 0;
   const pricingProducts = inventoryProducts.length
     ? inventoryProducts
     : [
@@ -86,16 +90,18 @@ export default async function PricingPage({
             {pricingIntro.headline}
           </h1>
 
-          <p className="mt-3 text-slate-600 text-lg">
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-2 text-lg text-slate-600">
             {zipValid ? (
               <>
-                Showing availability for{" "}
-                <span className="font-semibold text-slate-900">{zip}</span>
+                <span>
+                  Delivering to <span className="font-semibold text-slate-900">{zip}</span>
+                </span>
+                <PricingZipSwitcher currentZip={zip} preview={preview} />
               </>
             ) : (
-              <>{pricingIntro.defaultBody}</>
+              <span>{pricingIntro.defaultBody}</span>
             )}
-          </p>
+          </div>
 
           {includedServicesBlurb ? (
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
@@ -106,6 +112,11 @@ export default async function PricingPage({
 
         {/* Pricing Card */}
         <section>
+          {showSizeGuide ? (
+            <div className="mb-5">
+              <PricingSizeGuide content={sizeGuideContent} />
+            </div>
+          ) : null}
           <div className="grid gap-8 md:grid-cols-2">
             {pricingProducts.map((product) => (
               <div
@@ -124,17 +135,29 @@ export default async function PricingPage({
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50/70 p-4 text-sm text-slate-700">
-                  <div className="font-semibold text-slate-900">
-                    Includes up to {product.includedRentalDays} day{product.includedRentalDays === 1 ? "" : "s"}
-                  </div>
-                  <div className="mt-1">
-                    {money.format(product.extraDayPrice)} per extra day after day {product.includedRentalDays}.
-                  </div>
-                  <div className="mt-4 font-semibold text-slate-900">
-                    {formatIncludedWeight(product.includedWeightTons)}
-                  </div>
-                  <div className="mt-1">
-                    {money.format(product.tonOveragePrice)} per ton over.
+                  <div className="grid gap-4 sm:grid-cols-2 sm:gap-0">
+                    <div className="min-w-0 sm:pr-5">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[#C2410C] sm:min-h-[2.25rem]">
+                        Included rental duration
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-900">
+                        Includes up to {product.includedRentalDays} day{product.includedRentalDays === 1 ? "" : "s"}
+                      </div>
+                      <div className="mt-1">
+                        {money.format(product.extraDayPrice)} per extra day after day {product.includedRentalDays}.
+                      </div>
+                    </div>
+                    <div className="min-w-0 border-t border-orange-200 pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[#C2410C] sm:min-h-[2.25rem]">
+                        Included weight allowance
+                      </div>
+                      <div className="mt-2 font-semibold text-slate-900">
+                        {formatIncludedWeight(product.includedWeightTons)}
+                      </div>
+                      <div className="mt-1">
+                        Extra weight fee: {money.format(product.tonOveragePrice)}/ton
+                      </div>
+                    </div>
                   </div>
                 </div>
 

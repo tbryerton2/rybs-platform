@@ -9,16 +9,25 @@ import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizePhone } from "@/lib/customers";
 import { getDumpsterPriceForZip } from "@/lib/pricing";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder.server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { createCheckoutPayment, linkCheckoutPaymentToBooking } from "@/lib/payments/payment-service";
-import { saveCustomerPaymentMethod } from "@/lib/payments/customer-payment-method-service";
+import {
+  saveCustomerPaymentMethod,
+  SaveCustomerPaymentMethodError,
+} from "@/lib/payments/customer-payment-method-service";
 import { getCustomerFacingPaymentFailureMessage } from "@/lib/payments/payment-errors";
-import type { CheckoutPaymentResult, PaymentProvider } from "@/lib/payments/types";
+import type {
+  CheckoutPaymentResult,
+  PaymentProvider,
+  SaveCustomerPaymentMethodFailureStage,
+} from "@/lib/payments/types";
 import { getCurrentTenant } from "@/lib/tenant/server";
+import { sendBookingEmails } from "@/lib/email/booking-emails";
 import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettings,
@@ -115,6 +124,200 @@ function withOtherConcernDetails(
   const concernLine = accessIssues?.includes("other_concern") && concern ? `Other concern: ${concern}` : "";
 
   return [special, concernLine].filter(Boolean).join("\n") || null;
+}
+
+function sanitizeJsonValue(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((item) => sanitizeJsonValue(item));
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => {
+        if (isSensitivePaymentKey(key)) {
+          return [key, "[redacted]"];
+        }
+
+        return [key, sanitizeJsonValue(nestedValue)];
+      }),
+    );
+  }
+  return value;
+}
+
+const CARD_ON_FILE_SAVE_CUSTOMER_WARNING =
+  "Booking confirmed, but we could not save a payment method for future charges.";
+
+function isSensitivePaymentKey(key: string) {
+  return /token|source|cvv|cvc|cardNumber|card_number|accessToken|access_token|rawProvider|raw_provider|raw/i.test(key);
+}
+
+function sanitizeErrorMessage(value: unknown) {
+  const message = value instanceof Error ? value.message : typeof value === "string" ? value : "Unknown error.";
+  return message.replace(/(?:cnon|ccof|EAAA|sq0[a-z0-9_-]*):[A-Za-z0-9._:-]+/gi, "[redacted]");
+}
+
+function getSafeErrorCode(error: unknown, fallback: string) {
+  if (error instanceof SaveCustomerPaymentMethodError) return error.safeErrorCode;
+  if (error && typeof error === "object" && "code" in error && typeof error.code === "string") {
+    return error.code;
+  }
+  return fallback;
+}
+
+function getFailureStage(
+  error: unknown,
+  fallback: SaveCustomerPaymentMethodFailureStage,
+) {
+  return error instanceof SaveCustomerPaymentMethodError ? error.failureStage : fallback;
+}
+
+function getRetryable(error: unknown, fallback: boolean) {
+  return error instanceof SaveCustomerPaymentMethodError ? error.retryable : fallback;
+}
+
+function getCorrelationId(error: unknown, fallback: string | null) {
+  if (error instanceof SaveCustomerPaymentMethodError && error.correlationId) {
+    return error.correlationId;
+  }
+
+  return fallback;
+}
+
+function logConfirmBookingEvent(
+  level: "error" | "info" | "warn",
+  event: string,
+  details: Record<string, unknown>,
+) {
+  console[level](`[confirm-booking] ${event}`, {
+    event,
+    ...details,
+  });
+}
+
+async function createPaymentException(input: {
+  businessId: string;
+  holdId: string;
+  bookingId?: string | null;
+  customerId?: string | null;
+  checkoutPayment: CheckoutPaymentResult;
+  exceptionType?: string;
+  failureStage?: SaveCustomerPaymentMethodFailureStage;
+  safeErrorCode?: string;
+  sanitizedErrorMessage?: string;
+  attemptedAt?: string;
+  retryable?: boolean;
+  correlationId?: string | null;
+  failureReason: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  rawContext: unknown;
+}) {
+  const { error } = await supabaseAdmin.from("payment_exceptions").insert({
+    business_id: input.businessId,
+    booking_hold_id: input.holdId,
+    booking_id: input.bookingId ?? null,
+    customer_id: input.customerId ?? null,
+    booking_payment_id: input.checkoutPayment.paymentId,
+    provider: input.checkoutPayment.paymentProvider,
+    provider_environment: input.checkoutPayment.providerEnvironment,
+    provider_payment_id: input.checkoutPayment.providerPaymentId,
+    amount_cents: input.checkoutPayment.amountCents,
+    currency: input.checkoutPayment.currency,
+    status: "open",
+    exception_type: input.exceptionType ?? "booking_creation_failed_after_payment",
+    failure_reason: input.failureReason,
+    failure_stage: input.failureStage ?? "unexpected_failure",
+    safe_error_code: input.safeErrorCode ?? "UNKNOWN_PAYMENT_EXCEPTION",
+    sanitized_error_message: input.sanitizedErrorMessage ?? input.failureReason,
+    attempted_at: input.attemptedAt ?? new Date().toISOString(),
+    retryable: input.retryable ?? false,
+    correlation_id: input.correlationId ?? input.checkoutPayment.idempotencyKey,
+    customer_name: input.customerName || null,
+    customer_email: input.customerEmail || null,
+    customer_phone: input.customerPhone || null,
+    raw_context: sanitizeJsonValue(input.rawContext),
+  });
+
+  if (error) {
+    logConfirmBookingEvent("error", "payment_exception_persist_failed", {
+      businessId: input.businessId,
+      bookingId: input.bookingId ?? null,
+      bookingPaymentId: input.checkoutPayment.paymentId,
+      exceptionType: input.exceptionType ?? "booking_creation_failed_after_payment",
+      failureStage: input.failureStage ?? "unexpected_failure",
+      errorMessage: error.message,
+    });
+  }
+}
+
+async function createCardOnFileSaveException(input: {
+  businessId: string;
+  holdId: string;
+  bookingId: string;
+  customerId: string | null;
+  checkoutPayment: CheckoutPaymentResult;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  error: unknown;
+  fallbackStage: SaveCustomerPaymentMethodFailureStage;
+  fallbackCode: string;
+  retryable?: boolean;
+  correlationId?: string | null;
+  context?: Record<string, unknown>;
+}) {
+  const attemptedAt = new Date().toISOString();
+  const failureStage = getFailureStage(input.error, input.fallbackStage);
+  const safeErrorCode = getSafeErrorCode(input.error, input.fallbackCode);
+  const sanitizedErrorMessage = sanitizeErrorMessage(input.error);
+  const retryable = getRetryable(input.error, input.retryable ?? false);
+  const correlationId = getCorrelationId(input.error, input.correlationId ?? input.checkoutPayment.idempotencyKey);
+
+  logConfirmBookingEvent("warn", "card_on_file_save_failed", {
+    businessId: input.businessId,
+    bookingId: input.bookingId,
+    customerId: input.customerId,
+    bookingPaymentId: input.checkoutPayment.paymentId,
+    providerEnvironment: input.checkoutPayment.providerEnvironment,
+    failureStage,
+    safeErrorCode,
+    attemptedAt,
+    retryable,
+    correlationId,
+  });
+
+  await createPaymentException({
+    businessId: input.businessId,
+    holdId: input.holdId,
+    bookingId: input.bookingId,
+    customerId: input.customerId,
+    checkoutPayment: input.checkoutPayment,
+    exceptionType: "card_on_file_save_failed_after_payment",
+    failureReason: "Card-on-file authorization was accepted, but the payment method could not be saved.",
+    failureStage,
+    safeErrorCode,
+    sanitizedErrorMessage,
+    attemptedAt,
+    retryable,
+    correlationId,
+    customerName: input.customerName,
+    customerEmail: input.customerEmail,
+    customerPhone: input.customerPhone,
+    rawContext: {
+      bookingId: input.bookingId,
+      customerId: input.customerId,
+      bookingPaymentId: input.checkoutPayment.paymentId,
+      provider: input.checkoutPayment.paymentProvider,
+      providerEnvironment: input.checkoutPayment.providerEnvironment,
+      failureStage,
+      safeErrorCode,
+      retryable,
+      correlationId,
+      ...input.context,
+    },
+  });
 }
 
 export async function GET() {
@@ -505,6 +708,32 @@ export async function POST(req: Request) {
         },
       });
     } catch (insertError) {
+      const failureReason =
+        insertError instanceof Error ? insertError.message : "Booking creation failed after payment capture.";
+
+      if (checkoutPayment?.status === "paid") {
+        await createPaymentException({
+          businessId: tenant.id,
+          holdId,
+          checkoutPayment,
+          failureReason,
+          customerName,
+          customerEmail,
+          customerPhone,
+          rawContext: {
+            bookingDraft: draft,
+            deliveryDate,
+            pickupDate,
+            pickupMode,
+            selectedDumpster,
+            pricing: pricing.priceQuote,
+            paymentId: checkoutPayment.paymentId,
+            providerPaymentId: checkoutPayment.providerPaymentId,
+            insertError: failureReason,
+          },
+        });
+      }
+
       // If booking insert fails, try to revert hold back to active (best-effort)
       await supabase
         .from("booking_holds")
@@ -514,7 +743,7 @@ export async function POST(req: Request) {
         .eq("status", "converting");
 
       return NextResponse.json(
-        { ok: false, error: insertError instanceof Error ? insertError.message : "Booking creation failed." },
+        { ok: false, error: failureReason },
         { status: 500 }
       );
     }
@@ -547,18 +776,43 @@ export async function POST(req: Request) {
 
     if (paymentMethodToken && checkoutPayment?.status === "paid" && checkoutPayment.paymentProvider === "square") {
       if (!createdBooking.customerId) {
-        cardOnFileWarning = "Booking was created, but the card was not saved because the booking customer was missing.";
-        console.error("[confirm-booking] skipped card-on-file save because booking customer is missing:", {
-          bookingId: createdBooking.bookingId,
+        cardOnFileWarning = CARD_ON_FILE_SAVE_CUSTOMER_WARNING;
+        await createCardOnFileSaveException({
+          businessId: tenant.id,
           holdId,
+          bookingId: createdBooking.bookingId,
+          customerId: null,
+          checkoutPayment,
+          customerName,
+          customerEmail,
+          customerPhone,
+          error: new Error("Booking customer was missing after booking creation."),
+          fallbackStage: "linking_saved_method_to_customer",
+          fallbackCode: "BOOKING_CUSTOMER_MISSING",
+          retryable: false,
+          context: {
+            reason: "booking_customer_missing",
+          },
         });
       } else if (!checkoutPayment.providerPaymentId) {
-        cardOnFileWarning = "Booking was created, but the card was not saved because the Square payment ID was missing.";
-        console.error("[confirm-booking] skipped card-on-file save because Square payment ID is missing:", {
-          bookingId: createdBooking.bookingId,
+        cardOnFileWarning = CARD_ON_FILE_SAVE_CUSTOMER_WARNING;
+        await createCardOnFileSaveException({
+          businessId: tenant.id,
           holdId,
+          bookingId: createdBooking.bookingId,
           customerId: createdBooking.customerId,
-          paymentId: checkoutPayment.paymentId,
+          checkoutPayment,
+          customerName,
+          customerEmail,
+          customerPhone,
+          error: new Error("Square payment ID was missing after successful checkout payment."),
+          fallbackStage: "saving_square_card",
+          fallbackCode: "SQUARE_PAYMENT_ID_MISSING",
+          retryable: false,
+          context: {
+            reason: "square_payment_id_missing",
+            bookingPaymentId: checkoutPayment.paymentId,
+          },
         });
       } else {
         try {
@@ -571,12 +825,24 @@ export async function POST(req: Request) {
           });
 
           if (!cardOnFileConsent) {
-            cardOnFileWarning =
-              "Booking was created, but the card was not saved because card-on-file authorization was missing.";
-            console.error("[confirm-booking] skipped card-on-file save because consent was missing:", {
-              bookingId: createdBooking.bookingId,
+            cardOnFileWarning = CARD_ON_FILE_SAVE_CUSTOMER_WARNING;
+            await createCardOnFileSaveException({
+              businessId: tenant.id,
               holdId,
+              bookingId: createdBooking.bookingId,
               customerId: createdBooking.customerId,
+              checkoutPayment,
+              customerName,
+              customerEmail,
+              customerPhone,
+              error: new Error("Card-on-file authorization was missing while saving payment method."),
+              fallbackStage: "unexpected_failure",
+              fallbackCode: "CARD_ON_FILE_CONSENT_MISSING",
+              retryable: false,
+              correlationId: `cof-card-${createdBooking.bookingId}`,
+              context: {
+                reason: "card_on_file_consent_missing",
+              },
             });
           } else {
             const savedPaymentMethod = await saveCustomerPaymentMethod({
@@ -603,7 +869,7 @@ export async function POST(req: Request) {
               paymentMethodIdempotencyKey: `cof-card-${createdBooking.bookingId}`,
             });
 
-            console.info("[confirm-booking] saved card-on-file after checkout:", {
+            logConfirmBookingEvent("info", "card_on_file_saved_after_checkout", {
               bookingId: createdBooking.bookingId,
               holdId,
               customerId: createdBooking.customerId,
@@ -612,15 +878,21 @@ export async function POST(req: Request) {
             });
           }
         } catch (cardOnFileError) {
-          cardOnFileWarning =
-            cardOnFileError instanceof Error
-              ? cardOnFileError.message
-              : "Booking was created, but the card could not be saved on file.";
-          console.error("[confirm-booking] card-on-file save failed after booking creation:", {
-            bookingId: createdBooking.bookingId,
+          cardOnFileWarning = CARD_ON_FILE_SAVE_CUSTOMER_WARNING;
+          await createCardOnFileSaveException({
+            businessId: tenant.id,
             holdId,
+            bookingId: createdBooking.bookingId,
             customerId: createdBooking.customerId,
+            checkoutPayment,
+            customerName,
+            customerEmail,
+            customerPhone,
             error: cardOnFileError,
+            fallbackStage: "unexpected_failure",
+            fallbackCode: "CARD_ON_FILE_SAVE_FAILED",
+            retryable: true,
+            correlationId: `cof-card-${createdBooking.bookingId}`,
           });
         }
       }
@@ -696,20 +968,84 @@ export async function POST(req: Request) {
 
     if (ev.error) console.error("booking_events insert failed:", ev.error);
 
-    const msg = await supabase.from("booking_messages").insert({
-      business_id: tenant.id,
-      booking_id: createdBooking.bookingId,
-      channel: "email",
-      direction: "outbound",
-      template: "booking_confirmed",
-      to: customerEmail || null,
-      subject: "Your dumpster rental is confirmed",
-      body: `Booking confirmed for ${deliveryDate}. Booking reference: ${getCustomerFacingBookingLabel(createdBooking.bookingRef)}.`,
-      provider: "resend",
-      status: "queued",
-    }).select("id").single();
+        let bookingEmailWarning: string | null = null;
 
-    if (msg.error) console.error("booking_messages insert failed:", msg.error);
+    const serviceAddress = [
+      customerStreet,
+      customerCity,
+      customerState,
+      customerZip,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    try {
+      await sendBookingEmails({
+        bookingId: getCustomerFacingBookingLabel(createdBooking.bookingRef),
+        customerName,
+        customerEmail,
+        customerPhone,
+        dumpsterSize: selectedDumpster.dumpsterSize,
+        deliveryDate,
+        pickupDate: pickupMode === "date" ? pickupDate : null,
+        serviceAddress,
+        totalPriceCents: pricing.priceQuote.totalCents,
+      });
+
+      const msg = await supabase
+        .from("booking_messages")
+        .insert({
+          business_id: tenant.id,
+          booking_id: createdBooking.bookingId,
+          channel: "email",
+          direction: "outbound",
+          template: "booking_confirmed",
+          to: customerEmail || null,
+          subject: "Your dumpster rental is confirmed",
+          body: `Booking confirmed for ${deliveryDate}. Booking reference: ${getCustomerFacingBookingLabel(
+            createdBooking.bookingRef,
+          )}.`,
+          provider: "amazon_ses",
+          status: "sent",
+        })
+        .select("id")
+        .single();
+
+      if (msg.error) console.error("booking_messages insert failed:", msg.error);
+    } catch (bookingEmailError) {
+      bookingEmailWarning =
+        bookingEmailError instanceof Error
+          ? bookingEmailError.message
+          : "Booking was created, but one or more emails could not be sent.";
+
+      console.error("[confirm-booking] booking email send failed:", {
+        bookingId: createdBooking.bookingId,
+        bookingRef: createdBooking.bookingRef,
+        customerEmail: customerEmail || null,
+        error: bookingEmailError,
+      });
+
+      const msg = await supabase
+        .from("booking_messages")
+        .insert({
+          business_id: tenant.id,
+          booking_id: createdBooking.bookingId,
+          channel: "email",
+          direction: "outbound",
+          template: "booking_confirmed",
+          to: customerEmail || null,
+          subject: "Your dumpster rental is confirmed",
+          body: `Booking confirmed for ${deliveryDate}. Booking reference: ${getCustomerFacingBookingLabel(
+            createdBooking.bookingRef,
+          )}.`,
+          provider: "amazon_ses",
+          status: "failed",
+        })
+        .select("id")
+        .single();
+
+      if (msg.error) console.error("booking_messages insert failed:", msg.error);
+    }
 
     // 3) Mark hold as converted (best-effort)
     const finalize = await supabase
@@ -730,6 +1066,7 @@ export async function POST(req: Request) {
             paymentLinkWarning ||
             consentLinkWarning ||
             cardOnFileWarning ||
+            bookingEmailWarning ||
             "Booking created, but hold status failed to finalize.",
         },
         { status: 200 }

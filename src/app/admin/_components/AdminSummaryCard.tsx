@@ -23,7 +23,7 @@ export function adminSummaryCardShell(tone: SummaryCardTone, extra = "") {
               ? "border-teal-200/70 bg-teal-50/55"
               : "border-rose-200/70 bg-rose-50/55";
 
-  return `rounded-[28px] border shadow-sm ${toneClasses} ${extra}`;
+  return `rounded-[14px] border shadow-sm ${toneClasses} ${extra}`;
 }
 
 function chipToneClasses(tone: SummaryCardTone) {
@@ -64,6 +64,8 @@ export function AdminSummaryCard({
   icon: Icon,
   tone,
   href,
+  clearHref,
+  clearLabel,
   onClick,
   detail,
   compact = false,
@@ -76,6 +78,8 @@ export function AdminSummaryCard({
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   tone: SummaryCardTone;
   href?: string;
+  clearHref?: string;
+  clearLabel?: string;
   onClick?: () => void;
   detail?: string;
   compact?: boolean;
@@ -101,7 +105,7 @@ export function AdminSummaryCard({
         <div className="flex gap-4">
           <span
             className={joinClasses(
-              "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/65 ring-1 ring-inset",
+              "inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] bg-white/65 ring-1 ring-inset",
               chipToneClasses(tone),
             )}
           >
@@ -130,7 +134,7 @@ export function AdminSummaryCard({
           </div>
           <span
             className={joinClasses(
-              "inline-flex items-center justify-center rounded-2xl",
+              "inline-flex items-center justify-center rounded-[14px]",
               compact ? "h-10 w-10" : "h-11 w-11",
               chipToneClasses(tone),
             )}
@@ -142,13 +146,26 @@ export function AdminSummaryCard({
     );
 
   return href ? (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={joinClasses(stretch && "block h-full", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2 rounded-[28px]")}
-    >
-      {content}
-    </Link>
+    <div className={joinClasses(stretch && "h-full", "relative")}>
+      <Link
+        href={href}
+        aria-current={active ? "page" : undefined}
+        className={joinClasses(stretch && "block h-full", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2 rounded-[14px]")}
+      >
+        {content}
+      </Link>
+      {active && clearHref ? (
+        <Link
+          href={clearHref}
+          aria-label={clearLabel ?? `Clear ${label} filter`}
+          className="absolute right-2.5 top-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-slate-500 shadow-sm ring-1 ring-slate-200/80 transition hover:bg-white hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+        >
+          <span aria-hidden="true" className="text-base font-semibold leading-none">
+            ×
+          </span>
+        </Link>
+      ) : null}
+    </div>
   ) : onClick ? (
     <button
       type="button"
@@ -156,7 +173,7 @@ export function AdminSummaryCard({
       aria-pressed={active}
       className={joinClasses(
         stretch && "block h-full w-full text-left",
-        "cursor-pointer rounded-[28px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
+        "cursor-pointer rounded-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
       )}
     >
       {content}

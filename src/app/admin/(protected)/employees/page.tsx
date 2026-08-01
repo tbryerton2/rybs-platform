@@ -25,7 +25,7 @@ export default async function AdminEmployeesPage() {
         actions={
           <Link
             href="/admin/employees/new"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[#F97316] px-5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="admin-btn admin-btn-primary h-11 gap-2 px-5"
           >
             <PlusIcon className="h-4 w-4" />
             Add employee

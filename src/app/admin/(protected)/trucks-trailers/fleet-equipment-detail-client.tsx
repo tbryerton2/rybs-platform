@@ -305,19 +305,19 @@ export function FleetEquipmentDetailClient({
       </div>
 
       {panelError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+        <div className="rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {panelError}
         </div>
       ) : null}
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Equipment type" error={errors.equipmentType}>
             <select
               value={draft.equipmentType}
               disabled={isPending}
               onChange={(event) => updateDraft("equipmentType", event.target.value as FleetEquipmentRecord["equipmentType"])}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             >
               {fleetEquipmentTypeOptions.map((option) => (
                 <option key={option} value={option}>
@@ -332,7 +332,7 @@ export function FleetEquipmentDetailClient({
               value={draft.status}
               disabled={isPending}
               onChange={(event) => updateDraft("status", event.target.value as FleetEquipmentRecord["status"])}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             >
               {fleetEquipmentStatusOptions.map((option) => (
                 <option key={option} value={option}>
@@ -347,7 +347,7 @@ export function FleetEquipmentDetailClient({
               value={draft.name}
               disabled={isPending}
               onChange={(event) => updateDraft("name", event.target.value)}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
 
@@ -356,7 +356,7 @@ export function FleetEquipmentDetailClient({
               value={draft.licensePlate}
               disabled={isPending}
               onChange={(event) => updateDraft("licensePlate", event.target.value.toUpperCase())}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
 
@@ -365,7 +365,7 @@ export function FleetEquipmentDetailClient({
               value={draft.vin}
               disabled={isPending}
               onChange={(event) => updateDraft("vin", event.target.value.toUpperCase())}
-              className="h-11 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="h-11 w-full rounded-[14px] border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
 
@@ -377,7 +377,7 @@ export function FleetEquipmentDetailClient({
               disabled={isPending}
               onChange={(event) => updateDraft("notes", event.target.value)}
               rows={5}
-              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
+              className="w-full rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#F97316] disabled:cursor-not-allowed disabled:bg-slate-50"
             />
           </Field>
         </div>
@@ -388,7 +388,7 @@ export function FleetEquipmentDetailClient({
               type="button"
               onClick={resetDraft}
               disabled={isPending}
-              className="inline-flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="admin-btn admin-btn-secondary h-11 px-5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
@@ -397,7 +397,7 @@ export function FleetEquipmentDetailClient({
             type="button"
             onClick={saveDraft}
             disabled={isPending}
-            className="inline-flex h-11 items-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="admin-btn admin-btn-primary h-11 px-5"
           >
             {isPending ? "Saving..." : isCreateMode ? "Create truck or trailer" : "Save changes"}
           </button>

@@ -123,14 +123,14 @@ export default async function AdminPortalRequestDetailPage({
       />
 
       {resolvedSearchParams.saved ? (
-        <div className="mt-6 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
+        <div className="mt-6 rounded-[14px] bg-emerald-50 px-4 py-3 text-sm text-emerald-700 ring-1 ring-emerald-200">
           Request updates saved.
         </div>
       ) : null}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <section className="space-y-6">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Request summary</h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <DetailBlock label="Submitted" value={formatDateTime(request.submitted_at)} />
@@ -152,7 +152,7 @@ export default async function AdminPortalRequestDetailPage({
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Booking details</h2>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <DetailBlock
@@ -179,7 +179,7 @@ export default async function AdminPortalRequestDetailPage({
             </div>
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Requested details</h2>
             {request.action_type === "issue_report" ? (
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -222,7 +222,7 @@ export default async function AdminPortalRequestDetailPage({
           </div>
 
           {request.customer_update?.trim() ? (
-            <div className="rounded-[28px] border border-emerald-100 bg-emerald-50/60 p-6 shadow-sm">
+            <div className="rounded-[20px] border border-emerald-100 bg-emerald-50/60 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900">Latest customer update</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">{request.customer_update.trim()}</p>
             </div>
@@ -230,7 +230,7 @@ export default async function AdminPortalRequestDetailPage({
         </section>
 
         <aside className="space-y-6">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Admin response</h2>
             <p className="mt-2 text-sm leading-6 text-slate-500">
               Update the internal workflow, add internal context, and control what the customer sees in the portal.
@@ -247,7 +247,7 @@ export default async function AdminPortalRequestDetailPage({
                   id="status"
                   name="status"
                   defaultValue={request.status}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  className="mt-2 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                 >
                   <option value="submitted">Submitted</option>
                   <option value="under_review">Under review</option>
@@ -265,7 +265,7 @@ export default async function AdminPortalRequestDetailPage({
                   id="customer_visible_status"
                   name="customer_visible_status"
                   defaultValue={request.customer_visible_status}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  className="mt-2 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                 >
                   {getAvailableCustomerVisibleStatuses(request.action_type).map((status) => (
                     <option key={status} value={status}>
@@ -275,7 +275,7 @@ export default async function AdminPortalRequestDetailPage({
                 </select>
               </div>
 
-              <div className="rounded-2xl bg-slate-50/80 p-4">
+              <div className="rounded-[14px] bg-slate-50/80 p-4">
                 <label htmlFor="internal_notes" className="text-sm font-semibold text-slate-900">
                   Internal notes
                 </label>
@@ -285,11 +285,11 @@ export default async function AdminPortalRequestDetailPage({
                   rows={5}
                   defaultValue={request.internal_notes ?? ""}
                   placeholder="Routing context, dispatch notes, or follow-up needed"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  className="mt-2 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                 />
               </div>
 
-              <div className="rounded-2xl bg-slate-50/80 p-4">
+              <div className="rounded-[14px] bg-slate-50/80 p-4">
                 <label htmlFor="customer_update" className="text-sm font-semibold text-slate-900">
                   Customer update
                 </label>
@@ -299,20 +299,20 @@ export default async function AdminPortalRequestDetailPage({
                   rows={4}
                   defaultValue={request.customer_update ?? ""}
                   placeholder="Optional short update shown back in the customer portal"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  className="mt-2 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                 />
               </div>
 
               <button
                 type="submit"
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="admin-btn admin-btn-primary w-full"
               >
                 Save request updates
               </button>
             </form>
           </div>
 
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Workflow timestamps</h2>
             <div className="mt-5 space-y-4">
               <DetailBlock label="Submitted" value={formatDateTime(request.submitted_at)} />

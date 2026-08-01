@@ -1,9 +1,11 @@
 import { queueBookingEmail } from "../booking-messages.ts";
+import type { ProcessMessagesOptions } from "../messages/process-booking-messages.ts";
 import {
   buildPostBookingChargePaidEmail,
   type PostBookingChargeType,
 } from "../messages/post-booking-charge-receipt.ts";
 import { combineCustomerNameParts } from "../customer-name.ts";
+import { validateUsableSavedPaymentMethod } from "./saved-card-validation.ts";
 import type {
   CurrencyCode,
   PaymentProvider,
@@ -18,7 +20,7 @@ const DEFAULT_PAYMENT_PROVIDER = "square" satisfies PaymentProvider;
 const DEFAULT_CURRENCY = "USD";
 
 const BOOKING_CHARGE_SELECT =
-  "id, business_id, booking_id, customer_payment_method_id, charge_type, description, amount_cents, currency, status, provider, provider_environment, provider_payment_id, paid_at, failed_at, created_at, updated_at";
+  "id, business_id, booking_id, customer_payment_method_id, charge_type, description, amount_cents, currency, status, provider, provider_environment, provider_payment_id, paid_at, failed_at, customer_receipt_email_status, customer_receipt_email_to, customer_receipt_email_message_id, customer_receipt_email_sent_at, customer_receipt_email_failed_at, customer_receipt_email_error, created_at, updated_at";
 
 const BOOKING_PAYMENT_SELECT =
   "id, business_id, booking_hold_id, booking_id, booking_charge_id, provider, provider_environment, status, amount_cents, currency, provider_payment_id, provider_order_id, provider_location_id, idempotency_key, failure_code, failure_message, raw_provider_response, paid_at, failed_at, created_at, updated_at";
@@ -42,7 +44,7 @@ type SupabaseResult<T> = {
   error: SupabaseError | null;
 };
 
-type QueryBuilder<T = unknown> = {
+type QueryBuilder<T = unknown> = PromiseLike<SupabaseResult<T[]>> & {
   eq(column: string, value: string): QueryBuilder<T>;
   order(column: string, options?: { ascending?: boolean }): QueryBuilder<T>;
   limit(count: number): QueryBuilder<T>;
@@ -84,6 +86,12 @@ type BookingChargeRow = {
   provider_payment_id: string | null;
   paid_at: string | null;
   failed_at: string | null;
+  customer_receipt_email_status: string | null;
+  customer_receipt_email_to: string | null;
+  customer_receipt_email_message_id: string | null;
+  customer_receipt_email_sent_at: string | null;
+  customer_receipt_email_failed_at: string | null;
+  customer_receipt_email_error: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -149,6 +157,18 @@ export type ChargePendingBookingChargeWithSavedCardInput = {
   idempotencyKey?: string;
 };
 
+export type ValidateSavedCardForBookingChargeInput = {
+  businessId: string;
+  bookingId: string;
+  bookingChargeId: string;
+};
+
+export type SendPostBookingChargeReceiptInput = {
+  businessId: string;
+  bookingId: string;
+  bookingChargeId: string;
+};
+
 export type PostBookingChargePaymentResult = {
   ok: boolean;
   bookingChargeId: string;
@@ -174,8 +194,27 @@ type ChargePendingBookingChargeOptions = {
   adapter?: PaymentProviderAdapter;
   now?: () => Date;
   queueBookingEmail?: typeof queueBookingEmail;
+  processQueuedBookingMessages?: (options: ProcessMessagesOptions) => Promise<unknown>;
+  logger?: Pick<Console, "error" | "info" | "warn">;
+};
+
+type ValidateSavedCardForBookingChargeOptions = {
+  supabase?: PostBookingChargePaymentSupabaseClient;
+  adapter?: PaymentProviderAdapter;
+  logger?: Pick<Console, "error" | "info" | "warn">;
+};
+
+type SendPostBookingChargeReceiptOptions = {
+  supabase?: PostBookingChargePaymentSupabaseClient;
+  queueBookingEmail?: typeof queueBookingEmail;
+  processQueuedBookingMessages?: (options: ProcessMessagesOptions) => Promise<unknown>;
   logger?: Pick<Console, "error" | "warn">;
 };
+
+type SavedCardValidationFailure = Extract<
+  ReturnType<typeof validateUsableSavedPaymentMethod>,
+  { ok: false }
+>;
 
 export class PostBookingChargePaymentServiceError extends Error {
   readonly code: string;
@@ -196,6 +235,17 @@ export class PostBookingChargePaymentServiceError extends Error {
   }
 }
 
+function isPermanentSavedCardVerificationFailure(failureCode: string | null | undefined) {
+  const normalized = (failureCode ?? "").trim().toUpperCase();
+  return [
+    "NOT_FOUND",
+    "CARD_NOT_FOUND",
+    "SQUARE_CARD_DISABLED",
+    "SQUARE_CARD_ID_MISMATCH",
+    "SQUARE_CUSTOMER_MISMATCH",
+  ].includes(normalized);
+}
+
 async function getSupabaseClient() {
   const { supabaseAdmin } = await import("../supabaseAdmin");
   return supabaseAdmin as unknown as PostBookingChargePaymentSupabaseClient;
@@ -204,6 +254,11 @@ async function getSupabaseClient() {
 async function getAdapter(provider: PaymentProvider) {
   const { getPaymentProviderAdapter } = await import("./providers");
   return getPaymentProviderAdapter(provider);
+}
+
+async function processQueuedBookingMessagesDefault(options: ProcessMessagesOptions) {
+  const { processQueuedBookingMessages } = await import("../messages/process-booking-messages.ts");
+  return processQueuedBookingMessages(options);
 }
 
 function clean(value: string | null | undefined) {
@@ -420,30 +475,73 @@ async function hasCardOnFileConsent(input: {
   return Boolean(data);
 }
 
-async function findLatestActiveSavedCard(input: {
+async function findSavedPaymentMethods(input: {
   supabase: PostBookingChargePaymentSupabaseClient;
   businessId: string;
   customerId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
 }) {
-  const { data, error } = await input.supabase
+  const query = input.supabase
     .from("customer_payment_methods")
-    .select(CUSTOMER_PAYMENT_METHOD_SELECT)
+    .select(CUSTOMER_PAYMENT_METHOD_SELECT) as QueryBuilder<CustomerPaymentMethodRow>;
+
+  const { data, error } = await query
     .eq("business_id", input.businessId)
     .eq("customer_id", input.customerId)
     .eq("provider", input.provider)
     .eq("provider_environment", input.providerEnvironment)
-    .eq("status", "active")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<CustomerPaymentMethodRow>();
+    .limit(25);
 
   if (error) {
     throw new PostBookingChargePaymentServiceError(error.message, "DATABASE_ERROR", undefined, error);
   }
 
-  return data ? toStoredCustomerPaymentMethod(data) : null;
+  return (data ?? []).map(toStoredCustomerPaymentMethod);
+}
+
+function logSavedCardValidationFailure(input: {
+  logger: Pick<Console, "info" | "warn">;
+  reason: string;
+  businessId: string;
+  bookingId: string;
+  bookingChargeId: string;
+  customerId: string | null;
+  paymentMethodId?: string | null;
+}) {
+  const context = {
+    reason: input.reason,
+    businessId: input.businessId,
+    bookingId: input.bookingId,
+    bookingChargeId: input.bookingChargeId,
+    customerId: input.customerId,
+    paymentMethodId: input.paymentMethodId ?? null,
+  };
+
+  switch (input.reason) {
+    case "authorization_missing":
+      input.logger.warn("[post-booking-charge-payment] authorization missing", context);
+      return;
+    case "saved_payment_method_missing":
+      input.logger.warn("[post-booking-charge-payment] saved payment-method record missing", context);
+      return;
+    case "square_card_id_missing":
+      input.logger.warn("[post-booking-charge-payment] Square card ID missing", context);
+      return;
+    case "square_customer_id_missing":
+    case "saved_payment_method_customer_mismatch":
+    case "saved_payment_method_business_mismatch":
+    case "saved_payment_method_provider_mismatch":
+    case "saved_payment_method_environment_mismatch":
+      input.logger.warn("[post-booking-charge-payment] Square customer mismatch", context);
+      return;
+    case "square_card_unavailable":
+      input.logger.warn("[post-booking-charge-payment] card unavailable from Square", context);
+      return;
+    default:
+      input.logger.warn("[post-booking-charge-payment] saved card unavailable", context);
+  }
 }
 
 async function findPaymentByStatus(input: {
@@ -465,6 +563,146 @@ async function findPaymentByStatus(input: {
   }
 
   return data;
+}
+
+async function requireUsableSavedCardForBooking(input: {
+  supabase: PostBookingChargePaymentSupabaseClient;
+  adapter: PaymentProviderAdapter;
+  logger: Pick<Console, "info" | "warn">;
+  businessId: string;
+  bookingId: string;
+  bookingChargeId: string;
+  booking: BookingRow;
+  paymentProvider: PaymentProvider;
+}) {
+  const customerId = input.booking.customer_id;
+  if (!customerId) {
+    throw new PostBookingChargePaymentServiceError(
+      "Booking does not have a customer linked.",
+      "BOOKING_CUSTOMER_MISSING",
+    );
+  }
+
+  const consentExists = await hasCardOnFileConsent({
+    supabase: input.supabase,
+    businessId: input.businessId,
+    bookingId: input.bookingId,
+    customerId,
+  });
+
+  if (!consentExists) {
+    logSavedCardValidationFailure({
+      logger: input.logger,
+      reason: "authorization_missing",
+      businessId: input.businessId,
+      bookingId: input.bookingId,
+      bookingChargeId: input.bookingChargeId,
+      customerId,
+    });
+    throw new PostBookingChargePaymentServiceError(
+      "Card-on-file authorization was not found for this booking.",
+      "CARD_ON_FILE_CONSENT_MISSING",
+    );
+  }
+
+  const savedPaymentMethods = await findSavedPaymentMethods({
+    supabase: input.supabase,
+    businessId: input.businessId,
+    customerId,
+    provider: input.paymentProvider,
+    providerEnvironment: input.adapter.environment,
+  });
+
+  let paymentMethod: StoredCustomerPaymentMethod | null = null;
+  let paymentMethodValidation: ReturnType<typeof validateUsableSavedPaymentMethod> | null = null;
+  let firstValidationFailure: SavedCardValidationFailure | null = null;
+
+  for (const candidate of savedPaymentMethods) {
+    const validation = validateUsableSavedPaymentMethod(candidate, {
+      businessId: input.businessId,
+      customerId,
+      provider: input.paymentProvider,
+      providerEnvironment: input.adapter.environment,
+    });
+
+    if (validation.ok) {
+      paymentMethod = candidate;
+      paymentMethodValidation = validation;
+      break;
+    }
+
+    firstValidationFailure ??= validation;
+  }
+
+  if (!paymentMethodValidation?.ok) {
+    const failure =
+      firstValidationFailure ??
+      ({
+        ok: false,
+        reason: "saved_payment_method_missing",
+        paymentMethod: null,
+      } satisfies SavedCardValidationFailure);
+
+    logSavedCardValidationFailure({
+      logger: input.logger,
+      reason: failure.reason,
+      businessId: input.businessId,
+      bookingId: input.bookingId,
+      bookingChargeId: input.bookingChargeId,
+      customerId,
+      paymentMethodId: failure.paymentMethod?.id ?? null,
+    });
+
+    if (failure.reason === "saved_payment_method_missing") {
+      throw new PostBookingChargePaymentServiceError(
+        "No active saved card was found for this customer.",
+        "SAVED_CARD_MISSING",
+      );
+    }
+
+    throw new PostBookingChargePaymentServiceError(
+      "Saved card provider references are incomplete or do not match this booking customer.",
+      "SAVED_CARD_INVALID",
+    );
+  }
+
+  if (!paymentMethod) {
+    throw new PostBookingChargePaymentServiceError(
+      "No active saved card was found for this customer.",
+      "SAVED_CARD_MISSING",
+    );
+  }
+
+  if (input.adapter.verifySavedPaymentMethod) {
+    const verification = await input.adapter.verifySavedPaymentMethod({
+      providerPaymentMethodId: paymentMethodValidation.providerPaymentMethodId,
+      providerCustomerId: paymentMethodValidation.providerCustomerId,
+    });
+
+    if (!verification.ok) {
+      const permanentFailure = isPermanentSavedCardVerificationFailure(verification.failureCode);
+      logSavedCardValidationFailure({
+        logger: input.logger,
+        reason:
+          verification.providerCustomerId &&
+          verification.providerCustomerId !== paymentMethodValidation.providerCustomerId
+            ? "saved_payment_method_customer_mismatch"
+            : "square_card_unavailable",
+        businessId: input.businessId,
+        bookingId: input.bookingId,
+        bookingChargeId: input.bookingChargeId,
+        customerId,
+        paymentMethodId: paymentMethod.id,
+      });
+
+      throw new PostBookingChargePaymentServiceError(
+        verification.failureMessage ?? "Saved card could not be verified with Square.",
+        permanentFailure ? "SAVED_CARD_UNAVAILABLE" : "SAVED_CARD_VERIFICATION_FAILED",
+      );
+    }
+  }
+
+  return paymentMethod;
 }
 
 async function insertPendingPayment(input: {
@@ -490,6 +728,7 @@ async function insertPendingPayment(input: {
       amount_cents: input.amountCents,
       currency: input.currency,
       idempotency_key: input.idempotencyKey,
+      payment_collection_type: "square_saved_card",
     })
     .select(BOOKING_PAYMENT_SELECT)
     .single<BookingPaymentRow>();
@@ -668,6 +907,43 @@ function asString(value: unknown) {
   return typeof value === "string" ? value.trim() || null : null;
 }
 
+function safeReceiptError(value: unknown) {
+  const message = value instanceof Error ? value.message : typeof value === "string" ? value : "Receipt email failed.";
+  return message.replace(/\s+/g, " ").trim().slice(0, 500) || "Receipt email failed.";
+}
+
+function assertReceiptProcessorSucceeded(result: unknown) {
+  if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== false) return;
+  const error = "error" in result && typeof result.error === "string" ? result.error : "Receipt email processor failed.";
+  throw new Error(error);
+}
+
+async function updateBookingChargeReceiptFields(input: {
+  supabase: PostBookingChargePaymentSupabaseClient;
+  businessId: string;
+  bookingId: string;
+  bookingChargeId: string;
+  values: Record<string, unknown>;
+  logger: Pick<Console, "error" | "warn">;
+}) {
+  const { error } = await input.supabase
+    .from("booking_charges")
+    .update(input.values)
+    .eq("id", input.bookingChargeId)
+    .eq("booking_id", input.bookingId)
+    .eq("business_id", input.businessId)
+    .select("id")
+    .single<{ id: string }>();
+
+  if (error) {
+    input.logger.error("[post-booking-charge-payment] receipt status update failed", {
+      bookingId: input.bookingId,
+      bookingChargeId: input.bookingChargeId,
+      error,
+    });
+  }
+}
+
 async function loadTenantSetting(input: {
   supabase: PostBookingChargePaymentSupabaseClient;
   businessId: string;
@@ -728,10 +1004,26 @@ async function queuePostBookingChargePaidReceipt(input: {
   businessId: string;
   booking: BookingRow;
   charge: BookingChargeRow;
-  paymentMethod: StoredCustomerPaymentMethod;
+  paymentMethod?: StoredCustomerPaymentMethod | null;
+  processQueuedBookingMessages: (options: ProcessMessagesOptions) => Promise<unknown>;
 }) {
   const customerEmail = clean(input.booking.customer_email);
   if (!customerEmail) {
+    await updateBookingChargeReceiptFields({
+      supabase: input.supabase,
+      businessId: input.businessId,
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+      logger: input.logger,
+      values: {
+        customer_receipt_email_status: "not_applicable",
+        customer_receipt_email_to: null,
+        customer_receipt_email_message_id: null,
+        customer_receipt_email_sent_at: null,
+        customer_receipt_email_failed_at: null,
+        customer_receipt_email_error: "Customer email missing.",
+      },
+    });
     input.logger.warn("[post-booking-charge-payment] receipt email skipped: missing customer email", {
       bookingId: input.booking.id,
       bookingChargeId: input.charge.id,
@@ -762,11 +1054,11 @@ async function queuePostBookingChargePaidReceipt(input: {
       amountCents: input.charge.amount_cents,
       currency: input.charge.currency,
       paidAt: input.charge.paid_at ?? new Date().toISOString(),
-      cardBrand: input.paymentMethod.cardBrand,
-      cardLast4: input.paymentMethod.cardLast4,
+      cardBrand: input.paymentMethod?.cardBrand,
+      cardLast4: input.paymentMethod?.cardLast4,
     });
 
-    await input.enqueue({
+    const message = await input.enqueue({
       businessId: input.businessId,
       bookingId: input.booking.id,
       bookingChargeId: input.charge.id,
@@ -774,14 +1066,154 @@ async function queuePostBookingChargePaidReceipt(input: {
       to: customerEmail,
       subject: email.subject,
       body: email.body,
+      provider: "ses",
     });
+
+    await updateBookingChargeReceiptFields({
+      supabase: input.supabase,
+      businessId: input.businessId,
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+      logger: input.logger,
+      values: {
+        customer_receipt_email_status: message.status === "sent" ? "sent" : "queued",
+        customer_receipt_email_to: customerEmail,
+        customer_receipt_email_message_id: message.id,
+        customer_receipt_email_sent_at: message.status === "sent" ? message.sentAt : null,
+        customer_receipt_email_failed_at: null,
+        customer_receipt_email_error: null,
+      },
+    });
+
+    if (message.status === "queued") {
+      try {
+        const processResult = await input.processQueuedBookingMessages({
+          supabase: input.supabase as never,
+          messageId: message.id,
+        });
+        assertReceiptProcessorSucceeded(processResult);
+      } catch (error) {
+        await updateBookingChargeReceiptFields({
+          supabase: input.supabase,
+          businessId: input.businessId,
+          bookingId: input.booking.id,
+          bookingChargeId: input.charge.id,
+          logger: input.logger,
+          values: {
+            customer_receipt_email_status: "failed",
+            customer_receipt_email_to: customerEmail,
+            customer_receipt_email_sent_at: null,
+            customer_receipt_email_failed_at: new Date().toISOString(),
+            customer_receipt_email_error: safeReceiptError(error),
+          },
+        });
+        input.logger.error("[post-booking-charge-payment] immediate receipt email send failed", {
+          bookingId: input.booking.id,
+          bookingChargeId: input.charge.id,
+          messageId: message.id,
+          error,
+        });
+      }
+    }
   } catch (error) {
+    await updateBookingChargeReceiptFields({
+      supabase: input.supabase,
+      businessId: input.businessId,
+      bookingId: input.booking.id,
+      bookingChargeId: input.charge.id,
+      logger: input.logger,
+      values: {
+        customer_receipt_email_status: "failed",
+        customer_receipt_email_to: customerEmail,
+        customer_receipt_email_failed_at: new Date().toISOString(),
+        customer_receipt_email_error: safeReceiptError(error),
+      },
+    });
     input.logger.error("[post-booking-charge-payment] receipt email queue failed", {
       bookingId: input.booking.id,
       bookingChargeId: input.charge.id,
       error,
     });
   }
+}
+
+export async function validateSavedCardForBookingCharge(
+  input: ValidateSavedCardForBookingChargeInput,
+  options: ValidateSavedCardForBookingChargeOptions = {},
+) {
+  const businessId = cleanRequired(input.businessId, "businessId");
+  const bookingId = cleanRequired(input.bookingId, "bookingId");
+  const bookingChargeId = cleanRequired(input.bookingChargeId, "bookingChargeId");
+
+  assertUuid(businessId, "businessId");
+  assertUuid(bookingId, "bookingId");
+  assertUuid(bookingChargeId, "bookingChargeId");
+
+  const supabase = options.supabase ?? (await getSupabaseClient());
+  const paymentProvider = DEFAULT_PAYMENT_PROVIDER;
+  const adapter = options.adapter ?? (await getAdapter(paymentProvider));
+  const logger = options.logger ?? console;
+
+  if (adapter.provider !== paymentProvider) {
+    throw new PostBookingChargePaymentServiceError(
+      `Payment adapter mismatch: expected ${paymentProvider}, received ${adapter.provider}.`,
+      "PROVIDER_MISMATCH",
+    );
+  }
+
+  const booking = await loadBooking({ supabase, businessId, bookingId });
+
+  return requireUsableSavedCardForBooking({
+    supabase,
+    adapter,
+    logger,
+    businessId,
+    bookingId,
+    bookingChargeId,
+    booking,
+    paymentProvider,
+  });
+}
+
+export async function sendPostBookingChargeReceipt(
+  input: SendPostBookingChargeReceiptInput,
+  options: SendPostBookingChargeReceiptOptions = {},
+) {
+  const businessId = cleanRequired(input.businessId, "businessId");
+  const bookingId = cleanRequired(input.bookingId, "bookingId");
+  const bookingChargeId = cleanRequired(input.bookingChargeId, "bookingChargeId");
+
+  assertUuid(businessId, "businessId");
+  assertUuid(bookingId, "bookingId");
+  assertUuid(bookingChargeId, "bookingChargeId");
+
+  const supabase = options.supabase ?? (await getSupabaseClient());
+  const enqueueBookingEmail = options.queueBookingEmail ?? queueBookingEmail;
+  const processQueuedBookingMessages = options.processQueuedBookingMessages ?? processQueuedBookingMessagesDefault;
+  const logger = options.logger ?? console;
+  const charge = await loadBookingCharge({ supabase, businessId, bookingId, bookingChargeId });
+
+  if (charge.status !== "paid") {
+    throw new PostBookingChargePaymentServiceError(
+      "Customer receipts can only be sent for paid charges.",
+      "CHARGE_NOT_PAID",
+    );
+  }
+
+  const booking = await loadBooking({ supabase, businessId, bookingId });
+
+  await queuePostBookingChargePaidReceipt({
+    supabase,
+    enqueue: enqueueBookingEmail,
+    logger,
+    businessId,
+    booking,
+    charge,
+    paymentMethod: null,
+    processQueuedBookingMessages,
+  });
+
+  return { ok: true, bookingChargeId, bookingId, businessId };
 }
 
 export async function chargePendingBookingChargeWithSavedCard(
@@ -804,6 +1236,7 @@ export async function chargePendingBookingChargeWithSavedCard(
   const paymentProvider = DEFAULT_PAYMENT_PROVIDER;
   const adapter = options.adapter ?? (await getAdapter(paymentProvider));
   const enqueueBookingEmail = options.queueBookingEmail ?? queueBookingEmail;
+  const processQueuedBookingMessages = options.processQueuedBookingMessages ?? processQueuedBookingMessagesDefault;
   const logger = options.logger ?? console;
 
   if (adapter.provider !== paymentProvider) {
@@ -831,6 +1264,19 @@ export async function chargePendingBookingChargeWithSavedCard(
   });
 
   if (existingPaidPayment) {
+    if (charge.status === "paid" && charge.customer_receipt_email_status !== "queued" && charge.customer_receipt_email_status !== "sent") {
+      await queuePostBookingChargePaidReceipt({
+        supabase,
+        enqueue: enqueueBookingEmail,
+        logger,
+        businessId,
+        booking,
+        charge,
+        paymentMethod: null,
+        processQueuedBookingMessages,
+      });
+    }
+
     return toPaymentResult({
       payment: existingPaidPayment,
       charge,
@@ -860,41 +1306,16 @@ export async function chargePendingBookingChargeWithSavedCard(
     );
   }
 
-  const consentExists = await hasCardOnFileConsent({
+  const paymentMethod = await requireUsableSavedCardForBooking({
     supabase,
+    adapter,
+    logger,
     businessId,
     bookingId,
-    customerId,
+    bookingChargeId,
+    booking,
+    paymentProvider,
   });
-
-  if (!consentExists) {
-    throw new PostBookingChargePaymentServiceError(
-      "Card-on-file authorization was not found for this booking.",
-      "CARD_ON_FILE_CONSENT_MISSING",
-    );
-  }
-
-  const paymentMethod = await findLatestActiveSavedCard({
-    supabase,
-    businessId,
-    customerId,
-    provider: paymentProvider,
-    providerEnvironment: adapter.environment,
-  });
-
-  if (!paymentMethod) {
-    throw new PostBookingChargePaymentServiceError(
-      "No active saved card was found for this customer.",
-      "SAVED_CARD_MISSING",
-    );
-  }
-
-  if (!clean(paymentMethod.providerPaymentMethodId) || !clean(paymentMethod.providerCustomerId)) {
-    throw new PostBookingChargePaymentServiceError(
-      "Saved card provider references are incomplete.",
-      "SAVED_CARD_INVALID",
-    );
-  }
 
   const pendingPayment = await insertPendingPayment({
     supabase,
@@ -1011,6 +1432,7 @@ export async function chargePendingBookingChargeWithSavedCard(
     booking,
     charge: paidCharge,
     paymentMethod,
+    processQueuedBookingMessages,
   });
 
   return toPaymentResult({

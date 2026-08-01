@@ -47,6 +47,8 @@ const SQUARE_LOCATION_ID = (process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID || "").tr
 const SQUARE_SCRIPT_ID = "square-web-payments-sdk";
 const SQUARE_CARD_CONTAINER_ID = "square-card-container";
 const ENABLE_SIMULATED_CHECKOUT = process.env.NEXT_PUBLIC_ENABLE_SIMULATED_CHECKOUT === "true";
+const SQUARE_PRODUCTION_MODE = SQUARE_ENVIRONMENT === "production";
+const SIMULATED_CHECKOUT_ALLOWED = ENABLE_SIMULATED_CHECKOUT && !SQUARE_PRODUCTION_MODE;
 const PAYMENT_UNAVAILABLE_MESSAGE =
   "Online card payment is unavailable right now. Please contact us to complete your booking or try again later.";
 
@@ -386,6 +388,12 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
   useEffect(() => {
     if (!hydrated) return;
+
+    if (ENABLE_SIMULATED_CHECKOUT && SQUARE_PRODUCTION_MODE) {
+      console.error(
+        "NEXT_PUBLIC_ENABLE_SIMULATED_CHECKOUT is ignored when NEXT_PUBLIC_SQUARE_ENVIRONMENT is production.",
+      );
+    }
 
     const squareConfig = getSquareConfigStatus();
 
@@ -748,7 +756,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const squareConfigured = squareConfig.configured;
   const canSubmitSquarePayment =
     squareConfigured && squareReady && !!squareCard && canSubmitPayment && cardOnFileConsentAccepted;
-  const showSimulatedPayment = ENABLE_SIMULATED_CHECKOUT;
+  const showSimulatedPayment = SIMULATED_CHECKOUT_ALLOWED;
   const showPaymentUnavailableMessage =
     !showSimulatedPayment &&
     ((!squareConfigured && Boolean(squareFallbackReason)) ||
@@ -769,7 +777,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
             <div className="mx-auto w-full max-w-2xl mb-4">
               <div className="flex flex-col gap-2">
                 <div className="inline-flex w-fit items-center rounded-full bg-[#F97316]/10 px-4 py-1 text-xs font-semibold text-[#F97316]">
-                  Secure payment
+                  Step 5 of 5
                 </div>
                 <div className="h-2 w-full rounded-full bg-slate-200/60">
                   <div className="h-2 w-full rounded-full bg-[#F97316]" />

@@ -66,7 +66,7 @@ export function InteractiveInfoPopover({
         <span
           role="dialog"
           aria-label={label}
-          className="absolute left-0 top-7 z-50 w-72 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-3 text-left text-xs font-medium leading-5 text-slate-600 shadow-[0_16px_36px_rgba(15,23,42,0.14)]"
+          className="absolute left-0 top-7 z-50 w-72 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-3 text-left text-xs font-medium leading-5 text-slate-600 shadow-[0_16px_36px_rgba(15,23,42,0.14)]"
           onMouseEnter={openPopover}
           onMouseLeave={scheduleClose}
         >

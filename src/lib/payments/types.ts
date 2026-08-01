@@ -2,6 +2,15 @@ export type PaymentProvider = "square";
 
 export type PaymentProviderEnvironment = "sandbox" | "production";
 
+export type SaveCustomerPaymentMethodFailureStage =
+  | "finding_square_customer"
+  | "creating_square_customer"
+  | "saving_square_card"
+  | "validating_saved_card"
+  | "writing_customer_payment_methods"
+  | "linking_saved_method_to_customer"
+  | "unexpected_failure";
+
 export type PaymentStatus =
   | "pending"
   | "paid"
@@ -126,6 +135,11 @@ export type PaymentProviderSavePaymentMethodResult = {
   rawProviderResponse?: unknown;
 };
 
+export type PaymentProviderFindSavedPaymentMethodInput = {
+  providerCustomerId: string;
+  referenceId?: string | null;
+};
+
 export type SaveCustomerPaymentMethodInput = {
   businessId: string;
   customerId: string;
@@ -219,10 +233,28 @@ export type PaymentProviderChargeResult = {
   failureMessage?: string | null;
 };
 
+export type PaymentProviderSavedMethodVerificationInput = {
+  providerPaymentMethodId: string;
+  providerCustomerId: string;
+};
+
+export type PaymentProviderSavedMethodVerificationResult = {
+  ok: boolean;
+  providerPaymentMethodId: string | null;
+  providerCustomerId: string | null;
+  enabled: boolean | null;
+  failureCode?: string | null;
+  failureMessage?: string | null;
+  rawProviderResponse?: unknown | null;
+};
+
 export type PaymentProviderAdapter = {
   provider: PaymentProvider;
   environment: PaymentProviderEnvironment;
   charge(input: PaymentProviderChargeInput): Promise<PaymentProviderChargeResult>;
+  verifySavedPaymentMethod?(
+    input: PaymentProviderSavedMethodVerificationInput,
+  ): Promise<PaymentProviderSavedMethodVerificationResult>;
 };
 
 export type CheckoutPaymentResult = {
