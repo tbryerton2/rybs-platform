@@ -12,6 +12,7 @@ import {
   SignalIcon,
 } from "@heroicons/react/24/outline";
 import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
+import { ShowCaption } from "@/app/admin/_components/admin/show-caption";
 import type { DumpsterRecord } from "@/lib/admin/equipment";
 import { ServiceWarningPill } from "./operational-status-pill";
 
@@ -103,37 +104,40 @@ export function DumpstersClient({
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <AdminSummaryCard
-          label="Active dumpsters"
-          value={activeCount}
-          icon={CubeIcon}
-          tone="amber"
-          onClick={() => selectSummaryFilter("active")}
-          active={summaryFilter === "active"}
-          layout="pricing"
-          stretch
-        />
-        <AdminSummaryCard
-          label="Trackers enabled"
-          value={trackerEnabledCount}
-          icon={SignalIcon}
-          tone="blue"
-          onClick={() => selectSummaryFilter("tracker")}
-          active={summaryFilter === "tracker"}
-          layout="pricing"
-          stretch
-        />
-        <AdminSummaryCard
-          label="Maintenance due soon"
-          value={maintenanceAttention}
-          icon={ExclamationTriangleIcon}
-          tone="rose"
-          onClick={() => selectSummaryFilter("maintenance")}
-          active={summaryFilter === "maintenance"}
-          layout="pricing"
-          stretch
-        />
+      <section>
+        <ShowCaption />
+        <div className="grid gap-4 md:grid-cols-3">
+          <AdminSummaryCard
+            label="Active dumpsters"
+            value={activeCount}
+            icon={CubeIcon}
+            tone="slate"
+            onClick={() => selectSummaryFilter("active")}
+            active={summaryFilter === "active"}
+            layout="pricing"
+            stretch
+          />
+          <AdminSummaryCard
+            label="Trackers enabled"
+            value={trackerEnabledCount}
+            icon={SignalIcon}
+            tone="blue"
+            onClick={() => selectSummaryFilter("tracker")}
+            active={summaryFilter === "tracker"}
+            layout="pricing"
+            stretch
+          />
+          <AdminSummaryCard
+            label="Maintenance due soon"
+            value={maintenanceAttention}
+            icon={ExclamationTriangleIcon}
+            tone="rose"
+            onClick={() => selectSummaryFilter("maintenance")}
+            active={summaryFilter === "maintenance"}
+            layout="pricing"
+            stretch
+          />
+        </div>
       </section>
 
       <section className="rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">

@@ -3,8 +3,21 @@ import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { ArrowRightOnRectangleIcon, EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
-import { getRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
-import { getBrandSettings, getRuntimeSettings, getSupportSettings } from "@/lib/tenant/server";
+import {
+  getRetailSiteSettings,
+  sanitizeRetailSiteSettings,
+  type RetailSiteSettings,
+} from "@/lib/tenant/retail-site-settings";
+import {
+  getBrandSettings,
+  getRuntimeSettings,
+  getSupportSettings,
+  type BrandSettings,
+  type RuntimeSettings,
+  type SupportSettings,
+} from "@/lib/tenant/server";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
+import { DEFAULT_TENANT_STORAGE_NAMESPACE } from "@/lib/tenant/runtime";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -93,8 +106,86 @@ function getResolvedLogoHeight(header: Awaited<ReturnType<typeof getRetailSiteSe
   return getMatchedLogoHeight(header.businessNameSize);
 }
 
+function isAdminPath(pathname: string) {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
+function isPlatformAdminPath(pathname: string) {
+  return pathname === "/platform-admin" || pathname.startsWith("/platform-admin/");
+}
+
+function getStaticShellSettings(pathname: string): {
+  brand: BrandSettings;
+  support: SupportSettings;
+  runtime: RuntimeSettings;
+  retailSiteSettings: RetailSiteSettings;
+} {
+  const name = isPlatformAdminPath(pathname) ? "Platform Admin" : "Business Admin";
+
+  return {
+    brand: {
+      name,
+      tagline: null,
+      legalDisplayName: null,
+      headerPrimaryCtaLabel: "Contact",
+      headerPrimaryCtaType: "tel",
+      headerPrimaryCtaValue: null,
+    },
+    support: {
+      phone: null,
+      email: null,
+      timezone: "UTC",
+    },
+    runtime: {
+      storageNamespace: DEFAULT_TENANT_STORAGE_NAMESPACE,
+    },
+    retailSiteSettings: sanitizeRetailSiteSettings({}),
+  };
+}
+
+function PublicTenantUnavailable() {
+  return (
+    <main className="min-h-screen bg-[#F8FAFC] px-6 py-20 text-[#0F172A]">
+      <section className="mx-auto max-w-xl rounded-[8px] border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-semibold tracking-tight">Site unavailable</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          This public site is not configured for the current hostname.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 export async function generateMetadata(): Promise<Metadata> {
-  const brand = await getBrandSettings();
+  const headerStore = await headers();
+  const currentPathname = headerStore.get("x-current-pathname") ?? "";
+
+  if (isAdminPath(currentPathname) || isPlatformAdminPath(currentPathname)) {
+    return {
+      title: isPlatformAdminPath(currentPathname) ? "Platform Admin" : "Business Admin",
+      formatDetection: {
+        telephone: false,
+      },
+    };
+  }
+
+  let brand: BrandSettings;
+  try {
+    brand = await getBrandSettings();
+  } catch (error) {
+    if (isTenantResolutionError(error)) {
+      return {
+        title: "Site unavailable",
+        description: "This public site is not configured for the current hostname.",
+        formatDetection: {
+          telephone: false,
+        },
+      };
+    }
+
+    throw error;
+  }
+
   const description = [brand.tagline, brand.legalDisplayName].filter(Boolean).join(" • ");
 
   return {
@@ -113,13 +204,43 @@ export default async function RootLayout({
 }>) {
   const headerStore = await headers();
   const currentPathname = headerStore.get("x-current-pathname") ?? "";
-  const isAdminPage = currentPathname === "/admin" || currentPathname.startsWith("/admin/");
-  const [brand, support, runtime, retailSiteSettings] = await Promise.all([
-    getBrandSettings(),
-    getSupportSettings(),
-    getRuntimeSettings(),
-    getRetailSiteSettings(),
-  ]);
+  const isAdminPage = isAdminPath(currentPathname);
+  const isPlatformAdminPage = isPlatformAdminPath(currentPathname);
+  let shellSettings: {
+    brand: BrandSettings;
+    support: SupportSettings;
+    runtime: RuntimeSettings;
+    retailSiteSettings: RetailSiteSettings;
+  };
+
+  if (isAdminPage || isPlatformAdminPage) {
+    shellSettings = getStaticShellSettings(currentPathname);
+  } else {
+    try {
+      const [brand, support, runtime, retailSiteSettings] = await Promise.all([
+        getBrandSettings(),
+        getSupportSettings(),
+        getRuntimeSettings(),
+        getRetailSiteSettings(),
+      ]);
+      shellSettings = { brand, support, runtime, retailSiteSettings };
+    } catch (error) {
+      if (isTenantResolutionError(error)) {
+        return (
+          <html lang="en" data-tenant-storage-namespace={DEFAULT_TENANT_STORAGE_NAMESPACE}>
+            <body className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}>
+              <PublicTenantUnavailable />
+            </body>
+          </html>
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  const { brand, support, runtime, retailSiteSettings } = shellSettings;
+  const isAdminSurface = isAdminPage || isPlatformAdminPage;
   const headerPhoneNumber = retailSiteSettings.header.phoneNumber || support.phone || "";
   const phoneHref = retailSiteSettings.header.showCallTextButton ? buildTelHref(headerPhoneNumber) : null;
   const phoneDisplay = phoneHref ? formatPhoneDisplay(headerPhoneNumber) : null;
@@ -139,12 +260,12 @@ export default async function RootLayout({
           <header
             className={[
               "sticky top-0 z-50 border-b border-slate-200/70 backdrop-blur",
-              isAdminPage ? "bg-slate-100/95" : "bg-[#f5f4f0]/95",
+              isAdminSurface ? "bg-slate-100/95" : "bg-[#f5f4f0]/95",
             ].join(" ")}
           >
             <div
               className={
-                isAdminPage
+                isAdminSurface
                   ? "flex w-full items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-5 xl:px-6 2xl:px-8"
                   : "mx-auto flex max-w-6xl items-center justify-between px-6 py-3"
               }

@@ -10,6 +10,7 @@ import {
   TruckIcon,
 } from "@heroicons/react/24/outline";
 import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 import { shouldCountFleetEquipmentForMaintenanceAttention } from "@/lib/admin/fleet-equipment-attention";
 import type { FleetEquipmentRecord } from "@/lib/admin/fleet-equipment-shared";
 import type { FleetEquipmentInspectionStatus } from "./data";
@@ -262,7 +263,7 @@ export function TrucksTrailersListClient({
                     <td className="px-6 py-4 sm:px-8">
                       <div className="font-semibold text-slate-900">{item.name}</div>
                       <div className="mt-1 text-xs text-slate-500">
-                        {item.id} • {item.status}
+                        {item.id} • {formatEnumLabel(item.status)}
                       </div>
                     </td>
                     <td className="px-4 py-4 text-slate-600">

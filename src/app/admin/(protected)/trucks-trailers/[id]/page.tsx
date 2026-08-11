@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 import { getFleetEquipmentDueSoonIndicator } from "@/lib/admin/fleet-equipment-service-dates";
 import {
   getFleetEquipmentDetailById,
@@ -64,7 +65,7 @@ export default async function FleetEquipmentDetailPage({ params, searchParams }:
                     : "bg-slate-100 text-slate-600 ring-slate-200",
               ].join(" ")}
             >
-              {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+              {formatEnumLabel(record.status)}
             </span>
             {dueSoonIndicator ? (
               <span className="inline-flex rounded-full bg-amber-50 px-4 py-1.5 text-sm font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">

@@ -15,6 +15,7 @@ import { requireAdminOwner } from "@/lib/admin/auth";
 import { getHighestActiveIncludedRentalDays } from "@/lib/admin/pricing-settings-validation";
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import {
+  DEFAULT_PRICING_SETTINGS,
   isMissingPricingSettingsIncludedServicesBlurbColumnError,
   isMissingPricingSettingsRentalPeriodColumnsError,
 } from "@/lib/pricing-settings";
@@ -22,7 +23,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { PricingSettingsForm } from "./pricing-settings-form";
 
 type PricingSettingsRow = {
-  id: string;
+  id: string | null;
   standard_rental_price: number;
   included_rental_days: number;
   daily_overage_price: number;
@@ -32,6 +33,7 @@ type PricingSettingsRow = {
   included_tons: number;
   ton_overage_price: number;
   updated_at: string | null;
+  isPersisted: boolean;
 };
 
 function formatMoney(value: number) {
@@ -91,6 +93,22 @@ function SummaryMetricCard({
       </div>
     </div>
   );
+}
+
+function getDefaultPricingSettings(): PricingSettingsRow {
+  return {
+    id: null,
+    standard_rental_price: DEFAULT_PRICING_SETTINGS.standardRentalPrice,
+    included_rental_days: DEFAULT_PRICING_SETTINGS.includedRentalDays,
+    daily_overage_price: DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
+    max_rental_days: DEFAULT_PRICING_SETTINGS.maxRentalDays,
+    allow_extended_rental_at_booking: DEFAULT_PRICING_SETTINGS.allowExtendedRentalAtBooking,
+    included_services_blurb: DEFAULT_PRICING_SETTINGS.includedServicesBlurb,
+    included_tons: DEFAULT_PRICING_SETTINGS.includedTons,
+    ton_overage_price: DEFAULT_PRICING_SETTINGS.tonOveragePrice,
+    updated_at: null,
+    isPersisted: false,
+  };
 }
 
 async function getPricingSettings(businessId: string): Promise<PricingSettingsRow> {
@@ -159,97 +177,19 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
         allow_extended_rental_at_booking:
           legacyResult.data.allow_extended_rental_at_booking ?? false,
         included_services_blurb: null,
+        isPersisted: true,
       };
     }
   }
 
-  if (data) return data;
-
-  const defaultPricingSettings = {
-    standard_rental_price: 475,
-    scheduled_pickup_price: 475,
-    included_rental_days: 7,
-    daily_overage_price: 30,
-    max_rental_days: null,
-    allow_extended_rental_at_booking: false,
-    included_services_blurb: null,
-    included_tons: 1,
-    ton_overage_price: 100,
-    business_id: businessId,
-  };
-
-  const { data: inserted, error: insertError } = await supabaseAdmin
-    .from("pricing_settings")
-    .upsert(defaultPricingSettings, { onConflict: "business_id" })
-    .select(selectClause)
-    .single();
-
-  if (
-    insertError &&
-    !isMissingPricingSettingsRentalPeriodColumnsError(insertError) &&
-    !isMissingPricingSettingsIncludedServicesBlurbColumnError(insertError)
-  ) {
-    throw new Error(insertError.message);
-  }
-
-  if (insertError) {
-    const hasRentalPeriodColumns = !isMissingPricingSettingsRentalPeriodColumnsError(insertError);
-    const legacyInsertResult = await supabaseAdmin
-      .from("pricing_settings")
-      .upsert({
-        standard_rental_price: 475,
-        scheduled_pickup_price: 475,
-        included_rental_days: 7,
-        daily_overage_price: 30,
-        included_tons: 1,
-        ton_overage_price: 100,
-        business_id: businessId,
-        ...(hasRentalPeriodColumns
-          ? {
-              max_rental_days: null,
-              allow_extended_rental_at_booking: false,
-            }
-          : {}),
-      }, { onConflict: "business_id" })
-      .select(`
-        id,
-        standard_rental_price,
-        included_rental_days,
-        daily_overage_price,
-        ${hasRentalPeriodColumns ? "max_rental_days," : ""}
-        ${hasRentalPeriodColumns ? "allow_extended_rental_at_booking," : ""}
-        included_tons,
-        ton_overage_price,
-        updated_at
-      `)
-      .single<{
-        id: string;
-        standard_rental_price: number;
-        included_rental_days: number;
-        daily_overage_price: number;
-        max_rental_days?: number | null;
-        allow_extended_rental_at_booking?: boolean;
-        included_tons: number;
-        ton_overage_price: number;
-        updated_at: string | null;
-      }>();
-
-    if (legacyInsertResult.error) throw new Error(legacyInsertResult.error.message);
-
+  if (data) {
     return {
-      ...legacyInsertResult.data,
-      max_rental_days: legacyInsertResult.data.max_rental_days ?? null,
-      allow_extended_rental_at_booking:
-        legacyInsertResult.data.allow_extended_rental_at_booking ?? false,
-      included_services_blurb: null,
+      ...data,
+      isPersisted: true,
     };
   }
 
-  if (!inserted) {
-    throw new Error("Unable to create pricing settings.");
-  }
-
-  return inserted;
+  return getDefaultPricingSettings();
 }
 
 export default async function AdminPricingSettingsPage() {
@@ -315,6 +255,7 @@ export default async function AdminPricingSettingsPage() {
           allowExtendedRentalAtBooking: pricing.allow_extended_rental_at_booking,
           includedServicesBlurb: pricing.included_services_blurb,
           tonOveragePrice: pricing.ton_overage_price,
+          isPersisted: pricing.isPersisted,
         }}
         highestActiveIncludedRentalDays={highestActiveIncludedRentalDays}
       />

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 
-export type SummaryCardTone = "green" | "blue" | "violet" | "indigo" | "amber" | "teal" | "rose";
+export type SummaryCardTone = "green" | "blue" | "slate" | "violet" | "indigo" | "amber" | "teal" | "rose";
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -13,6 +13,8 @@ export function adminSummaryCardShell(tone: SummaryCardTone, extra = "") {
       ? "border-emerald-200/70 bg-emerald-50/55"
       : tone === "blue"
         ? "border-sky-200/70 bg-sky-50/55"
+        : tone === "slate"
+          ? "border-slate-300/80 bg-slate-50/80"
         : tone === "indigo"
           ? "border-indigo-200/70 bg-indigo-50/55"
         : tone === "violet"
@@ -31,6 +33,8 @@ function chipToneClasses(tone: SummaryCardTone) {
     ? "bg-emerald-100/90 text-emerald-700 ring-1 ring-inset ring-emerald-200/80"
     : tone === "blue"
       ? "bg-sky-100/90 text-sky-700 ring-1 ring-inset ring-sky-200/80"
+      : tone === "slate"
+        ? "bg-slate-200/80 text-slate-700 ring-1 ring-inset ring-slate-300/80"
       : tone === "indigo"
         ? "bg-indigo-100/90 text-indigo-700 ring-1 ring-inset ring-indigo-200/80"
       : tone === "violet"
@@ -47,6 +51,8 @@ function activeToneClasses(tone: SummaryCardTone) {
     ? "ring-2 ring-emerald-300/90 shadow-md shadow-emerald-200/35"
     : tone === "blue"
       ? "ring-2 ring-sky-300/90 shadow-md shadow-sky-200/35"
+      : tone === "slate"
+        ? "ring-2 ring-slate-300/90 shadow-md shadow-slate-200/45"
       : tone === "indigo"
         ? "ring-2 ring-indigo-300/90 shadow-md shadow-indigo-200/35"
         : tone === "violet"

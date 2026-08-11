@@ -5,6 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { getExpenseForCurrentBusiness } from "@/lib/admin/expenses.server";
 import { ExpenseDetailClient } from "../expense-detail-client";
 
@@ -27,7 +28,8 @@ function getSavedMessage(saved: string | undefined) {
 export default async function ExpenseDetailPage({ params, searchParams }: PageProps) {
   const { expenseId } = await params;
   const { saved } = (await searchParams) ?? {};
-  const expense = await getExpenseForCurrentBusiness(expenseId);
+  const adminSession = await requireAdminOwner();
+  const expense = await getExpenseForCurrentBusiness(expenseId, adminSession.business.id);
 
   if (!expense) {
     notFound();

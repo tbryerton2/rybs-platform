@@ -1,6 +1,7 @@
 import HomePageClient from "@/app/home-page-client";
 import { getActiveServiceAreaZipCodes } from "@/lib/service-area";
-import { getRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
+import { getRetailSiteSettingsForTenant } from "@/lib/tenant/retail-site-settings";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import {
   getHomeFaqContent,
   getHomeDumpsterSizesContent,
@@ -21,6 +22,8 @@ export default async function HomePage({
 }) {
   const sp = await searchParams;
   const preview = sp?.preview === "1";
+  const tenant = await getCurrentTenant();
+  const contentOptions = { preview, tenantId: tenant.id };
   const [
     heroContent,
     serviceAreaContent,
@@ -33,16 +36,16 @@ export default async function HomePage({
     retailSiteSettings,
     servedZipCodes,
   ] = await Promise.all([
-    getHomeHeroContent({ preview }),
-    getHomeServiceAreaContent({ preview }),
-    getHomeStatsBarContent({ preview }),
-    getHomeSectionsContent({ preview }),
-    getHomeDumpsterSizesContent({ preview }),
-    getHomeServiceAreaLookupContent({ preview }),
-    getHomeFaqContent({ preview }),
-    getSupportMarketingContent({ preview }),
-    getRetailSiteSettings(),
-    getActiveServiceAreaZipCodes(),
+    getHomeHeroContent(contentOptions),
+    getHomeServiceAreaContent(contentOptions),
+    getHomeStatsBarContent(contentOptions),
+    getHomeSectionsContent(contentOptions),
+    getHomeDumpsterSizesContent(contentOptions),
+    getHomeServiceAreaLookupContent(contentOptions),
+    getHomeFaqContent(contentOptions),
+    getSupportMarketingContent(contentOptions),
+    getRetailSiteSettingsForTenant(tenant),
+    getActiveServiceAreaZipCodes(tenant.id),
   ]);
 
   return (

@@ -10,6 +10,7 @@ import {
 } from "@/app/admin/_components/admin/service-dates-section";
 import { TrackerConfigurationSection } from "@/app/admin/_components/admin/tracker-configuration-section";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 import { fleetEquipmentServiceDateTypeOptions } from "@/lib/admin/equipment";
 import {
   getFleetEquipmentServiceDateStatus,
@@ -30,10 +31,6 @@ function formatDate(value: string) {
 
 function formatEquipmentType(value: FleetEquipmentRecord["equipmentType"]) {
   return value === "truck" ? "Truck" : "Trailer";
-}
-
-function formatStatus(value: FleetEquipmentRecord["status"]) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function sortServiceDates(records: ServiceDateRowRecord[]) {
@@ -136,7 +133,7 @@ export function FleetEquipmentView({
           <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {[
               ["Equipment type", formatEquipmentType(record.equipmentType)],
-              ["Status", formatStatus(record.status)],
+              ["Status", formatEnumLabel(record.status)],
               ["Name", record.name || "—"],
               ["License plate", record.licensePlate || "—"],
               ["VIN", record.vin || "—"],

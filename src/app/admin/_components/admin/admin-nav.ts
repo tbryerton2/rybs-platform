@@ -31,7 +31,14 @@ export type AdminNavGroup = {
   items: AdminNavItem[];
 };
 
-export const adminNavGroups: AdminNavGroup[] = [
+export const adminNavVisibility = {
+  showEmployeesNav: false,
+  showExpensesNav: false,
+  showTaxesNav: false,
+  showTrucksAndTrailersNav: false,
+} as const;
+
+const allAdminNavGroups: AdminNavGroup[] = [
   {
     label: "Home",
     items: [{ label: "Dashboard", href: "/admin", icon: "dashboard", exact: true, matchers: ["/admin"] }],
@@ -131,6 +138,21 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [{ label: "Admin Tools", href: "/admin/system", icon: "adminTools", matchers: ["/admin/system"] }],
   },
 ];
+
+function shouldShowAdminNavItem(item: AdminNavItem) {
+  if (item.href === "/admin/employees") return adminNavVisibility.showEmployeesNav;
+  if (item.href === "/admin/expenses") return adminNavVisibility.showExpensesNav;
+  if (item.href === "/admin/taxes") return adminNavVisibility.showTaxesNav;
+  if (item.href === "/admin/trucks-trailers") return adminNavVisibility.showTrucksAndTrailersNav;
+  return true;
+}
+
+export const adminNavGroups: AdminNavGroup[] = allAdminNavGroups
+  .map((group) => ({
+    ...group,
+    items: group.items.filter(shouldShowAdminNavItem),
+  }))
+  .filter((group) => group.items.length > 0);
 
 export function isAdminNavItemActive(pathname: string, item: AdminNavItem) {
   const matchers = item.matchers ?? [item.href];

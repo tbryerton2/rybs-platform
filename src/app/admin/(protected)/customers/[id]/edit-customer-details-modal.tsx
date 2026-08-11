@@ -11,6 +11,16 @@ type EditCustomerDetailsModalProps = {
   customerPhone: string | null;
 };
 
+function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const localDigits = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  const trimmed = localDigits.slice(0, 10);
+
+  if (trimmed.length <= 3) return trimmed;
+  if (trimmed.length <= 6) return `(${trimmed.slice(0, 3)}) ${trimmed.slice(3)}`;
+  return `(${trimmed.slice(0, 3)}) ${trimmed.slice(3, 6)}-${trimmed.slice(6)}`;
+}
+
 export function EditCustomerDetailsModal({
   customerId,
   customerName,
@@ -18,6 +28,7 @@ export function EditCustomerDetailsModal({
   customerPhone,
 }: EditCustomerDetailsModalProps) {
   const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState(() => formatPhoneInput(customerPhone ?? ""));
 
   useEffect(() => {
     if (!open) return;
@@ -39,7 +50,10 @@ export function EditCustomerDetailsModal({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setPhone(formatPhoneInput(customerPhone ?? ""));
+          setOpen(true);
+        }}
         className="inline-flex h-10 w-10 items-center justify-center rounded-[14px] border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-200"
         aria-label="Edit customer details"
       >
@@ -85,6 +99,11 @@ export function EditCustomerDetailsModal({
             <form action={updateCustomerIdentityAction} className="mt-6 grid gap-4 md:grid-cols-2">
               <input type="hidden" name="id" value={customerId} />
 
+              <div className="rounded-[12px] border border-slate-200 bg-slate-50 px-4 py-3 md:col-span-2">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Internal ID</div>
+                <div className="mt-1 select-text break-all font-mono text-xs text-slate-700">{customerId}</div>
+              </div>
+
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-700">Name</span>
                 <input
@@ -108,7 +127,8 @@ export function EditCustomerDetailsModal({
                 <span className="mb-2 block text-sm font-medium text-slate-700">Phone</span>
                 <input
                   name="phone"
-                  defaultValue={customerPhone ?? ""}
+                  value={phone}
+                  onChange={(event) => setPhone(formatPhoneInput(event.target.value))}
                   className="h-12 w-full rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-[#F97316] focus:ring-4 focus:ring-orange-100"
                 />
               </label>

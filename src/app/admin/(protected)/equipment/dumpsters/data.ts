@@ -33,6 +33,7 @@ export async function getDumpsters(businessId: string) {
 
   const dumpsters = await decorateDumpstersWithOperationalStatus(
     ((data ?? []) as DumpsterRow[]).map(mapDumpsterRowToRecord),
+    businessId,
   );
   const todayYmd = formatInputDateET(new Date());
 
@@ -87,7 +88,7 @@ export async function getDumpsterById(id: string, businessId: string) {
 
   const [record] = await decorateDumpstersWithOperationalStatus([
     mapDumpsterRowToRecord(data as DumpsterRow),
-  ]);
+  ], businessId);
 
   return record ?? null;
 }

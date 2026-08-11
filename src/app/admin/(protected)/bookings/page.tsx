@@ -6,9 +6,11 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ClockIcon,
+  ClipboardDocumentListIcon,
   ExclamationTriangleIcon,
   HomeIcon,
   InformationCircleIcon,
+  MagnifyingGlassIcon,
   TruckIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
@@ -16,6 +18,7 @@ import { AdminSummaryCard, type SummaryCardTone } from "@/app/admin/_components/
 import { ClickableTableRow } from "@/app/admin/(protected)/analytics/zip-heatmap/clickable-table-row";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help-link";
+import { CardSectionHeader } from "@/app/admin/_components/admin/card-section-header";
 import { ShowCaption } from "@/app/admin/_components/admin/show-caption";
 import { CopyBookingRefButton } from "@/app/admin/(protected)/bookings/CopyBookingRefButton";
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
@@ -32,6 +35,7 @@ import { buildPickupPlanningModel } from "@/lib/pickup-planning";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { combineCustomerNameParts } from "@/lib/customer-name";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { formatBookingStatusLabel } from "@/lib/admin/booking-status";
 import { getBusinessTimeZone } from "@/lib/time";
 import type { ComponentType, SVGProps } from "react";
 
@@ -792,6 +796,13 @@ function buildPlacementInstructionLines(details: ReturnType<typeof sanitizePlace
 function getPickupDateCell(vm: Pick<BookingViewModel, "booking" | "pickupPlanning">) {
   const { booking, pickupPlanning } = vm;
 
+  if (booking.status === "cancelled") {
+    return {
+      label: "Pickup",
+      value: "—",
+    };
+  }
+
   if (booking.status === "picked_up") {
     return {
       label: "Pickup",
@@ -1112,7 +1123,7 @@ function buildScopeMeta(filters: Filters, totalCount: number) {
   }
 
   if (filters.status.length === 1) {
-    return { label: `Showing ${filters.status[0].replace(/_/g, " ")} bookings` };
+    return { label: `Showing ${formatBookingStatusLabel(filters.status[0])} bookings` };
   }
 
   if (filters.q) {
@@ -1773,7 +1784,7 @@ export default async function AdminBookingsPage({
         </section>
 
         <section className="mb-8 rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
-          <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search bookings</h2>
+          <CardSectionHeader title="Search bookings" icon={<MagnifyingGlassIcon className="h-4 w-4" />} />
 
           <form action="/admin/bookings" method="GET" className="mt-5 space-y-5">
             <input type="hidden" name="view" value={filters.quickView} />
@@ -1839,7 +1850,7 @@ export default async function AdminBookingsPage({
           <div className="border-b border-slate-200 px-6 py-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <div className="text-lg font-semibold text-slate-900">{bookingTableHeading}</div>
+                <CardSectionHeader title={bookingTableHeading} icon={<ClipboardDocumentListIcon className="h-4 w-4" />} />
                 {scopeMeta.label !== "Showing all bookings" ? (
                   <div className="mt-1 text-sm text-slate-500">{scopeMeta.label}</div>
                 ) : null}
@@ -1915,7 +1926,7 @@ export default async function AdminBookingsPage({
                               </div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className={pillBase(statusPillClass(booking.status))}>
-                                  {(booking.status ?? "unknown").replace(/_/g, " ")}
+                                  {formatBookingStatusLabel(booking.status)}
                                 </span>
                                 {booking.reordered_from_booking_id ? (
                                   <span className={pillBase("bg-orange-50 text-orange-700 ring-orange-200")}>Reorder</span>
@@ -1978,7 +1989,9 @@ export default async function AdminBookingsPage({
                               </div>
                               <div className="flex items-baseline gap-2">
                                 <dt className="shrink-0 text-xs font-medium text-slate-400">Delivery:</dt>
-                                <dd className="min-w-0 font-medium text-slate-900">{formatTableDateLabel(booking.delivery_date)}</dd>
+                                <dd className="min-w-0 font-medium text-slate-900">
+                                  {booking.status === "cancelled" ? "—" : formatTableDateLabel(booking.delivery_date)}
+                                </dd>
                               </div>
                               <div className="flex items-baseline gap-2">
                                 <dt className="shrink-0 text-xs font-medium text-slate-400">{pickupDateCell.label}:</dt>

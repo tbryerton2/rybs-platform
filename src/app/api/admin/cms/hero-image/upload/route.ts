@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant, getRuntimeSettings } from "@/lib/tenant/server";
+import { getRuntimeSettingsForTenant } from "@/lib/tenant/server";
 
 const HERO_IMAGE_BUCKET = "retail-site-assets";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -93,7 +93,8 @@ export async function POST(req: Request) {
 
     await ensureHeroImageBucket();
 
-    const [tenant, runtime] = await Promise.all([getCurrentTenant(), getRuntimeSettings()]);
+    const tenant = adminAuth.session.business;
+    const runtime = await getRuntimeSettingsForTenant(tenant.id);
     const ext = fileExtension(file.type);
     const safeName = sanitizeFileName(file.name);
     const path = `${runtime.storageNamespace}/cms/hero/${tenant.id}/${Date.now()}-${crypto.randomUUID()}-${safeName}.${ext}`;

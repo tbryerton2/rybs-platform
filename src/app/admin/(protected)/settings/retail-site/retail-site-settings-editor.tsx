@@ -505,7 +505,7 @@ export function RetailSiteSettingsEditor({
                       return current;
                     })
                   }
-                  placeholder="+1-315-555-0123"
+                  placeholder="+1-555-555-0123"
                   error={phoneError}
                   helperText="Shown as a clickable link in the site header."
                 />
@@ -609,7 +609,7 @@ export function RetailSiteSettingsEditor({
                         return current;
                       })
                     }
-                    placeholder="Tan Can Man logo"
+                    placeholder="Business logo"
                   />
                 </>
               ) : null}

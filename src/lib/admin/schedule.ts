@@ -1,6 +1,5 @@
 import { EMPTY_BOOKING_PLACEMENT_FIELDS, isBookingSchemaError } from "@/lib/booking-schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant } from "@/lib/tenant/server";
 
 const SCHEDULE_PLACEMENT_SELECT =
   "placement_preference, placement_details, access_issues, gate_instructions, delivery_presence, alternate_contact_name, alternate_contact_phone, placement_photo_url, special_delivery_instructions";
@@ -50,13 +49,16 @@ type ScheduleQueryResult = {
   error: ScheduleQueryError | null;
 };
 
-export async function getScheduleJobs(weekStartISO: string, weekEndISO: string) {
-  const tenant = await getCurrentTenant();
+export async function getScheduleJobs(
+  businessId: string,
+  weekStartISO: string,
+  weekEndISO: string,
+) {
   const buildQuery = (selectClause: string) =>
     supabaseAdmin
       .from("bookings")
       .select(selectClause)
-      .eq("business_id", tenant.id)
+      .eq("business_id", businessId)
       .in("status", ["confirmed", "scheduled", "delivered"])
       .lte("delivery_date", weekEndISO)
       .not("status", "eq", "cancelled")
@@ -114,14 +116,13 @@ async function getScheduleRows(
   return data ?? [];
 }
 
-export async function getOverdueScheduleJobs(todayISO: string) {
-  const tenant = await getCurrentTenant();
+export async function getOverdueScheduleJobs(businessId: string, todayISO: string) {
   const [overdueDeliveries, overduePickups] = await Promise.all([
     getScheduleRows((selectClause) =>
       supabaseAdmin
         .from("bookings")
         .select(selectClause)
-        .eq("business_id", tenant.id)
+        .eq("business_id", businessId)
         .in("status", ["confirmed", "scheduled"])
         .lt("delivery_date", todayISO)
         .order("delivery_date", { ascending: true }),
@@ -130,7 +131,7 @@ export async function getOverdueScheduleJobs(todayISO: string) {
       supabaseAdmin
         .from("bookings")
         .select(selectClause)
-        .eq("business_id", tenant.id)
+        .eq("business_id", businessId)
         .eq("status", "delivered")
         .lt("pickup_date", todayISO)
         .order("pickup_date", { ascending: true }),

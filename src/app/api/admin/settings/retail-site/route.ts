@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { requireAdminOwnerForApi } from "@/lib/admin/auth";
-import { saveRetailSiteSettings } from "@/lib/tenant/retail-site-settings";
+import { saveRetailSiteSettingsForTenant } from "@/lib/tenant/retail-site-settings";
 
 export async function PUT(req: Request) {
   const adminAuth = await requireAdminOwnerForApi();
@@ -9,7 +9,7 @@ export async function PUT(req: Request) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const settings = await saveRetailSiteSettings(body);
+    const settings = await saveRetailSiteSettingsForTenant(adminAuth.session.business, body);
 
     revalidatePath("/", "layout");
     revalidatePath("/");

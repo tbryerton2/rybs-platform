@@ -22,6 +22,8 @@ import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { evaluateBookingAttention } from "@/lib/admin/booking-attention";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { formatBookingStatusLabel } from "@/lib/admin/booking-status";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 import { formatUsdFromCents } from "@/lib/money";
 import { formatShortDateET } from "@/lib/time";
 import { validateUsableSavedPaymentMethod } from "@/lib/payments/saved-card-validation";
@@ -303,12 +305,6 @@ function formatTitleLabel(value: string | null | undefined) {
     .join(" ");
 }
 
-function formatEnumLabel(value: string | null | undefined) {
-  const label = formatPlainLabel(value).trim().toLowerCase();
-  if (!label || label === "—") return "—";
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
 function formatExternalPaymentMethod(value: string | null | undefined) {
   switch (value) {
     case "cash":
@@ -446,6 +442,7 @@ function formatHistoryPrimitive(fieldName: string, value: unknown): string {
       return isPlacementPreference(stringValue) ? getPlacementPreferenceLabel(stringValue) : stringValue;
     case "portal_status":
     case "status":
+      return formatBookingStatusLabel(stringValue);
     case "booking_charge_status":
     case "pickup_mode":
     case "payment_status":
@@ -1761,7 +1758,7 @@ export default async function AdminBookingDetailPage({
           : "Completed"
         : booking.status === "cancelled"
           ? "Cancelled"
-          : formatEnumLabel(booking.status);
+          : formatBookingStatusLabel(booking.status);
   const nextActionLabel = canMarkDelivered
     ? "Mark delivery complete"
     : canSchedulePickup
@@ -1823,7 +1820,7 @@ export default async function AdminBookingDetailPage({
                     booking.status
                   )}`}
                 >
-                  {formatEnumLabel(booking.status)}
+                  {formatBookingStatusLabel(booking.status)}
                 </span>
                 {booking.reordered_from_booking_id ? (
                   <span className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200">
@@ -1853,10 +1850,15 @@ export default async function AdminBookingDetailPage({
                     Pickup overdue
                   </span>
                 ) : null}
-              </div>
-
-              <div className="mt-2 text-[11px] text-slate-500">
-                Internal UUID: <span className="font-mono break-all">{booking.id}</span>
+                <details className="group relative">
+                  <summary className="inline-flex cursor-pointer list-none items-center rounded-full bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2">
+                    Internal ID
+                  </summary>
+                  <div className="absolute left-0 top-8 z-20 w-[min(28rem,calc(100vw-3rem))] rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500 shadow-lg">
+                    <span className="mr-1 font-medium">Internal UUID:</span>
+                    <span className="select-text break-all font-mono">{booking.id}</span>
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -2003,7 +2005,7 @@ export default async function AdminBookingDetailPage({
                     {hasSpecialInstructions ? (
                       <Link
                         href="#placement-special-instructions"
-                        className="inline-flex items-center rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-800 ring-1 ring-violet-200 transition hover:bg-violet-100"
+                        className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 ring-1 ring-blue-200 transition hover:bg-blue-100"
                       >
                         Special instructions
                       </Link>

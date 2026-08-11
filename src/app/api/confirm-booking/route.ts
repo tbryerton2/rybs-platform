@@ -26,11 +26,12 @@ import type {
   PaymentProvider,
   SaveCustomerPaymentMethodFailureStage,
 } from "@/lib/payments/types";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import { sendBookingEmails } from "@/lib/email/booking-emails";
 import {
   getRetailCalendarClosureForDate,
-  getRetailSiteSettings,
+  getRetailSiteSettingsForTenant,
 } from "@/lib/tenant/retail-site-settings";
 
 type ConfirmBody = {
@@ -411,7 +412,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const retailSiteSettings = await getRetailSiteSettings();
+    const retailSiteSettings = await getRetailSiteSettingsForTenant(tenant);
     const closure = getRetailCalendarClosureForDate(deliveryDate, retailSiteSettings);
     if (closure.blocked) {
       return NextResponse.json(
@@ -751,12 +752,9 @@ export async function POST(req: Request) {
     let paymentLinkWarning: string | null = null;
     let consentLinkWarning: string | null = null;
     let cardOnFileWarning: string | null = null;
-    let tenantForPostBooking: Awaited<ReturnType<typeof getCurrentTenant>> | null = null;
-
     try {
-      tenantForPostBooking = await getCurrentTenant();
       await linkBookingConsentsToBooking({
-        businessId: tenantForPostBooking.id,
+        businessId: tenant.id,
         bookingHoldId: holdId,
         bookingId: createdBooking.bookingId,
         customerId: createdBooking.customerId,
@@ -816,7 +814,6 @@ export async function POST(req: Request) {
         });
       } else {
         try {
-          const tenant = tenantForPostBooking ?? (await getCurrentTenant());
           const cardOnFileConsent = await findBookingConsent({
             businessId: tenant.id,
             bookingHoldId: holdId,
@@ -918,6 +915,7 @@ export async function POST(req: Request) {
         serverSupabase,
         createdBooking.bookingId,
         reorderSourceBookingId,
+        tenant.id,
       );
       reorderReferenceSkipped = reorderReferenceResult.skipped;
 
@@ -1091,6 +1089,13 @@ export async function POST(req: Request) {
           : undefined),
     });
   } catch (error: unknown) {
+    if (isTenantResolutionError(error)) {
+      return NextResponse.json(
+        { ok: false, error: error.publicMessage },
+        { status: 503 }
+      );
+    }
+
     const message = error instanceof Error ? error.message : "Confirm failed.";
     return NextResponse.json(
       { ok: false, error: message },

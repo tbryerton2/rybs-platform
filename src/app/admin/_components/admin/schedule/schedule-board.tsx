@@ -251,7 +251,9 @@ function getGlobalOverdueStops(jobs: BookingRow[]) {
 
 function eventClasses(stop: ScheduleStop) {
   if (stop.overdue) {
-    return "border-rose-300 bg-rose-50 text-rose-900 shadow-rose-950/5 hover:border-rose-400 hover:bg-rose-100";
+    return stop.variant === "delivery"
+      ? "border-[#534AB7] bg-[#EEEDFE] text-[#342B8C] shadow-slate-950/5 hover:border-[#44399C] hover:bg-[#E5E3FD]"
+      : "border-[#F09595] bg-[#FCEBEB] text-[#A32D2D] shadow-rose-950/5 hover:border-[#E97979] hover:bg-[#FADDDD]";
   }
 
   if (stop.variant === "delivery") {
@@ -262,15 +264,41 @@ function eventClasses(stop: ScheduleStop) {
 }
 
 function badgeClasses(stop: ScheduleStop) {
-  if (stop.overdue) return "bg-rose-100 text-rose-700 ring-rose-200";
+  if (stop.overdue) {
+    return stop.variant === "delivery"
+      ? "bg-[#EEEDFE] text-[#534AB7] ring-[#534AB7]"
+      : "bg-[#FCEBEB] text-[#A32D2D] ring-[#F09595]";
+  }
   if (stop.variant === "delivery") return "bg-emerald-100 text-emerald-700 ring-emerald-200";
   return "bg-blue-100 text-blue-700 ring-blue-200";
 }
 
 function calendarBadgeClasses(stop: ScheduleStop) {
-  if (stop.overdue) return "border-rose-200 bg-white text-rose-700";
+  if (stop.overdue) {
+    return stop.variant === "delivery"
+      ? "border-[#534AB7] bg-white text-[#534AB7]"
+      : "border-[#F09595] bg-white text-[#A32D2D]";
+  }
   if (stop.variant === "delivery") return "border-emerald-200 bg-white text-emerald-700";
   return "border-blue-200 bg-white text-blue-700";
+}
+
+function overdueListTone(stop: ScheduleStop) {
+  return stop.variant === "delivery"
+    ? {
+        row: "border-[#534AB7] bg-[#EEEDFE] text-[#342B8C] shadow-slate-950/5",
+        title: "text-[#342B8C]",
+        detail: "text-[#342B8C]/85",
+        icon: "text-[#534AB7]",
+        due: "text-[#534AB7]",
+      }
+    : {
+        row: "border-[#F09595] bg-[#FCEBEB] text-[#A32D2D] shadow-rose-950/5",
+        title: "text-[#A32D2D]",
+        detail: "text-[#A32D2D]/85",
+        icon: "text-[#A32D2D]",
+        due: "text-[#A32D2D]",
+      };
 }
 
 function formatCalendarDumpsterSize(job: BookingRow) {
@@ -363,7 +391,9 @@ function StopTypeBadge({ stop }: { stop: ScheduleStop }) {
       ? "Delivery"
       : "Pickup";
   const classes = stop.overdue
-    ? "border border-rose-200 bg-white text-rose-800 font-normal"
+    ? stop.variant === "delivery"
+      ? "border border-[#534AB7] bg-white text-[#534AB7] font-normal"
+      : "border border-[#F09595] bg-white text-[#A32D2D] font-normal"
     : `${badgeClasses(stop)} font-normal ring-1`;
 
   return (
@@ -392,32 +422,33 @@ function BookingRowLink({
     const dumpsterLabel = overdueDumpsterLabel(stop.job);
     const action = stop.variant === "pickup" ? onMarkPickedUp : onMarkDelivered;
     const actionLabel = stop.variant === "pickup" ? "Mark picked up" : "Mark delivered";
+    const tone = overdueListTone(stop);
 
     return (
       <div
         id={`schedule-row-${stop.key}`}
-        className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[14px] border border-rose-300 bg-rose-50 px-4 py-3 text-rose-950 shadow-sm shadow-rose-950/5 max-sm:grid-cols-1 ${
+        className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-[14px] border px-4 py-3 shadow-sm max-sm:grid-cols-1 ${tone.row} ${
           highlighted ? "ring-4 ring-orange-100" : ""
         }`}
       >
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="min-w-0 max-w-full break-words text-sm font-semibold leading-5 text-rose-950">
+            <span className={`min-w-0 max-w-full break-words text-sm font-semibold leading-5 ${tone.title}`}>
               {formatCustomer(stop.job)}
             </span>
             <StopTypeBadge stop={stop} />
           </div>
 
-          <div className="mt-2 flex min-w-0 items-start gap-2 text-sm text-rose-900/85">
-            <MapPinIcon className="mt-0.5 h-4 w-4 shrink-0 text-rose-700" />
+          <div className={`mt-2 flex min-w-0 items-start gap-2 text-sm ${tone.detail}`}>
+            <MapPinIcon className={`mt-0.5 h-4 w-4 shrink-0 ${tone.icon}`} />
             <span className="min-w-0 break-words leading-5">
               {address}
               {dumpsterLabel ? <span className="font-medium"> · {dumpsterLabel}</span> : null}
             </span>
           </div>
 
-          <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs font-semibold text-rose-800">
-            <ClockIcon className="h-4 w-4 shrink-0 text-rose-700" />
+          <div className={`mt-1.5 flex min-w-0 items-center gap-2 text-xs font-semibold ${tone.due}`}>
+            <ClockIcon className={`h-4 w-4 shrink-0 ${tone.icon}`} />
             <span className="min-w-0 break-words">Was due {formatDueDate(stop.date)}</span>
           </div>
         </div>

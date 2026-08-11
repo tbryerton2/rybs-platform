@@ -1,7 +1,6 @@
 import "server-only";
 
 import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
-import { getCurrentTenant } from "@/lib/tenant/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   createEmptyExpense,
@@ -139,12 +138,14 @@ function buildExpenseWriteValues(
   };
 }
 
-export async function listExpensesForCurrentBusiness(filter?: ExpenseListFilter) {
-  const tenant = await getCurrentTenant();
+export async function listExpensesForCurrentBusiness(
+  businessId: string,
+  filter?: ExpenseListFilter,
+) {
   let query = supabaseAdmin
     .from("business_expenses")
     .select(BUSINESS_EXPENSE_SELECT)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .order("expense_date", { ascending: false })
     .order("updated_at", { ascending: false });
 
@@ -161,13 +162,12 @@ export async function listExpensesForCurrentBusiness(filter?: ExpenseListFilter)
   return ((data ?? []) as BusinessExpenseRow[]).map(mapRowToExpenseRecord);
 }
 
-export async function getExpenseForCurrentBusiness(id: string) {
-  const tenant = await getCurrentTenant();
+export async function getExpenseForCurrentBusiness(id: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("business_expenses")
     .select(BUSINESS_EXPENSE_SELECT)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .is("archived_at", null)
     .maybeSingle();
 
@@ -183,10 +183,10 @@ export async function getExpenseForCurrentBusiness(id: string) {
 }
 
 export async function createExpenseForCurrentBusiness(
+  businessId: string,
   input: ExpenseMutationInput,
   actorUserId?: string | null,
 ): Promise<ExpenseMutationResult> {
-  const tenant = await getCurrentTenant();
   const normalizedInput = normalizeExpenseMutationInput(input);
   const fieldErrors = validateExpense(normalizedInput);
 
@@ -199,7 +199,7 @@ export async function createExpenseForCurrentBusiness(
   }
 
   const values = {
-    ...buildExpenseWriteValues(tenant.id, normalizedInput, { actorUserId }),
+    ...buildExpenseWriteValues(businessId, normalizedInput, { actorUserId }),
     created_by: actorUserId ?? null,
   };
 
@@ -234,7 +234,7 @@ export async function createExpenseForCurrentBusiness(
       changedById: actorUserId ?? null,
       changeReason: "Expense record created from admin",
     },
-  ], tenant.id);
+  ], businessId);
 
   return {
     ok: true,
@@ -244,6 +244,7 @@ export async function createExpenseForCurrentBusiness(
 }
 
 export async function updateExpenseForCurrentBusiness(
+  businessId: string,
   id: string,
   input: ExpenseMutationInput,
   actorUserId?: string | null,
@@ -259,12 +260,11 @@ export async function updateExpenseForCurrentBusiness(
     };
   }
 
-  const tenant = await getCurrentTenant();
   const currentLookup = await supabaseAdmin
     .from("business_expenses")
     .select(BUSINESS_EXPENSE_SELECT)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .is("archived_at", null)
     .maybeSingle();
 
@@ -276,13 +276,13 @@ export async function updateExpenseForCurrentBusiness(
   }
 
   const current = mapRowToExpenseRecord(currentLookup.data as BusinessExpenseRow);
-  const values = buildExpenseWriteValues(tenant.id, normalizedInput, { actorUserId });
+  const values = buildExpenseWriteValues(businessId, normalizedInput, { actorUserId });
 
   const { data, error } = await supabaseAdmin
     .from("business_expenses")
     .update(values)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .is("archived_at", null)
     .select(BUSINESS_EXPENSE_SELECT)
     .single();
@@ -324,7 +324,7 @@ export async function updateExpenseForCurrentBusiness(
         changeReason: "Expense record updated from admin",
       },
     ),
-    tenant.id,
+    businessId,
   );
 
   return {
@@ -335,15 +335,15 @@ export async function updateExpenseForCurrentBusiness(
 }
 
 export async function archiveExpenseForCurrentBusiness(
+  businessId: string,
   id: string,
   actorUserId?: string | null,
 ): Promise<ExpenseMutationResult> {
-  const tenant = await getCurrentTenant();
   const currentLookup = await supabaseAdmin
     .from("business_expenses")
     .select(BUSINESS_EXPENSE_SELECT)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .is("archived_at", null)
     .maybeSingle();
 
@@ -362,7 +362,7 @@ export async function archiveExpenseForCurrentBusiness(
       updated_by: actorUserId ?? null,
     })
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .is("archived_at", null)
     .select(BUSINESS_EXPENSE_SELECT)
     .single();
@@ -387,7 +387,7 @@ export async function archiveExpenseForCurrentBusiness(
       changedById: actorUserId ?? null,
       changeReason: "Expense archived from admin",
     },
-  ], tenant.id);
+  ], businessId);
 
   return {
     ok: true,

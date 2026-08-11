@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
     const [savedDumpster] = await decorateDumpstersWithOperationalStatus([
       mapDumpsterRowToRecord(data),
-    ]);
+    ], adminAuth.session.business.id);
 
     return NextResponse.json({
       ok: true,

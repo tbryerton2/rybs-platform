@@ -12,9 +12,9 @@ import {
 import type { EmployeeMutationInput } from "@/lib/admin/employees";
 
 export async function createEmployeeAction(input: EmployeeMutationInput): Promise<EmployeeMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await createEmployeeForCurrentBusiness(input);
+  const result = await createEmployeeForCurrentBusiness(adminSession.business.id, input);
 
   if (result.ok) {
     revalidatePath("/admin/employees");
@@ -29,9 +29,9 @@ export async function updateEmployeeAction(
   id: string,
   input: EmployeeMutationInput,
 ): Promise<EmployeeMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await updateEmployeeForCurrentBusiness(id, input);
+  const result = await updateEmployeeForCurrentBusiness(adminSession.business.id, id, input);
 
   if (result.ok) {
     revalidatePath("/admin/employees");
@@ -42,9 +42,9 @@ export async function updateEmployeeAction(
 }
 
 export async function deactivateEmployeeAction(id: string): Promise<EmployeeMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await deactivateEmployeeForCurrentBusiness(id);
+  const result = await deactivateEmployeeForCurrentBusiness(adminSession.business.id, id);
 
   if (result.ok) {
     revalidatePath("/admin/employees");
@@ -55,9 +55,9 @@ export async function deactivateEmployeeAction(id: string): Promise<EmployeeMuta
 }
 
 export async function reactivateEmployeeAction(id: string): Promise<EmployeeMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await reactivateEmployeeForCurrentBusiness(id);
+  const result = await reactivateEmployeeForCurrentBusiness(adminSession.business.id, id);
 
   if (result.ok) {
     revalidatePath("/admin/employees");

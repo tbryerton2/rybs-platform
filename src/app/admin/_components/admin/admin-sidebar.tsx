@@ -34,10 +34,12 @@ export function subscribeToSidebarState(onChange: () => void) {
 
 export function AdminSidebar({
   pathname,
+  businessName,
   collapsed,
   onToggle,
 }: {
   pathname: string;
+  businessName: string;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -57,7 +59,7 @@ export function AdminSidebar({
               rel="noopener noreferrer"
               className="inline-flex items-center rounded-full border border-orange-300 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-800 transition-colors hover:border-orange-400 hover:bg-orange-100 hover:text-orange-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 focus-visible:ring-offset-2"
             >
-              Tan Can Man
+              {businessName}
             </a>
             <h1 className="mt-2.5 text-[1.6rem] font-semibold tracking-tight text-slate-900">Admin</h1>
           </div>

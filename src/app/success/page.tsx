@@ -3,6 +3,7 @@ import { getOptionalPortalCustomer } from "@/lib/portal/auth";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { formatUsdFromCents } from "@/lib/money";
 import { getBookingSuccessContent } from "@/lib/tenant/content";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 type SuccessPageProps = {
   searchParams?: Promise<{
@@ -24,8 +25,9 @@ type SuccessPageProps = {
 
 export default async function SuccessPage({ searchParams }: SuccessPageProps) {
   const params = (await searchParams) ?? {};
+  const tenant = await getCurrentTenant();
   const portalCustomer = await getOptionalPortalCustomer();
-  const content = await getBookingSuccessContent();
+  const content = await getBookingSuccessContent({ tenantId: tenant.id });
   const bookingRef = getCustomerFacingBookingLabel(params.bookingRef);
   const bookingEmail = params.email?.trim() || null;
   const portalHref = bookingEmail ? `/portal/login?email=${encodeURIComponent(bookingEmail)}` : "/portal/login";

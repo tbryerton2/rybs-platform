@@ -2,7 +2,6 @@ import "server-only";
 
 import { DUMPSTER_SELECT, type DumpsterRow } from "@/lib/admin/dumpster-inventory-shared";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type DumpsterInventorySummary = {
   totalCount: number;
@@ -55,12 +54,11 @@ function isBookableRow(row: DumpsterRow) {
   );
 }
 
-export async function getDumpsterInventorySummary(businessId?: string): Promise<DumpsterInventorySummary> {
-  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
+export async function getDumpsterInventorySummary(businessId: string): Promise<DumpsterInventorySummary> {
   const { data, error } = await supabaseAdmin
     .from("dumpsters")
     .select(DUMPSTER_SELECT)
-    .eq("business_id", resolvedBusinessId)
+    .eq("business_id", businessId)
     .order("size", { ascending: true })
     .order("display_name", { ascending: true });
 
@@ -126,12 +124,11 @@ export async function getDumpsterInventorySummary(businessId?: string): Promise<
   };
 }
 
-export async function getActiveDumpsterFilterOptions(businessId?: string): Promise<DumpsterFilterOption[]> {
-  const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
+export async function getActiveDumpsterFilterOptions(businessId: string): Promise<DumpsterFilterOption[]> {
   const { data, error } = await supabaseAdmin
     .from("dumpsters")
     .select("id, display_name, equipment_id, size")
-    .eq("business_id", resolvedBusinessId)
+    .eq("business_id", businessId)
     .eq("active", true)
     .order("display_name", { ascending: true });
 
@@ -152,7 +149,7 @@ export async function getActiveDumpsterFilterOptions(businessId?: string): Promi
   }));
 }
 
-export async function getOfferedDumpsterProducts(businessId?: string): Promise<OfferedDumpsterProduct[]> {
+export async function getOfferedDumpsterProducts(businessId: string): Promise<OfferedDumpsterProduct[]> {
   const summary = await getDumpsterInventorySummary(businessId);
 
   return summary.countsBySize

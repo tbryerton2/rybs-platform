@@ -7,7 +7,6 @@ import {
   type RentalWindowDumpster,
 } from "@/lib/rental-window-availability";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant } from "@/lib/tenant/server";
 
 export type DumpsterAvailabilityInput = {
   dumpsterSize: string;
@@ -16,7 +15,7 @@ export type DumpsterAvailabilityInput = {
   pickupDate?: string | null;
   excludeHoldIds?: string[];
   excludeBookingIds?: string[];
-  businessId?: string;
+  businessId: string;
 };
 
 export type OverlappingBookingDetail = {
@@ -177,7 +176,7 @@ export async function getPooledDumpsterAvailabilityBySize(
     throw new Error("deliveryDate must use YYYY-MM-DD.");
   }
 
-  const businessId = input.businessId ?? (await getCurrentTenant()).id;
+  const businessId = input.businessId;
   const rentalPolicy = await getDumpsterRentalPolicy({
     dumpsterSize,
     dumpsterProductId,

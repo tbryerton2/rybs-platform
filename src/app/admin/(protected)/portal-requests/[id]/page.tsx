@@ -26,6 +26,7 @@ import { updatePortalRequestAction } from "./actions";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { formatCustomerName } from "@/lib/customer-name";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { formatBookingStatusLabel } from "@/lib/admin/booking-status";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -148,7 +149,7 @@ export default async function AdminPortalRequestDetailPage({
 	              />
               <DetailBlock label="Customer email" value={request.customer?.email || "—"} />
               <DetailBlock label="Customer phone" value={request.customer?.phone || "—"} />
-              <DetailBlock label="Rental status" value={request.booking?.status || "—"} />
+              <DetailBlock label="Rental status" value={request.booking?.status ? formatBookingStatusLabel(request.booking.status) : "—"} />
             </div>
           </div>
 

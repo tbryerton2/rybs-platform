@@ -8,15 +8,16 @@ import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { supabase } from "@/lib/supabase";
 import {
   getRetailCalendarClosureForDate,
-  getRetailSiteSettings,
+  getRetailSiteSettingsForTenant,
 } from "@/lib/tenant/retail-site-settings";
-import { getCurrentTenant, getServerTenantStorageKey } from "@/lib/tenant/server";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
+import { getCurrentTenant, getServerTenantStorageKeyForTenant } from "@/lib/tenant/server";
 import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import { getHoldMinutes } from "@/lib/config";
 
-async function getOrCreateClientId() {
+async function getOrCreateClientId(businessId: string) {
   const jar = await cookies(); // ✅ await fixes "jar.get is not a function"
-  const clientCookieKey = await getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalClientId);
+  const clientCookieKey = await getServerTenantStorageKeyForTenant(businessId, TENANT_STORAGE_KEYS.portalClientId);
   const existing = (jar.get(clientCookieKey)?.value || "").trim();
   if (existing) return { clientId: existing, setCookie: false };
 
@@ -28,8 +29,8 @@ async function getOrCreateClientId() {
   return { clientId, setCookie: true };
 }
 
-function attachClientIdCookie(res: NextResponse, clientId: string) {
-  const cookieNamePromise = getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalClientId);
+function attachClientIdCookie(res: NextResponse, clientId: string, businessId: string) {
+  const cookieNamePromise = getServerTenantStorageKeyForTenant(businessId, TENANT_STORAGE_KEYS.portalClientId);
   return cookieNamePromise.then((cookieName) => {
   // 30 days
     res.cookies.set(cookieName, clientId, {
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
       dumpsterSize: body?.dumpsterSize,
       dumpsterProductId: body?.dumpsterProductId,
     });
-    const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
+    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
     const requestedRentalDays =
       Number.isFinite(Number(rentalDaysRaw)) && Number(rentalDaysRaw) > 0
         ? Math.floor(Number(rentalDaysRaw))
@@ -91,7 +92,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const retailSiteSettings = await getRetailSiteSettings();
+    const retailSiteSettings = await getRetailSiteSettingsForTenant(tenant);
     const closure = getRetailCalendarClosureForDate(deliveryDate, retailSiteSettings);
     if (closure.blocked) {
       return NextResponse.json(
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
     }
 
     // ✅ Client/session guard (prevents one browser from spamming holds)
-    const { clientId, setCookie } = await getOrCreateClientId();
+    const { clientId, setCookie } = await getOrCreateClientId(tenant.id);
     const nowIso = new Date().toISOString();
 
 
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
         holdMinutes,
       });
 
-      return setCookie ? await attachClientIdCookie(res, clientId) : res;
+      return setCookie ? await attachClientIdCookie(res, clientId, tenant.id) : res;
     }
 
     const activeClientHold = await supabase
@@ -210,6 +211,7 @@ export async function POST(req: Request) {
         dumpsterSize: selectedDumpster.dumpsterSize,
         dumpsterProductId: selectedDumpster.dumpsterProductId,
         pickupDate: requestedPickupDate,
+        businessId: tenant.id,
         logContext: "api/hold",
       });
 
@@ -267,6 +269,7 @@ export async function POST(req: Request) {
       dumpsterSize: selectedDumpster.dumpsterSize,
       dumpsterProductId: selectedDumpster.dumpsterProductId,
       pickupDate: requestedPickupDate,
+      businessId: tenant.id,
       logContext: "api/hold/post-insert",
     }).catch(() => ({ remaining: Math.max(0, remaining - 1) }));
     const remainingAfterHold = Number(availAfter.remaining ?? Math.max(0, remaining - 1));
@@ -281,9 +284,16 @@ export async function POST(req: Request) {
       holdMinutes,
     });
 
-    return setCookie ? await attachClientIdCookie(res, clientId) : res;
+    return setCookie ? await attachClientIdCookie(res, clientId, tenant.id) : res;
 
   } catch (e: unknown) {
+    if (isTenantResolutionError(e)) {
+      return NextResponse.json(
+        { ok: false, error: e.publicMessage },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "Hold failed." },
       { status: 500 }

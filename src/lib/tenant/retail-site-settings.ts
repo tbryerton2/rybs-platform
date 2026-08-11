@@ -1,5 +1,11 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getBrandSettings, getCurrentTenant, getSupportSettings, getTenantSettings } from "./server";
+import {
+  getBrandSettingsForTenant,
+  getCurrentTenant,
+  getSupportSettingsForTenant,
+  getTenantSettings,
+  type TenantRecord,
+} from "./server";
 
 export type RetailHeaderSettings = {
   showCallTextButton: boolean;
@@ -167,10 +173,14 @@ export function sanitizeRetailSiteSettings(input: unknown): RetailSiteSettings {
 
 export async function getRetailSiteSettings(): Promise<RetailSiteSettings> {
   const tenant = await getCurrentTenant();
+  return getRetailSiteSettingsForTenant(tenant);
+}
+
+export async function getRetailSiteSettingsForTenant(tenant: TenantRecord): Promise<RetailSiteSettings> {
   const [settings, brand, support] = await Promise.all([
     getTenantSettings(tenant.id),
-    getBrandSettings(),
-    getSupportSettings(),
+    getBrandSettingsForTenant(tenant),
+    getSupportSettingsForTenant(tenant.id),
   ]);
 
   const defaultPhoneNumber =
@@ -207,6 +217,13 @@ export async function getRetailSiteSettings(): Promise<RetailSiteSettings> {
 
 export async function saveRetailSiteSettings(input: unknown): Promise<RetailSiteSettings> {
   const tenant = await getCurrentTenant();
+  return saveRetailSiteSettingsForTenant(tenant, input);
+}
+
+export async function saveRetailSiteSettingsForTenant(
+  tenant: TenantRecord,
+  input: unknown,
+): Promise<RetailSiteSettings> {
   const settings = sanitizeRetailSiteSettings(input);
 
   if (settings.header.showCallTextButton && !settings.header.phoneNumber) {

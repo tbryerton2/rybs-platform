@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
@@ -34,7 +33,7 @@ function toFormValues(setting: DumpsterProductSetting): DumpsterProductSettingsF
 
 function Field({
   label,
-  tooltip,
+  caption,
   name,
   value,
   onChange,
@@ -44,7 +43,7 @@ function Field({
   suffix,
 }: {
   label: string;
-  tooltip?: string;
+  caption?: string;
   name: Exclude<keyof DumpsterProductSettingsFormValues, "isPublic">;
   value: string;
   onChange: (name: Exclude<keyof DumpsterProductSettingsFormValues, "isPublic">, value: string) => void;
@@ -55,25 +54,11 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="mb-1.5 flex items-center gap-2 text-sm font-medium text-slate-900">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
         <span>{label}</span>
-        {tooltip ? (
-          <button
-            type="button"
-            aria-label={`${label} details`}
-            className="group relative rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
-          >
-            <InformationCircleIcon className="h-4 w-4" aria-hidden="true" />
-            <span
-              role="tooltip"
-              className="pointer-events-none absolute left-0 top-7 z-50 w-64 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-            >
-              {tooltip}
-            </span>
-          </button>
-        ) : null}
       </div>
-      <div className="relative">
+      {caption ? <div className="mt-1 text-xs leading-5 text-slate-500">{caption}</div> : null}
+      <div className={caption ? "relative mt-2" : "relative mt-1.5"}>
         {prefix ? (
           <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-sm text-slate-500">
             {prefix}
@@ -118,21 +103,24 @@ function TextareaField({
   error?: string;
   helpText?: string;
 }) {
+  const fixedTallTextarea = name === "shortDescription" || name === "customerBulletPoints";
+
   return (
     <label className="block">
-      <div className="mb-1.5 text-sm font-medium text-slate-900">{label}</div>
+      <div className="text-sm font-medium text-slate-900">{label}</div>
+      {helpText ? <div className="mt-1 text-xs leading-5 text-slate-500">{helpText}</div> : null}
       <textarea
         name={name}
         value={value}
         onChange={(event) => onChange(name, event.target.value)}
-        rows={name === "customerBulletPoints" ? 4 : name === "shortDescription" ? 3 : 2}
+        rows={fixedTallTextarea ? 4 : 2}
         className={[
-          "w-full rounded-[14px] border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition",
+          `${helpText ? "mt-2" : "mt-1.5"} w-full rounded-[14px] border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition`,
+          fixedTallTextarea ? "h-32 resize-none" : "",
           "focus:border-[#F97316] focus:ring-4 focus:ring-orange-100",
           error ? "border-red-300" : "border-slate-300",
         ].join(" ")}
       />
-      {helpText ? <div className="mt-1 text-xs text-slate-500">{helpText}</div> : null}
       {error ? <div className="mt-1 text-sm text-red-700">{error}</div> : null}
     </label>
   );
@@ -217,6 +205,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <Field
           label="Display name"
+          caption="Shown as the product name on the booking site."
           name="displayName"
           value={values.displayName}
           onChange={updateTextValue}
@@ -224,7 +213,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         />
         <Field
           label="Display order"
-          tooltip="Controls the order this dumpster appears to customers. Lower numbers show first."
+          caption="Controls the order this dumpster appears to customers. Lower numbers show first."
           name="sortOrder"
           value={values.sortOrder}
           onChange={updateTextValue}
@@ -237,6 +226,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
           value={values.shortDescription}
           onChange={updateTextValue}
           error={errors.shortDescription}
+          helpText="Optional. Shown as a line of text below the pricing details on the booking site."
         />
         <TextareaField
           label="Customer-facing bullet points"
@@ -244,7 +234,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
           value={values.customerBulletPoints}
           onChange={updateTextValue}
           error={errors.customerBulletPoints}
-          helpText="Enter one bullet point per line."
+          helpText="Optional. Shown as a bullet list below the short description on the booking site. Enter one bullet point per line."
         />
         <TextareaField
           label="Dimensions"
@@ -252,9 +242,11 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
           value={values.dimensions}
           onChange={updateTextValue}
           error={errors.dimensions}
+          helpText="Shown under the product name to help customers judge size."
         />
         <Field
           label="Base price"
+          caption="Shown as the price to customers on the booking site."
           name="basePrice"
           value={values.basePrice}
           onChange={updateTextValue}
@@ -263,6 +255,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         />
         <Field
           label="Extra day price"
+          caption="Shown in the included rental duration details as the per-day charge after the included days."
           name="extraDayPrice"
           value={values.extraDayPrice}
           onChange={updateTextValue}
@@ -271,6 +264,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         />
         <Field
           label="Included weight"
+          caption="Shown in the included weight allowance details on the booking site."
           name="includedWeightTons"
           value={values.includedWeightTons}
           onChange={updateTextValue}
@@ -279,6 +273,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         />
         <Field
           label="Included rental days"
+          caption="Shown as the included rental duration on the booking site."
           name="includedRentalDays"
           value={values.includedRentalDays}
           onChange={updateTextValue}
@@ -296,14 +291,14 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex-1 text-sm leading-6 text-slate-500">
-          To override the base price for any zip code{" "}
+          Need different pricing in some areas?{" "}
           <Link
             href="/admin/settings/zips"
             className="font-medium text-[#F97316] transition hover:text-orange-600"
           >
-            click here
-          </Link>{" "}
-          and select the zip code(s) you wish to override.
+            Override pricing by ZIP code
+          </Link>
+          .
         </div>
 
         <div className="shrink-0">

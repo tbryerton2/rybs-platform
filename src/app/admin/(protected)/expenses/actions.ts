@@ -11,9 +11,9 @@ import {
 import type { ExpenseMutationInput } from "@/lib/admin/expenses";
 
 export async function createExpenseAction(input: ExpenseMutationInput): Promise<ExpenseMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await createExpenseForCurrentBusiness(input);
+  const result = await createExpenseForCurrentBusiness(adminSession.business.id, input);
 
   if (result.ok) {
     revalidatePath("/admin/expenses");
@@ -26,9 +26,9 @@ export async function updateExpenseAction(
   id: string,
   input: ExpenseMutationInput,
 ): Promise<ExpenseMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await updateExpenseForCurrentBusiness(id, input);
+  const result = await updateExpenseForCurrentBusiness(adminSession.business.id, id, input);
 
   if (result.ok) {
     revalidatePath("/admin/expenses");
@@ -38,9 +38,9 @@ export async function updateExpenseAction(
 }
 
 export async function archiveExpenseAction(id: string): Promise<ExpenseMutationResult> {
-  await requireAdminOwner();
+  const adminSession = await requireAdminOwner();
 
-  const result = await archiveExpenseForCurrentBusiness(id);
+  const result = await archiveExpenseForCurrentBusiness(adminSession.business.id, id);
 
   if (result.ok) {
     revalidatePath("/admin/expenses");

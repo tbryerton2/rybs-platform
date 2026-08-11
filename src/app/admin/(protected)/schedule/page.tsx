@@ -180,8 +180,8 @@ export default async function AdminSchedulePage({
   const todayISO = toISODate(todayETDate());
 
   const [allJobs, allOverdueJobs, inventorySummary] = await Promise.all([
-    getScheduleJobs(weekStartISO, weekEndISO),
-    getOverdueScheduleJobs(todayISO),
+    getScheduleJobs(adminSession.business.id, weekStartISO, weekEndISO),
+    getOverdueScheduleJobs(adminSession.business.id, todayISO),
     getDumpsterInventorySummary(adminSession.business.id),
   ]);
   const jobs = allJobs as BookingRow[];

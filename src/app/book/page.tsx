@@ -4,6 +4,7 @@ import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
 import { getActiveServiceAreaZip } from "@/lib/service-area";
 import { getBookingEntryContent } from "@/lib/tenant/content";
+import { getCurrentTenant } from "@/lib/tenant/server";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +23,16 @@ export default async function BookPage({
   const zip = sanitizeZip(sp?.zip);
   const zipValid = zip.length === 5;
   const isEditingDumpster = sp?.editing === "dumpster";
+  const tenant = await getCurrentTenant();
 
   if (!zipValid) {
     redirect("/book/address");
   }
 
   const [entryContent, products, serviceAreaZip] = await Promise.all([
-    getBookingEntryContent(),
-    getPublicDumpsterProducts(zip),
-    zipValid ? getActiveServiceAreaZip(zip) : Promise.resolve(null),
+    getBookingEntryContent({ tenantId: tenant.id }),
+    getPublicDumpsterProducts(zip, tenant.id),
+    zipValid ? getActiveServiceAreaZip(zip, tenant.id) : Promise.resolve(null),
   ]);
 
   const blocked = zipValid && !serviceAreaZip;

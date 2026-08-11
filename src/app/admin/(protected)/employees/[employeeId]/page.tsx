@@ -57,7 +57,7 @@ export default async function EmployeeDetailPage({ params, searchParams }: PageP
   const { employeeId } = await params;
   const { saved } = (await searchParams) ?? {};
   const [employee, historyResult] = await Promise.all([
-    getEmployeeForCurrentBusiness(employeeId),
+    getEmployeeForCurrentBusiness(employeeId, adminSession.business.id),
     supabaseAdmin
       .from("entity_history")
       .select("id, field_name, old_value, new_value, changed_by_type, created_at")

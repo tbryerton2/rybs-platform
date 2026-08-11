@@ -4,9 +4,11 @@ import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { getValidActiveHoldExclusionId } from "@/lib/booking-hold-exclusion";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import {
   getRetailCalendarClosureForDate,
-  getRetailSiteSettings,
+  getRetailSiteSettingsForTenant,
 } from "@/lib/tenant/retail-site-settings";
 
 export async function GET(req: Request) {
@@ -27,26 +29,28 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid date" }, { status: 400 });
   }
 
-  const retailSiteSettings = await getRetailSiteSettings();
-  const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
-  const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
-  if (closure.blocked) {
-    return NextResponse.json({
-      ok: true,
-      capacity: 0,
-      used: 0,
-      remaining: 0,
-      blocked: true,
-      label: closure.label,
-    });
-  }
-
   try {
+    const tenant = await getCurrentTenant();
+    const retailSiteSettings = await getRetailSiteSettingsForTenant(tenant);
+    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
+    const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
+    if (closure.blocked) {
+      return NextResponse.json({
+        ok: true,
+        capacity: 0,
+        used: 0,
+        remaining: 0,
+        blocked: true,
+        label: closure.label,
+      });
+    }
+
     const excludeHoldId = holdId
       ? await getValidActiveHoldExclusionId({
           holdId,
           dumpsterSize: selectedDumpster.dumpsterSize,
           dumpsterProductId: selectedDumpster.dumpsterProductId,
+          businessId: tenant.id,
         })
       : null;
     const availability = await getDeliveryAvailabilitySnapshot({
@@ -56,6 +60,7 @@ export async function GET(req: Request) {
       dumpsterProductId: selectedDumpster.dumpsterProductId,
       pickupDate: null,
       excludeHoldIds: excludeHoldId ? [excludeHoldId] : undefined,
+      businessId: tenant.id,
       logContext: "api/availability",
     });
 
@@ -69,6 +74,10 @@ export async function GET(req: Request) {
       source: availability.source,
     });
   } catch (error) {
+    if (isTenantResolutionError(error)) {
+      return NextResponse.json({ ok: false, error: error.publicMessage }, { status: 503 });
+    }
+
     const message = error instanceof Error ? error.message : "Availability check failed.";
     console.error("[api/availability] Delivery availability request failed.", error);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

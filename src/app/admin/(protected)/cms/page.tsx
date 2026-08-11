@@ -1,12 +1,14 @@
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { InteractiveInfoPopover } from "@/app/admin/(protected)/customers/[id]/interactive-info-popover";
-import { getRetailSiteCmsInitialState } from "@/lib/admin/cms";
+import { getRetailSiteCmsInitialStateForTenant } from "@/lib/admin/cms";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import RetailSiteCmsEditor from "./retail-site/retail-site-cms-editor";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCmsPage() {
-  const cms = await getRetailSiteCmsInitialState();
+  const adminSession = await requireAdminOwner();
+  const cms = await getRetailSiteCmsInitialStateForTenant(adminSession.business.id);
 
   return (
     <AdminPage>

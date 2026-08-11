@@ -6,6 +6,10 @@ import {
   ExclamationTriangleIcon,
   InformationCircleIcon,
   MapPinIcon,
+  ChartBarIcon,
+  ClockIcon,
+  CurrencyDollarIcon,
+  FunnelIcon,
   TruckIcon,
 } from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "../_components/admin/admin-page";
@@ -24,6 +28,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { requireAdminOwner } from "@/lib/admin/auth";
 import { centsToDollars, formatUsd, formatUsdFromCents } from "@/lib/money";
 import { formatCustomerName } from "@/lib/customer-name";
+import { formatBookingStatusLabel } from "@/lib/admin/booking-status";
 import {
   ANALYTICS_DATA_MODE,
   buildConversionAnalytics,
@@ -206,22 +211,7 @@ function startOfDayIso(daysAgo = 0) {
 }
 
 function statusLabel(status: BookingStatus | null) {
-  switch (status) {
-    case "confirmed":
-      return "Confirmed";
-    case "scheduled":
-      return "Scheduled";
-    case "delivered":
-      return "Delivered";
-    case "picked_up":
-      return "Picked Up";
-    case "cancelled":
-      return "Cancelled";
-    case "paid":
-      return "Paid";
-    default:
-      return "Unknown";
-  }
+  return formatBookingStatusLabel(status);
 }
 
 function statusTone(status: BookingStatus | null) {
@@ -253,6 +243,7 @@ function SectionCard({
   title,
   subtitle,
   tooltip,
+  icon,
   actionHref,
   actionLabel,
   children,
@@ -261,6 +252,7 @@ function SectionCard({
   title: string;
   subtitle?: string;
   tooltip?: string;
+  icon?: React.ReactNode;
   actionHref?: string;
   actionLabel?: string;
   children: React.ReactNode;
@@ -271,7 +263,12 @@ function SectionCard({
       <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 px-6 py-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>
+            {icon ? (
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-[14px] bg-slate-100 text-slate-600">
+                {icon}
+              </span>
+            ) : null}
+            <h2 className="text-[15px] font-medium uppercase tracking-[0.08em] text-[var(--text-secondary)]">{title}</h2>
             {tooltip ? (
               <button
                 type="button"
@@ -466,8 +463,8 @@ export default async function AdminDashboardPage() {
       .select("id, action_type, status, priority, submitted_at")
       .eq("business_id", adminSession.business.id)
       .order("submitted_at", { ascending: false }),
-    listEmployeesForCurrentBusiness({ includeInactive: true }),
-    listExpensesForCurrentBusiness(),
+    listEmployeesForCurrentBusiness(adminSession.business.id, { includeInactive: true }),
+    listExpensesForCurrentBusiness(adminSession.business.id),
     getDumpsters(adminSession.business.id),
     listFleetEquipment(adminSession.business.id),
     getFleetEquipmentMaintenanceAttentionIds(adminSession.business.id),
@@ -764,6 +761,7 @@ export default async function AdminDashboardPage() {
       <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
           title="Needs Attention"
+          icon={<ExclamationTriangleIcon className="h-4 w-4" />}
           tooltip="This list highlights the active issues the office or dispatcher can act on right now."
         >
           <NeedsAttentionList rows={needsAttentionRows} />
@@ -771,6 +769,7 @@ export default async function AdminDashboardPage() {
 
         <SectionCard
           title="Upcoming Schedule"
+          icon={<ClockIcon className="h-4 w-4" />}
           actionHref="/admin/schedule"
           actionLabel="Open Schedule"
         >
@@ -811,6 +810,7 @@ export default async function AdminDashboardPage() {
       <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
           title="Latest Booking Activity"
+          icon={<ChartBarIcon className="h-4 w-4" />}
           tooltip="Latest Booking Activity shows the newest booking creation activity so the office can quickly gauge how recent incoming work has been."
           actionHref="/admin/bookings"
           actionLabel="View All Bookings"
@@ -898,6 +898,7 @@ export default async function AdminDashboardPage() {
 
         <SectionCard
           title="Revenue Snapshot"
+          icon={<CurrencyDollarIcon className="h-4 w-4" />}
           tooltip="Revenue Snapshot gives a quick read on recent booked value, collected revenue, outstanding work, and average booking size."
           actionHref="/admin/financials"
           actionLabel="Open Financials"
@@ -950,6 +951,7 @@ export default async function AdminDashboardPage() {
       <section className="grid gap-6 2xl:grid-cols-2">
         <SectionCard
           title="Booking Funnel"
+          icon={<FunnelIcon className="h-4 w-4" />}
           tooltip="Booking Funnel shows the top-line path from booking started, to review reached, to completed, plus the overall conversion rate from started to completed."
           actionHref="/admin/analytics/conversion"
           actionLabel="View Full Analytics"
@@ -992,6 +994,7 @@ export default async function AdminDashboardPage() {
 
         <SectionCard
           title="Top Zip Codes"
+          icon={<MapPinIcon className="h-4 w-4" />}
           actionHref="/admin/analytics/zip-heatmap"
           actionLabel="View ZIP Heatmap"
         >

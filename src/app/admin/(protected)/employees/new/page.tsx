@@ -3,13 +3,15 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
 import { createEmptyEmployee } from "@/lib/admin/employees";
 import { getNextEmployeeCodeForCurrentBusiness } from "@/lib/admin/employees.server";
 import { EmployeeDetailClient } from "../employee-detail-client";
 
 export default async function NewEmployeePage() {
+  const adminSession = await requireAdminOwner();
   const initialEmployee = createEmptyEmployee();
-  initialEmployee.employeeId = await getNextEmployeeCodeForCurrentBusiness();
+  initialEmployee.employeeId = await getNextEmployeeCodeForCurrentBusiness(adminSession.business.id);
 
   return (
     <AdminPage width="wide" className="space-y-6">

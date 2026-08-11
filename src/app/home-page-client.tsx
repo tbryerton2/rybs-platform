@@ -764,17 +764,17 @@ export default function HomePageClient({
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <h3 id="service-area-modal-title" className="text-lg font-semibold text-slate-900">
-                            Service area
+                            {serviceAreaContent.modalTitle}
                           </h3>
                           <p id="service-area-modal-description" className="mt-1 text-sm text-slate-600">
-                            We currently serve the following ZIP codes in Central New York.
+                            {serviceAreaContent.modalIntro}
                           </p>
                         </div>
                       </div>
 
                       <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <div className="text-sm font-semibold text-slate-900">
-                          Currently covered ZIP codes
+                          {serviceAreaContent.coverageHeading}
                         </div>
 
                         {servedZipCodes.length > 0 ? (
@@ -793,6 +793,9 @@ export default function HomePageClient({
                             Service area details are being updated. Please contact us for availability.
                           </p>
                         )}
+                        {serviceAreaContent.coverageFootnote ? (
+                          <p className="mt-3 text-sm text-slate-500">{serviceAreaContent.coverageFootnote}</p>
+                        ) : null}
                       </div>
 
                       <div className="mt-6 flex justify-center">

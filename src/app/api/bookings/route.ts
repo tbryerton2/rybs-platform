@@ -10,6 +10,7 @@ import { isValidEmail } from "@/lib/identity";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder.server";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
 import { getCurrentTenant } from "@/lib/tenant/server";
 
 function withOtherConcernDetails(
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "A valid 2-letter customer_state is required." }, { status: 400 });
     }
 
-    const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
+    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
     const pickupModeForAvailability = pickup_mode === "schedule" ? "date" : "unspecified";
     const rentalPeriod = getRentalPeriodDetails({
       deliveryDate: delivery_date ?? null,
@@ -264,6 +265,13 @@ export async function POST(req: Request) {
         : undefined,
     });
   } catch (error: unknown) {
+    if (isTenantResolutionError(error)) {
+      return NextResponse.json(
+        { ok: false, error: error.publicMessage },
+        { status: 503 }
+      );
+    }
+
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
       { ok: false, error: message },

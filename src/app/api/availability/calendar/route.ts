@@ -3,9 +3,11 @@ import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { getValidActiveHoldExclusionId } from "@/lib/booking-hold-exclusion";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import {
   getRetailCalendarClosureForDate,
-  getRetailSiteSettings,
+  getRetailSiteSettingsForTenant,
 } from "@/lib/tenant/retail-site-settings";
 
 function isYmd(value: string) {
@@ -54,6 +56,7 @@ async function getAvailabilityEntry(
   standardRentalDays: number,
   dumpsterSize: string,
   dumpsterProductId: string | null,
+  businessId: string,
   fixedDeliveryDate: string | null = null,
   activeHoldContext: { holdId: string } | null = null,
 ): Promise<CalendarAvailabilityResult> {
@@ -91,6 +94,7 @@ async function getAvailabilityEntry(
     dumpsterProductId,
     pickupDate: fixedDeliveryDate ? date : null,
     excludeHoldIds,
+    businessId,
     logContext: "api/availability/calendar",
   });
 
@@ -172,8 +176,9 @@ export async function GET(req: Request) {
   const today = todayYmdUtc();
 
   try {
-    const retailSiteSettings = await getRetailSiteSettings();
-    const rentalPolicy = await getDumpsterRentalPolicy(selectedDumpster);
+    const tenant = await getCurrentTenant();
+    const retailSiteSettings = await getRetailSiteSettingsForTenant(tenant);
+    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
     const excludeHoldId = activeHoldContext
       ? await getValidActiveHoldExclusionId({
           holdId: activeHoldContext.holdId,
@@ -181,6 +186,7 @@ export async function GET(req: Request) {
           holdPickupDate: holdPickupDate,
           dumpsterSize: selectedDumpster.dumpsterSize,
           dumpsterProductId: selectedDumpster.dumpsterProductId,
+          businessId: tenant.id,
         })
       : null;
     const activeHoldForAvailability = excludeHoldId ? { holdId: excludeHoldId } : null;
@@ -199,6 +205,7 @@ export async function GET(req: Request) {
             rentalPolicy.standardRentalDays,
             selectedDumpster.dumpsterSize,
             selectedDumpster.dumpsterProductId,
+            tenant.id,
             fixedDeliveryDate || null,
             activeHoldForAvailability,
           );
@@ -233,6 +240,10 @@ export async function GET(req: Request) {
       dates: results,
     });
   } catch (error) {
+    if (isTenantResolutionError(error)) {
+      return NextResponse.json({ ok: false, error: error.publicMessage }, { status: 503 });
+    }
+
     const message = error instanceof Error ? error.message : "Calendar availability check failed.";
     console.error("[api/availability/calendar] Delivery calendar request failed.", error);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

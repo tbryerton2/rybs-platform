@@ -9,6 +9,7 @@ import {
 } from "@/app/admin/_components/admin/service-dates-section";
 import { TrackerConfigurationSection } from "@/app/admin/_components/admin/tracker-configuration-section";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 import {
   createEmptyFleetEquipment,
   fleetEquipmentStatusOptions,
@@ -299,7 +300,7 @@ export function FleetEquipmentDetailClient({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
           <span>{draft.equipmentType === "truck" ? "Truck" : "Trailer"}</span>
           <span className="text-slate-300" aria-hidden="true">|</span>
-          <span>{draft.status}</span>
+          <span>{formatEnumLabel(draft.status)}</span>
           <span className="text-slate-300" aria-hidden="true">|</span>
           <span>{draft.licensePlate || "No plate yet"}</span>
       </div>
@@ -336,7 +337,7 @@ export function FleetEquipmentDetailClient({
             >
               {fleetEquipmentStatusOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option.charAt(0).toUpperCase() + option.slice(1)}
+                  {formatEnumLabel(option)}
                 </option>
               ))}
             </select>

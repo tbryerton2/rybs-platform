@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
 import { getCurrentTenant } from "@/lib/tenant/server";
 
 type BookingRouteContext = {
@@ -36,6 +37,13 @@ export async function GET(_req: NextRequest, context: BookingRouteContext) {
 
     return NextResponse.json({ ok: true, booking: data });
   } catch (e: unknown) {
+    if (isTenantResolutionError(e)) {
+      return NextResponse.json(
+        { ok: false, error: e.publicMessage },
+        { status: 503 },
+      );
+    }
+
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : "Unknown error" },
       { status: 500 },

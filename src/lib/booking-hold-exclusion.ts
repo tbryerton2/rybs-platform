@@ -2,13 +2,17 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant, getServerTenantStorageKey } from "@/lib/tenant/server";
+import {
+  getCurrentTenant,
+  getServerTenantStorageKeyForTenant,
+} from "@/lib/tenant/server";
 import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 
 type ValidActiveHoldExclusionInput = {
   holdId: string;
   dumpsterSize: string;
   dumpsterProductId: string | null;
+  businessId?: string;
   holdDeliveryDate?: string | null;
   holdPickupDate?: string | null;
 };
@@ -21,8 +25,8 @@ export async function getValidActiveHoldExclusionId(input: ValidActiveHoldExclus
   const holdId = normalizeText(input.holdId);
   if (!holdId) return null;
 
-  const cookieName = await getServerTenantStorageKey(TENANT_STORAGE_KEYS.portalClientId);
-  const tenant = await getCurrentTenant();
+  const businessId = input.businessId ?? (await getCurrentTenant()).id;
+  const cookieName = await getServerTenantStorageKeyForTenant(businessId, TENANT_STORAGE_KEYS.portalClientId);
   const clientId = normalizeText((await cookies()).get(cookieName)?.value);
   if (!clientId) return null;
 
@@ -30,7 +34,7 @@ export async function getValidActiveHoldExclusionId(input: ValidActiveHoldExclus
     .from("booking_holds")
     .select("id, client_id, status, expires_at, delivery_date, pickup_date, dumpster_size, dumpster_product_id")
     .eq("id", holdId)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (error) {

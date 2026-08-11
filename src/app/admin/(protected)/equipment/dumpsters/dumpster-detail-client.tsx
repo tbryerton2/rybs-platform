@@ -3,8 +3,10 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CubeIcon,
   InformationCircleIcon,
 } from "@heroicons/react/24/outline";
+import { CardSectionHeader } from "@/app/admin/_components/admin/card-section-header";
 import {
   ServiceDatesSection,
   type ServiceDateEditorState,
@@ -505,9 +507,7 @@ export function DumpsterDetailClient({
         <div className="space-y-6">
           <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-lg font-semibold text-slate-900">Dumpster details</div>
-              </div>
+              <CardSectionHeader title="Dumpster details" icon={<CubeIcon className="h-4 w-4" />} />
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -570,11 +570,10 @@ export function DumpsterDetailClient({
       ) : (
         <section className="rounded-[20px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-lg font-semibold text-slate-900">
-                {mode === "create" ? "Dumpster details" : "Edit dumpster"}
-              </div>
-            </div>
+            <CardSectionHeader
+              title={mode === "create" ? "Dumpster details" : "Edit dumpster"}
+              icon={<CubeIcon className="h-4 w-4" />}
+            />
             {mode !== "create" && dumpster?.id ? (
               <div className="flex flex-wrap items-center gap-2">
                 <button

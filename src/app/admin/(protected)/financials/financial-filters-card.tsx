@@ -2,6 +2,7 @@
 
 import {
   AdjustmentsHorizontalIcon,
+  ArrowDownTrayIcon,
   ChevronDownIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
@@ -18,11 +19,9 @@ type FinancialFiltersCardProps = {
   preset: string;
   startDate: string;
   endDate: string;
-  zipFilter: string;
-  statusScope: string;
-  currentView: "table" | "chart";
   currentGranularity: "daily" | "weekly" | "monthly" | "annual";
-  zipOptions: string[];
+  customActive: boolean;
+  exportHref: string;
   quickRanges: QuickRange[];
   presetRanges: Array<{ key: string; start?: string; end?: string }>;
   advancedDefaultOpen: boolean;
@@ -32,11 +31,9 @@ export function FinancialFiltersCard({
   preset,
   startDate,
   endDate,
-  zipFilter,
-  statusScope,
-  currentView,
   currentGranularity,
-  zipOptions,
+  customActive,
+  exportHref,
   quickRanges,
   presetRanges,
   advancedDefaultOpen,
@@ -97,24 +94,46 @@ export function FinancialFiltersCard({
                     {item.label}
                   </Link>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className={`inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-sm font-medium transition ${
+                    customActive
+                      ? "bg-[#F97316] text-white shadow-sm shadow-orange-100/80"
+                      : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                  }`}
+                >
+                  Custom range
+                </button>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              aria-expanded={expanded}
-              className="admin-btn admin-btn-secondary admin-btn-sm ml-auto h-8 shrink-0 gap-1 px-2"
-            >
-              <span>Less</span>
-              <ChevronDownIcon
-                className="h-4 w-4 rotate-180 transition-transform duration-200"
-                aria-hidden="true"
-              />
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <a
+                href={exportHref}
+                download
+                className="admin-btn admin-btn-primary admin-btn-sm h-8 gap-1.5 px-3"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
+                <span>Export CSV</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                aria-expanded={expanded}
+                className="admin-btn admin-btn-secondary admin-btn-sm h-8 shrink-0 gap-1 px-2"
+              >
+                <span>Less</span>
+                <ChevronDownIcon
+                  className="h-4 w-4 rotate-180 transition-transform duration-200"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="flex w-full items-center gap-6">
+          <div className="flex w-full flex-wrap items-center gap-x-6 gap-y-3">
             <div className="flex min-w-0 flex-1 items-center gap-6">
               <div className="flex shrink-0 items-center gap-2">
                 <AdjustmentsHorizontalIcon
@@ -138,18 +157,40 @@ export function FinancialFiltersCard({
                     {item.label}
                   </Link>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className={`inline-flex h-9 shrink-0 items-center rounded-full px-3.5 text-sm font-medium transition ${
+                    customActive
+                      ? "bg-[#F97316] text-white shadow-sm shadow-orange-100/80"
+                      : "border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                  }`}
+                >
+                  Custom range
+                </button>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setExpanded(true)}
-              aria-expanded={false}
-              className="admin-btn admin-btn-secondary admin-btn-sm ml-auto h-8 shrink-0 gap-1 px-2"
-            >
-              <span>More filters</span>
-              <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
-            </button>
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              <a
+                href={exportHref}
+                download
+                className="admin-btn admin-btn-primary admin-btn-sm h-8 gap-1.5 px-3"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
+                <span>Export CSV</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                aria-expanded={false}
+                className="admin-btn admin-btn-secondary admin-btn-sm h-8 shrink-0 gap-1 px-2"
+              >
+                <span>Dates</span>
+                <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -164,10 +205,9 @@ export function FinancialFiltersCard({
                 method="GET"
                 action="/admin/financials#filters"
                 onSubmit={handleSubmit}
-                className="grid gap-5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,0.95fr)_auto]"
+                className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
               >
-                <input type="hidden" name="preset" value={preset} />
-                <input type="hidden" name="view" value={currentView} />
+                <input type="hidden" name="preset" value={customActive ? "custom" : preset} />
                 <input type="hidden" name="granularity" value={currentGranularity} />
 
                 <label className="block">
@@ -194,38 +234,6 @@ export function FinancialFiltersCard({
                   />
                 </label>
 
-                <label className="block">
-                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                    ZIP
-                  </span>
-                  <select
-                    name="zip"
-                    defaultValue={zipFilter}
-                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
-                  >
-                    <option value="">All ZIPs</option>
-                    {zipOptions.map((zip) => (
-                      <option key={zip} value={zip}>
-                        {zip}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                    Booking type
-                  </span>
-                  <select
-                    name="status"
-                    defaultValue={statusScope}
-                    className="h-11 w-full rounded-[14px] border border-slate-200 bg-white px-4 text-sm text-slate-900 shadow-sm outline-none transition focus:border-[#F97316]/40 focus:ring-4 focus:ring-[#F97316]/10"
-                  >
-                    <option value="revenue">Completed bookings</option>
-                    <option value="all-active">All active bookings</option>
-                  </select>
-                </label>
-
                 <div className="flex items-end gap-2.5 xl:justify-end">
                   <button
                     type="submit"
@@ -235,7 +243,7 @@ export function FinancialFiltersCard({
                   </button>
 
                   <Link
-                    href={`/admin/financials?view=${currentView}&granularity=${currentGranularity}#filters`}
+                    href={`/admin/financials?granularity=${currentGranularity}#filters`}
                     className="admin-btn admin-btn-secondary h-11 px-3.5 font-medium"
                   >
                     Reset

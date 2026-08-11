@@ -11,7 +11,7 @@ export type DumpsterAvailabilityComparisonInput = {
   dumpsterProductId?: string | null;
   deliveryDate: string;
   pickupDate?: string | null;
-  businessId?: string;
+  businessId: string;
 };
 
 export type LegacyRpcAvailabilityResult = {

@@ -303,19 +303,19 @@ type BookingSuccessContent = {
 };
 
 const HOME_HERO_FALLBACK: HomeHeroContent = {
-  eyebrow: "Serving Central New York",
+  eyebrow: "Reliable dumpster rental made simple",
   headlineLine1: "Dumpster Rentals Made Easy",
   headlineLine2: null,
-  subheadline: "Proudly serving Central New York with fast delivery and honest pricing.",
+  subheadline: "Find the right dumpster for your project with clear rental details and an easy booking flow.",
   imageUrl: "/hero-dumpster.png",
-  imageAlt: "Clean roll-off dumpster delivery in Central New York",
+  imageAlt: "Roll-off dumpster rental service",
   availabilityHelper: "Get instant pricing and availability in your area.",
-  trustItems: ["Locally owned", "Fully insured", "Upfront pricing"],
+  trustItems: ["Easy booking", "Clear rental details", "Helpful service"],
 };
 
 const HOME_SERVICE_AREA_FALLBACK: HomeServiceAreaContent = {
   modalTitle: "Service area",
-  modalIntro: "We currently serve the following ZIP codes in Central New York.",
+  modalIntro: "Check available ZIP codes for this business.",
   coverageHeading: "Currently covered ZIP codes",
   regionList: [],
   coverageFootnote: "",
@@ -325,26 +325,26 @@ const HOME_SERVICE_AREA_FALLBACK: HomeServiceAreaContent = {
 };
 
 const HOME_STATS_BAR_FALLBACK: HomeStatsBarContent = {
-  enabled: true,
+  enabled: false,
   items: [
     {
-      id: "next-day-delivery",
+      id: "delivery-details",
       icon: "truck",
-      text: "Next-day delivery available",
+      text: "",
       sort_order: 1,
       active: true,
     },
     {
-      id: "family-owned",
-      icon: "home",
-      text: "Family owned & operated",
+      id: "rental-details",
+      icon: "tag",
+      text: "",
       sort_order: 2,
       active: true,
     },
     {
-      id: "insured-licensed",
-      icon: "shield",
-      text: "Fully insured & licensed",
+      id: "customer-support",
+      icon: "home",
+      text: "",
       sort_order: 3,
       active: true,
     },
@@ -355,14 +355,14 @@ const HOME_DUMPSTER_SIZES_FALLBACK: HomeDumpsterSizesContent = {
   enabled: true,
   eyebrow: "Choose your size",
   title: "Pick the right dumpster",
-  intro: "Not sure what you need? Call us — we’ll help you choose.",
+  intro: "Compare common dumpster details and choose the size that fits your project.",
   items: [
     {
       id: "14-yard",
       sizeYards: 14,
-      title: "The right size for most jobs",
-      shortDescription: "Great for cleanouts, renovations, yard waste, and roofing debris.",
-      longDescription: "Big enough for a full cleanout or renovation, small enough to fit in most driveways.",
+      title: "Common starter size",
+      shortDescription: "A reusable starter item for common residential projects.",
+      longDescription: "Confirm the details for this dumpster size before booking.",
       checklistItems: [
         "Home cleanouts",
         "Yard waste",
@@ -372,8 +372,8 @@ const HOME_DUMPSTER_SIZES_FALLBACK: HomeDumpsterSizesContent = {
         "Garage & basement",
       ],
       dimensions: "14′ × 7.5′ × 4.5′",
-      weightIncluded: "Up to 3 tons",
-      rentalWindowDays: 7,
+      weightIncluded: "Weight allowance varies",
+      rentalWindowDays: null,
       badgeLabel: "",
       isFeatured: true,
     },
@@ -381,24 +381,15 @@ const HOME_DUMPSTER_SIZES_FALLBACK: HomeDumpsterSizesContent = {
 };
 
 const HOME_SERVICE_AREA_LOOKUP_FALLBACK: HomeServiceAreaLookupContent = {
-  enabled: true,
+  enabled: false,
   eyebrow: "SERVICE AREA",
-  headline: "Do we serve your area?",
-  description: "Enter your ZIP for instant confirmation and pricing.",
+  headline: "Check service availability",
+  description: "Enter your ZIP code to check service availability.",
   zipPlaceholder: "Enter ZIP code",
   buttonText: "Check ZIP",
-  areasEyebrow: "SOME AREAS WE COVER",
-  areaPills: [
-    "Syracuse",
-    "Oneida",
-    "Utica",
-    "Rome",
-    "Cazenovia",
-    "Chittenango",
-    "Canastota",
-    "Hamilton",
-  ],
-  helperText: "& more — check your ZIP to confirm",
+  areasEyebrow: "SERVICE AREAS",
+  areaPills: [],
+  helperText: "",
 };
 
 const DEFAULT_CARD_GRID_ICON_KEYS = ["tag", "truck", "home"] satisfies HomeStatsIconKey[];
@@ -413,25 +404,25 @@ function getDefaultMarketingIconKey(
 }
 
 const HOME_VALUE_PROPS_FALLBACK: HomeValuePropsContent = {
-  sectionTitle: "Why choose Tan Can Man?",
-  intro: "Simple pricing, reliable delivery, and easy online booking.",
+  sectionTitle: "Why choose us?",
+  intro: "Use this section to highlight what makes your dumpster service easy to book and manage.",
   items: [
     {
-      title: "Upfront pricing",
-      headline: "Flat-rate, no surprises",
-      body: "Know your total cost up front. No surprise fees or confusing add-ons.",
+      title: "Clear rental details",
+      headline: "Help customers know what to expect",
+      body: "Explain pricing, timing, and rental terms in straightforward language.",
       icon: "tag",
     },
     {
-      title: "Reliable service",
-      headline: "On-time delivery & pickup",
-      body: "We show up when we say we will—and make pickup just as easy.",
+      title: "Delivery coordination",
+      headline: "Plan delivery and pickup",
+      body: "Describe how customers choose dates and prepare the drop-off location.",
       icon: "truck",
     },
     {
-      title: "Local & trusted",
-      headline: "Proudly Central New York",
-      body: "Locally owned and operated, focused on dependable service and straightforward pricing.",
+      title: "Responsive service",
+      headline: "Guide customers through the job",
+      body: "Share how your team supports customers before, during, and after the rental.",
       icon: "home",
     },
   ],
@@ -439,28 +430,28 @@ const HOME_VALUE_PROPS_FALLBACK: HomeValuePropsContent = {
 
 const HOME_HOW_IT_WORKS_FALLBACK: HomeHowItWorksContent = {
   sectionTitle: "How it works",
-  intro: "Simple from delivery to pickup — we’ll keep it easy.",
+  intro: "A simple rental flow from delivery planning through pickup.",
   items: [
     {
       stepLabel: "Step 1",
       title: "Pick your delivery date",
-      body: "Choose a date that works for your project — we’ll confirm quickly.",
+      body: "Submit a preferred date and confirm availability through the booking flow.",
       icon: "calendar",
     },
     {
       stepLabel: "Step 2",
-      title: "We drop it where you want it",
-      body: "Driveway placement notes supported — we’ll place it safely and neatly.",
+      title: "Plan the drop-off",
+      body: "Add placement notes so delivery details are clear before the job starts.",
       icon: "mapPin",
     },
     {
       stepLabel: "Step 3",
       title: "Fill it, then request pickup",
-      body: "When you’re ready, request pickup and we’ll haul it away.",
+      body: "Follow the configured pickup process when the dumpster is ready to be removed.",
       icon: "checkCircle",
     },
   ],
-  footnote: "Included weight allowances vary by dumpster size. Overages billed only if exceeded.",
+  footnote: "Included weight allowances and rental rules vary by configured dumpster size.",
 };
 
 const HOME_FAQ_FALLBACK: HomeFaqContent = {
@@ -470,7 +461,7 @@ const HOME_FAQ_FALLBACK: HomeFaqContent = {
     {
       question: "What’s included in the flat-rate price?",
       answer:
-        "Delivery, pickup, and your included weight allowance are all covered. If you exceed the included tonnage, we only charge the overage — no surprise fees.",
+        "Included services, rental length, and weight allowance depend on this business's configured pricing.",
     },
     {
       question: "How long can I keep the dumpster?",
@@ -485,36 +476,35 @@ const HOME_FAQ_FALLBACK: HomeFaqContent = {
     {
       question: "What items are not allowed?",
       answer:
-        "Common restricted items include tires, batteries, paint, chemicals, and certain electronics. If you’re unsure, text us a photo or list and we’ll confirm quickly.",
+        "Common restricted items can include tires, batteries, paint, chemicals, and certain electronics. Check the business's rules before booking.",
     },
     {
       question: "How fast can you deliver?",
       answer:
-        "Often next-day delivery is available, and sometimes same-day depending on schedule. Enter your ZIP code or call/text and we’ll confirm the soonest option.",
+        "Delivery timing depends on local availability and schedule capacity. Enter your ZIP code to check available options.",
     },
   ],
 };
 
 const PRICING_INTRO_FALLBACK: PricingIntroContent = {
   headline: "Dumpster Pricing",
-  defaultBody: "Simple flat-rate pricing for Central New York.",
+  defaultBody: "Review available dumpster sizes and rental details.",
 };
 
 const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
   productBody:
-    "Base pricing includes delivery, pickup, the standard rental period, and the standard weight allowance.",
-  dimensionLabel: "7' × 14' × 4'",
+    "Base pricing and included services are shown with each available dumpster size.",
+  dimensionLabel: "Dimensions vary by size",
   featureList: ["Included weight shown by dumpster size"],
   includedHeading: "What’s included in your rental",
   includedPricePrefix: "All included in the",
   includedPriceSuffix: "flat rate",
   includedItems: [
-    "Delivery & pickup included",
+    "Delivery and pickup details",
     "Included weight shown by dumpster size",
-    "Standard rental period included",
-    "No hidden fees",
+    "Rental period shown at booking",
   ],
-  footnote: "Extra days and weight overages are billed only when they apply.",
+  footnote: "Additional charges may apply according to configured pricing.",
 };
 
 const PRICING_SIZE_GUIDE_FALLBACK: PricingSizeGuideContent = {
@@ -559,7 +549,7 @@ const PRICING_SIZE_GUIDE_FALLBACK: PricingSizeGuideContent = {
 
 const SUPPORT_MARKETING_FALLBACK: SupportMarketingContent = {
   headline: "Ready to book your dumpster?",
-  body: "Fast delivery, honest pricing, and friendly local support.",
+  body: "Check availability and review rental details before booking.",
   primaryContactCtaLabel: null,
   responseTimeCopy: null,
 };
@@ -567,12 +557,12 @@ const SUPPORT_MARKETING_LEGACY_BODY =
   "Check availability in your area — fast delivery, honest pricing, and friendly local support.";
 
 const PRODUCT_MARKETING_FALLBACK: ProductMarketingContent = {
-  badge: "Most Popular",
-  headline: "14-Foot Dumpster",
-  description: "Includes delivery, pickup & standard weight allowance. No hidden fees.",
+  badge: "",
+  headline: "Dumpster rental",
+  description: "Review the available size, rental details, and included services before booking.",
   highlightBullets: ["Great for cleanouts", "Small remodels", "Flooring & furniture"],
-  dimensionsLabel: "7' × 14' × 4'",
-  helperText: "One simple option to keep booking fast.",
+  dimensionsLabel: "Dimensions vary by size",
+  helperText: "Choose the available option that fits your project.",
 };
 
 const BOOKING_ENTRY_FALLBACK: BookingEntryContent = {
@@ -586,7 +576,7 @@ const BOOKING_ENTRY_FALLBACK: BookingEntryContent = {
 const BOOKING_ADDRESS_FALLBACK: BookingAddressContent = {
   title: "Delivery Address",
   description: "Add your contact info and service address to get started.",
-  serviceAreaNotice: "We currently service Onondaga and Madison Counties, NY.",
+  serviceAreaNotice: "Enter your ZIP code to confirm service availability.",
   savedLocationsTitle: "Use a saved location",
   savedLocationsDescription: "Start with your default location or pick another saved address, then update anything you need below.",
   savedLocationsManageLabel: "Manage saved locations",
@@ -1199,9 +1189,10 @@ export async function getSupportMarketingContent(
 
 export async function getProductMarketingContent(
   productId = "default",
+  options?: TenantContentReadOptions,
 ): Promise<ProductMarketingContent> {
   const raw = asObject(
-    await getTenantContent(`content.catalog.product_marketing.${productId}`),
+    await getTenantContent(`content.catalog.product_marketing.${productId}`, options),
   );
 
   return {
@@ -1214,8 +1205,10 @@ export async function getProductMarketingContent(
   };
 }
 
-export async function getBookingEntryContent(): Promise<BookingEntryContent> {
-  const raw = asObject(await getTenantContent("content.booking.entry"));
+export async function getBookingEntryContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingEntryContent> {
+  const raw = asObject(await getTenantContent("content.booking.entry", options));
 
   return {
     title: asString(raw.title, BOOKING_ENTRY_FALLBACK.title),
@@ -1226,8 +1219,10 @@ export async function getBookingEntryContent(): Promise<BookingEntryContent> {
   };
 }
 
-export async function getBookingAddressContent(): Promise<BookingAddressContent> {
-  const raw = asObject(await getTenantContent("content.booking.address"));
+export async function getBookingAddressContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingAddressContent> {
+  const raw = asObject(await getTenantContent("content.booking.address", options));
 
   return {
     title: asString(raw.title, BOOKING_ADDRESS_FALLBACK.title),
@@ -1261,8 +1256,10 @@ export async function getBookingAddressContent(): Promise<BookingAddressContent>
   };
 }
 
-export async function getBookingDateContent(): Promise<BookingDateContent> {
-  const raw = asObject(await getTenantContent("content.booking.date"));
+export async function getBookingDateContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingDateContent> {
+  const raw = asObject(await getTenantContent("content.booking.date", options));
   const title = asString(raw.title, BOOKING_DATE_FALLBACK.title);
   const earliestAvailablePrefix = asString(
     raw.earliestAvailablePrefix,
@@ -1287,8 +1284,10 @@ export async function getBookingDateContent(): Promise<BookingDateContent> {
   };
 }
 
-export async function getBookingPlacementContent(): Promise<BookingPlacementContent> {
-  const raw = asObject(await getTenantContent("content.booking.placement"));
+export async function getBookingPlacementContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingPlacementContent> {
+  const raw = asObject(await getTenantContent("content.booking.placement", options));
 
   return {
     title: asString(raw.title, BOOKING_PLACEMENT_FALLBACK.title),
@@ -1330,8 +1329,10 @@ export async function getBookingPlacementContent(): Promise<BookingPlacementCont
   };
 }
 
-export async function getBookingPickupContent(): Promise<BookingPickupContent> {
-  const raw = asObject(await getTenantContent("content.booking.pickup"));
+export async function getBookingPickupContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingPickupContent> {
+  const raw = asObject(await getTenantContent("content.booking.pickup", options));
 
   return {
     title: asString(raw.title, BOOKING_PICKUP_FALLBACK.title),
@@ -1353,8 +1354,10 @@ export async function getBookingPickupContent(): Promise<BookingPickupContent> {
   };
 }
 
-export async function getBookingSummaryContent(): Promise<BookingSummaryContent> {
-  const raw = asObject(await getTenantContent("content.booking.summary"));
+export async function getBookingSummaryContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingSummaryContent> {
+  const raw = asObject(await getTenantContent("content.booking.summary", options));
 
   return {
     title: asString(raw.title, BOOKING_SUMMARY_FALLBACK.title),
@@ -1427,8 +1430,10 @@ export async function getBookingConfirmContent(
   };
 }
 
-export async function getBookingCheckoutContent(): Promise<BookingCheckoutContent> {
-  const raw = asObject(await getTenantContent("content.booking.checkout"));
+export async function getBookingCheckoutContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingCheckoutContent> {
+  const raw = asObject(await getTenantContent("content.booking.checkout", options));
 
   return {
     title: asString(raw.title, BOOKING_CHECKOUT_FALLBACK.title),
@@ -1454,8 +1459,10 @@ export async function getBookingCheckoutContent(): Promise<BookingCheckoutConten
   };
 }
 
-export async function getBookingSuccessContent(): Promise<BookingSuccessContent> {
-  const raw = asObject(await getTenantContent("content.booking.success"));
+export async function getBookingSuccessContent(
+  options?: TenantContentReadOptions,
+): Promise<BookingSuccessContent> {
+  const raw = asObject(await getTenantContent("content.booking.success", options));
 
   return {
     title: asString(raw.title, BOOKING_SUCCESS_FALLBACK.title),

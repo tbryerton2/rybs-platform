@@ -1,9 +1,9 @@
 import "server-only";
 
 import {
-  getTenantContentByStatus,
-  getTenantContentDraftFirst,
-  getTenantContentRowByStatus,
+  getTenantContentByStatusForTenant,
+  getTenantContentDraftFirstForTenant,
+  getTenantContentRowByStatusForTenant,
 } from "@/lib/tenant/server";
 import { normalizeHomeStatsIconKey, type HomeStatsIconKey } from "@/lib/home-stats-icons";
 import { RENTAL_TERMS_CONSENT_TEXT } from "@/lib/booking-terms";
@@ -12,6 +12,7 @@ export type CmsPageId = "home" | "pricing" | "terms";
 export type HomeSectionType = "card_grid" | "steps";
 
 export type CmsEntryStatus = {
+  source: "default" | "draft" | "published";
   hasDraft: boolean;
   draftUpdatedAt: string | null;
   publishedUpdatedAt: string | null;
@@ -196,26 +197,26 @@ const TERMS_AND_CONDITIONS_DEFAULT: TermsAndConditionsContentValue = {
 };
 
 const HOME_STATS_BAR_DEFAULT: HomeStatsBarValue = {
-  enabled: true,
+  enabled: false,
   items: [
     {
-      id: "next-day-delivery",
+      id: "delivery-details",
       icon: "truck",
-      text: "Next-day delivery available",
+      text: "",
       sort_order: 1,
       active: true,
     },
     {
-      id: "family-owned",
-      icon: "home",
-      text: "Family owned & operated",
+      id: "rental-details",
+      icon: "tag",
+      text: "",
       sort_order: 2,
       active: true,
     },
     {
-      id: "insured-licensed",
-      icon: "shield",
-      text: "Fully insured & licensed",
+      id: "customer-support",
+      icon: "home",
+      text: "",
       sort_order: 3,
       active: true,
     },
@@ -226,14 +227,14 @@ const HOME_DUMPSTER_SIZES_DEFAULT: HomeDumpsterSizesValue = {
   showDumpsterSizesSection: true,
   dumpsterSizesEyebrow: "Choose your size",
   dumpsterSizesTitle: "Pick the right dumpster",
-  dumpsterSizesIntro: "Not sure what you need? Call us — we’ll help you choose.",
+  dumpsterSizesIntro: "Use this starter item as a template, then adjust it to match your actual offerings.",
   dumpsterSizes: [
     {
       id: "14-yard",
       sizeYards: 14,
-      title: "The right size for most jobs",
-      shortDescription: "Great for cleanouts, renovations, yard waste, and roofing debris.",
-      longDescription: "Big enough for a full cleanout or renovation, small enough to fit in most driveways.",
+      title: "Common starter size",
+      shortDescription: "A reusable starter item for common residential projects.",
+      longDescription: "Edit this description so it matches the dumpster sizes and policies this business offers.",
       checklistItems: [
         "Home cleanouts",
         "Yard waste",
@@ -243,8 +244,8 @@ const HOME_DUMPSTER_SIZES_DEFAULT: HomeDumpsterSizesValue = {
         "Garage & basement",
       ],
       dimensions: "14′ × 7.5′ × 4.5′",
-      weightIncluded: "Up to 3 tons",
-      rentalWindowDays: 7,
+      weightIncluded: "Set included weight",
+      rentalWindowDays: null,
       badgeLabel: "",
       isFeatured: true,
     },
@@ -252,24 +253,15 @@ const HOME_DUMPSTER_SIZES_DEFAULT: HomeDumpsterSizesValue = {
 };
 
 const HOME_SERVICE_AREA_LOOKUP_DEFAULT: HomeServiceAreaLookupValue = {
-  enabled: true,
+  enabled: false,
   eyebrow: "SERVICE AREA",
-  headline: "Do we serve your area?",
-  description: "Enter your ZIP for instant confirmation and pricing.",
+  headline: "Check service availability",
+  description: "Enter your ZIP code to check service availability.",
   zipPlaceholder: "Enter ZIP code",
   buttonText: "Check ZIP",
-  areasEyebrow: "SOME AREAS WE COVER",
-  areaPills: [
-    "Syracuse",
-    "Oneida",
-    "Utica",
-    "Rome",
-    "Cazenovia",
-    "Chittenango",
-    "Canastota",
-    "Hamilton",
-  ],
-  helperText: "& more — check your ZIP to confirm",
+  areasEyebrow: "SERVICE AREAS",
+  areaPills: [],
+  helperText: "",
 };
 
 const PRICING_SIZE_GUIDE_DEFAULT: PricingSizeGuideValue = {
@@ -381,6 +373,24 @@ function latestTimestamp(...values: Array<string | null | undefined>) {
   });
 }
 
+function getEntrySource(
+  draftRow: { value_json?: unknown; updated_at?: string | null } | null | undefined,
+  publishedRow: { value_json?: unknown; updated_at?: string | null } | null | undefined,
+): CmsEntryStatus["source"] {
+  if (draftRow && publishedRow) {
+    try {
+      if (JSON.stringify(draftRow.value_json) === JSON.stringify(publishedRow.value_json)) {
+        return "published";
+      }
+    } catch {
+      // If a stored value cannot be stringified, keep the conservative draft-first source.
+    }
+  }
+  if (draftRow) return "draft";
+  if (publishedRow) return "published";
+  return "default";
+}
+
 function normalizeHero(rawValue: unknown): HomeHeroValue {
   const raw = asObject(rawValue);
   const trustBullets = asStringArray(raw.trustBullets ?? raw.trustItems, 3).slice(0, 3);
@@ -390,7 +400,7 @@ function normalizeHero(rawValue: unknown): HomeHeroValue {
   }
 
   return {
-    eyebrow: asString(raw.eyebrow, "Serving Central New York"),
+    eyebrow: asString(raw.eyebrow, "Reliable dumpster rental made simple"),
     headlineLine1: asString(raw.headlineLine1 ?? raw.headline),
     headlineLine2: asString(raw.headlineLine2),
     subheadline: asString(raw.subheadline),
@@ -652,7 +662,7 @@ function normalizeTermsAndConditions(rawValue: unknown): TermsAndConditionsConte
   };
 }
 
-async function getHomeSectionsEntry(): Promise<CmsEntry<HomeFlexibleSection[]>> {
+async function getHomeSectionsEntry(tenantId: string): Promise<CmsEntry<HomeFlexibleSection[]>> {
   const [
     sectionsDraftRow,
     sectionsPublishedRow,
@@ -666,22 +676,23 @@ async function getHomeSectionsEntry(): Promise<CmsEntry<HomeFlexibleSection[]>> 
     howDraftValue,
     howPublishedValue,
   ] = await Promise.all([
-    getTenantContentRowByStatus("content.home.sections", "draft"),
-    getTenantContentRowByStatus("content.home.sections", "published"),
-    getTenantContentDraftFirst("content.home.sections"),
-    getTenantContentRowByStatus("content.home.value_props", "draft"),
-    getTenantContentRowByStatus("content.home.value_props", "published"),
-    getTenantContentByStatus("content.home.value_props", "draft"),
-    getTenantContentByStatus("content.home.value_props", "published"),
-    getTenantContentRowByStatus("content.home.how_it_works", "draft"),
-    getTenantContentRowByStatus("content.home.how_it_works", "published"),
-    getTenantContentByStatus("content.home.how_it_works", "draft"),
-    getTenantContentByStatus("content.home.how_it_works", "published"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.sections", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.sections", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.sections"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.value_props", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.value_props", "published"),
+    getTenantContentByStatusForTenant(tenantId, "content.home.value_props", "draft"),
+    getTenantContentByStatusForTenant(tenantId, "content.home.value_props", "published"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.how_it_works", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.how_it_works", "published"),
+    getTenantContentByStatusForTenant(tenantId, "content.home.how_it_works", "draft"),
+    getTenantContentByStatusForTenant(tenantId, "content.home.how_it_works", "published"),
   ]);
 
   if (sectionsValue !== undefined) {
     return {
       contentKey: "content.home.sections",
+      source: getEntrySource(sectionsDraftRow, sectionsPublishedRow),
       hasDraft: Boolean(sectionsDraftRow),
       draftUpdatedAt: sectionsDraftRow?.updated_at ?? null,
       publishedUpdatedAt: sectionsPublishedRow?.updated_at ?? null,
@@ -703,6 +714,7 @@ async function getHomeSectionsEntry(): Promise<CmsEntry<HomeFlexibleSection[]>> 
 
   return {
     contentKey: "content.home.sections",
+    source: getEntrySource(valuePropsDraftRow || howDraftRow, valuePropsPublishedRow || howPublishedRow),
     hasDraft: Boolean(valuePropsDraftRow || howDraftRow),
     draftUpdatedAt: latestTimestamp(valuePropsDraftRow?.updated_at, howDraftRow?.updated_at),
     publishedUpdatedAt: latestTimestamp(valuePropsPublishedRow?.updated_at, howPublishedRow?.updated_at),
@@ -710,15 +722,16 @@ async function getHomeSectionsEntry(): Promise<CmsEntry<HomeFlexibleSection[]>> 
   };
 }
 
-async function getHomeHeroEntry(): Promise<CmsEntry<HomeHeroValue>> {
+async function getHomeHeroEntry(tenantId: string): Promise<CmsEntry<HomeHeroValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
-    getTenantContentRowByStatus("content.home.hero", "draft"),
-    getTenantContentRowByStatus("content.home.hero", "published"),
-    getTenantContentDraftFirst("content.home.hero"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.hero", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.hero", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.hero"),
   ]);
 
   return {
     contentKey: "content.home.hero",
+    source: getEntrySource(draftRow, publishedRow),
     hasDraft: Boolean(draftRow),
     draftUpdatedAt: draftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? null,
@@ -726,15 +739,16 @@ async function getHomeHeroEntry(): Promise<CmsEntry<HomeHeroValue>> {
   };
 }
 
-async function getHomeStatsBarEntry(): Promise<CmsEntry<HomeStatsBarValue>> {
+async function getHomeStatsBarEntry(tenantId: string): Promise<CmsEntry<HomeStatsBarValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
-    getTenantContentRowByStatus("content.home.stats_bar", "draft"),
-    getTenantContentRowByStatus("content.home.stats_bar", "published"),
-    getTenantContentDraftFirst("content.home.stats_bar"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.stats_bar", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.stats_bar", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.stats_bar"),
   ]);
 
   return {
     contentKey: "content.home.stats_bar",
+    source: getEntrySource(draftRow, publishedRow),
     hasDraft: Boolean(draftRow),
     draftUpdatedAt: draftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? null,
@@ -742,15 +756,16 @@ async function getHomeStatsBarEntry(): Promise<CmsEntry<HomeStatsBarValue>> {
   };
 }
 
-async function getHomeDumpsterSizesEntry(): Promise<CmsEntry<HomeDumpsterSizesValue>> {
+async function getHomeDumpsterSizesEntry(tenantId: string): Promise<CmsEntry<HomeDumpsterSizesValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
-    getTenantContentRowByStatus("content.home.dumpster_sizes", "draft"),
-    getTenantContentRowByStatus("content.home.dumpster_sizes", "published"),
-    getTenantContentDraftFirst("content.home.dumpster_sizes"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.dumpster_sizes", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.dumpster_sizes", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.dumpster_sizes"),
   ]);
 
   return {
     contentKey: "content.home.dumpster_sizes",
+    source: getEntrySource(draftRow, publishedRow),
     hasDraft: Boolean(draftRow),
     draftUpdatedAt: draftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? null,
@@ -758,18 +773,19 @@ async function getHomeDumpsterSizesEntry(): Promise<CmsEntry<HomeDumpsterSizesVa
   };
 }
 
-async function getServiceAreaPopupEntry(): Promise<CmsEntry<HomeServiceAreaPopupValue>> {
+async function getServiceAreaPopupEntry(tenantId: string): Promise<CmsEntry<HomeServiceAreaPopupValue>> {
   const [draftRow, publishedRow, value, legacyDraftRow, legacyPublishedRow, legacyValue] = await Promise.all([
-    getTenantContentRowByStatus("content.home.service_area_popup", "draft"),
-    getTenantContentRowByStatus("content.home.service_area_popup", "published"),
-    getTenantContentDraftFirst("content.home.service_area_popup"),
-    getTenantContentRowByStatus("content.home.service_area", "draft"),
-    getTenantContentRowByStatus("content.home.service_area", "published"),
-    getTenantContentDraftFirst("content.home.service_area"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.service_area_popup", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.service_area_popup", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.service_area_popup"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.service_area", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.service_area", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.service_area"),
   ]);
 
   return {
     contentKey: "content.home.service_area_popup",
+    source: getEntrySource(draftRow || legacyDraftRow, publishedRow || legacyPublishedRow),
     hasDraft: Boolean(draftRow || legacyDraftRow),
     draftUpdatedAt: draftRow?.updated_at ?? legacyDraftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? legacyPublishedRow?.updated_at ?? null,
@@ -779,15 +795,16 @@ async function getServiceAreaPopupEntry(): Promise<CmsEntry<HomeServiceAreaPopup
   };
 }
 
-async function getServiceAreaLookupEntry(): Promise<CmsEntry<HomeServiceAreaLookupValue>> {
+async function getServiceAreaLookupEntry(tenantId: string): Promise<CmsEntry<HomeServiceAreaLookupValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
-    getTenantContentRowByStatus("content.home.service_area_lookup", "draft"),
-    getTenantContentRowByStatus("content.home.service_area_lookup", "published"),
-    getTenantContentDraftFirst("content.home.service_area_lookup"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.service_area_lookup", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.home.service_area_lookup", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.home.service_area_lookup"),
   ]);
 
   return {
     contentKey: "content.home.service_area_lookup",
+    source: getEntrySource(draftRow, publishedRow),
     hasDraft: Boolean(draftRow),
     draftUpdatedAt: draftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? null,
@@ -795,15 +812,16 @@ async function getServiceAreaLookupEntry(): Promise<CmsEntry<HomeServiceAreaLook
   };
 }
 
-async function getHomeFaqEntry(): Promise<CmsEntry<HomeFaqValue>> {
+async function getHomeFaqEntry(tenantId: string): Promise<CmsEntry<HomeFaqValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
-    getTenantContentRowByStatus("content.faq.home", "draft"),
-    getTenantContentRowByStatus("content.faq.home", "published"),
-    getTenantContentDraftFirst("content.faq.home"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.faq.home", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.faq.home", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.faq.home"),
   ]);
 
   return {
     contentKey: "content.faq.home",
+    source: getEntrySource(draftRow, publishedRow),
     hasDraft: Boolean(draftRow),
     draftUpdatedAt: draftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? null,
@@ -811,18 +829,19 @@ async function getHomeFaqEntry(): Promise<CmsEntry<HomeFaqValue>> {
   };
 }
 
-async function getPricingProductContentEntry(): Promise<CmsEntry<PricingProductContentValue>> {
+async function getPricingProductContentEntry(tenantId: string): Promise<CmsEntry<PricingProductContentValue>> {
   const [draftRow, publishedRow, value, legacyDraftRow, legacyPublishedRow, legacyValue] = await Promise.all([
-    getTenantContentRowByStatus("content.pricing.product_content", "draft"),
-    getTenantContentRowByStatus("content.pricing.product_content", "published"),
-    getTenantContentDraftFirst("content.pricing.product_content"),
-    getTenantContentRowByStatus("content.pricing.promises", "draft"),
-    getTenantContentRowByStatus("content.pricing.promises", "published"),
-    getTenantContentDraftFirst("content.pricing.promises"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.product_content", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.product_content", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.pricing.product_content"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.promises", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.promises", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.pricing.promises"),
   ]);
 
   return {
     contentKey: "content.pricing.product_content",
+    source: getEntrySource(draftRow || legacyDraftRow, publishedRow || legacyPublishedRow),
     hasDraft: Boolean(draftRow || legacyDraftRow),
     draftUpdatedAt: draftRow?.updated_at ?? legacyDraftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? legacyPublishedRow?.updated_at ?? null,
@@ -832,15 +851,16 @@ async function getPricingProductContentEntry(): Promise<CmsEntry<PricingProductC
   };
 }
 
-async function getTermsAndConditionsEntry(): Promise<CmsEntry<TermsAndConditionsContentValue>> {
+async function getTermsAndConditionsEntry(tenantId: string): Promise<CmsEntry<TermsAndConditionsContentValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
-    getTenantContentRowByStatus("content.terms.rental_terms", "draft"),
-    getTenantContentRowByStatus("content.terms.rental_terms", "published"),
-    getTenantContentDraftFirst("content.terms.rental_terms"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.terms.rental_terms", "draft"),
+    getTenantContentRowByStatusForTenant(tenantId, "content.terms.rental_terms", "published"),
+    getTenantContentDraftFirstForTenant(tenantId, "content.terms.rental_terms"),
   ]);
 
   return {
     contentKey: "content.terms.rental_terms",
+    source: getEntrySource(draftRow, publishedRow),
     hasDraft: Boolean(draftRow),
     draftUpdatedAt: draftRow?.updated_at ?? null,
     publishedUpdatedAt: publishedRow?.updated_at ?? null,
@@ -848,7 +868,9 @@ async function getTermsAndConditionsEntry(): Promise<CmsEntry<TermsAndConditions
   };
 }
 
-export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState> {
+export async function getRetailSiteCmsInitialStateForTenant(
+  tenantId: string,
+): Promise<RetailSiteCmsState> {
   const [
     hero,
     statsBar,
@@ -860,15 +882,15 @@ export async function getRetailSiteCmsInitialState(): Promise<RetailSiteCmsState
     productContent,
     rentalTerms,
   ] = await Promise.all([
-    getHomeHeroEntry(),
-    getHomeStatsBarEntry(),
-    getHomeSectionsEntry(),
-    getHomeDumpsterSizesEntry(),
-    getServiceAreaLookupEntry(),
-    getServiceAreaPopupEntry(),
-    getHomeFaqEntry(),
-    getPricingProductContentEntry(),
-    getTermsAndConditionsEntry(),
+    getHomeHeroEntry(tenantId),
+    getHomeStatsBarEntry(tenantId),
+    getHomeSectionsEntry(tenantId),
+    getHomeDumpsterSizesEntry(tenantId),
+    getServiceAreaLookupEntry(tenantId),
+    getServiceAreaPopupEntry(tenantId),
+    getHomeFaqEntry(tenantId),
+    getPricingProductContentEntry(tenantId),
+    getTermsAndConditionsEntry(tenantId),
   ]);
 
   return {

@@ -57,7 +57,7 @@ export async function PATCH(
 
       const [savedDumpster] = await decorateDumpstersWithOperationalStatus([
         mapDumpsterRowToRecord(data),
-      ]);
+      ], adminAuth.session.business.id);
 
       return NextResponse.json({
         ok: true,
@@ -80,7 +80,7 @@ export async function PATCH(
 
       const [savedDumpster] = await decorateDumpstersWithOperationalStatus([
         mapDumpsterRowToRecord(data),
-      ]);
+      ], adminAuth.session.business.id);
 
       return NextResponse.json({
         ok: true,

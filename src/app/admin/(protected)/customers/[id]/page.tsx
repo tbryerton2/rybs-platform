@@ -2,20 +2,24 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import {
-  BanknotesIcon,
   CalendarDaysIcon,
+  ChatBubbleLeftEllipsisIcon,
+  CurrencyDollarIcon,
+  EnvelopeIcon,
   ExclamationTriangleIcon,
   HashtagIcon,
+  PhoneIcon,
   SignalIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AdminSummaryCard } from "@/app/admin/_components/AdminSummaryCard";
+import { AdminSummaryCard, type SummaryCardTone } from "@/app/admin/_components/AdminSummaryCard";
 import { AdminAuditHistoryCard } from "@/app/admin/_components/admin/admin-audit-history-card";
 import { AdminToastTrigger } from "@/app/admin/_components/admin/admin-toast-trigger";
 import { BookingListRow } from "@/app/admin/_components/admin/booking-list-row";
 import { AdminPage } from "@/app/admin/_components/admin/admin-page";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireAdminOwner } from "@/lib/admin/auth";
 import { EditCustomerDetailsModal } from "./edit-customer-details-modal";
@@ -97,14 +101,6 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatStatusLabel(value: string | null) {
-  if (!value) return "Unknown";
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function normalizePhoneDigits(value: string | null) {
   if (!value) return null;
 
@@ -139,6 +135,23 @@ function getSavedMessage(saved: string | undefined) {
     default:
       return null;
   }
+}
+
+function getPortalStatusTone(status: string | null | undefined): SummaryCardTone {
+  switch ((status ?? "invited").toLowerCase()) {
+    case "active":
+      return "green";
+    case "deactivated":
+      return "rose";
+    default:
+      return "slate";
+  }
+}
+
+function formatCustomerHistoryTitle(fieldName: string) {
+  if (fieldName === "customer_created" || fieldName === "__created__") return "Customer created";
+  if (fieldName === "portal_status") return "Portal status";
+  return formatEnumLabel(fieldName);
 }
 
 export default async function CustomerDetailPage({ params, searchParams }: PageProps) {
@@ -201,11 +214,6 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
   const telHref = getTelHref(customer.phone);
   const smsHref = getSmsHref(customer.phone);
 
-  const contactActions = [
-    { label: "Email Customer", href: customerEmail ? `mailto:${customerEmail}` : null },
-    { label: "Text Customer", href: smsHref },
-    { label: "Call Customer", href: telHref },
-  ];
   const bookingsSearchTerm = customerEmail || customer.phone || customer.name || customer.id;
   const viewAllBookingsHref = `/admin/bookings?q=${encodeURIComponent(bookingsSearchTerm)}`;
   const linkedBookingsCountLabel =
@@ -213,6 +221,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
       ? `${visibleLinkedBookings.length} of ${bookings.length}`
       : `${bookings.length} booking${bookings.length === 1 ? "" : "s"}`;
   const savedLocationsCountLabel = `${savedLocations.length} location${savedLocations.length === 1 ? "" : "s"}`;
+  const portalStatusTone = getPortalStatusTone(customer.portal_status);
 
   return (
     <AdminPage className="space-y-6 py-8">
@@ -238,39 +247,50 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
               customerPhone={customer.phone}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-3 xl:justify-end">
-            {contactActions.map((action) =>
-              action.href ? (
-                <a
-                  key={action.label}
-                  href={action.href}
-                  className="admin-btn admin-btn-secondary h-10 px-4"
-                >
-                  {action.label}
-                </a>
-              ) : (
-                <span
-                  key={action.label}
-                  aria-disabled="true"
-                  className="inline-flex h-10 cursor-not-allowed items-center rounded-[14px] border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-400"
-                >
-                  {action.label}
-                </span>
-              ),
-            )}
-          </div>
         </div>
-        <div className="flex flex-wrap items-center text-sm text-slate-600">
-          <span>{customerEmail || "No email"}</span>
-          <span className="px-4 text-slate-300" aria-hidden="true">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
+          {customerEmail ? (
+            <a
+              href={`mailto:${customerEmail}`}
+              className="inline-flex items-center gap-1.5 font-medium text-slate-700 hover:text-slate-950"
+            >
+              <EnvelopeIcon className="h-4 w-4 shrink-0 text-slate-400" />
+              {customerEmail}
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <EnvelopeIcon className="h-4 w-4 shrink-0 text-slate-400" />
+              No email
+            </span>
+          )}
+          <span className="text-slate-300" aria-hidden="true">
             |
           </span>
-          <span>{formattedPhone}</span>
-          <span className="px-4 text-slate-300" aria-hidden="true">
-            |
-          </span>
-          <span>
-            UUID: <span className="font-mono text-slate-900">{customer.id}</span>
+          <span className="inline-flex items-center gap-2">
+            {telHref ? (
+              <a
+                href={telHref}
+                className="inline-flex items-center gap-1.5 font-medium text-slate-700 hover:text-slate-950"
+              >
+                <PhoneIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                {formattedPhone}
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                <PhoneIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                {formattedPhone}
+              </span>
+            )}
+            {smsHref ? (
+              <a
+                href={smsHref}
+                aria-label={`Text ${formattedPhone}`}
+                title="Text customer"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+              >
+                <ChatBubbleLeftEllipsisIcon className="h-4 w-4" />
+              </a>
+            ) : null}
           </span>
         </div>
       </section>
@@ -297,23 +317,23 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
           label="Active Bookings"
           value={activeBookings.length}
           icon={SignalIcon}
-          tone="teal"
+          tone="slate"
           compact
           stretch
         />
         <AdminSummaryCard
           label="Portal Status"
-          value={formatStatusLabel(customer.portal_status ?? "invited")}
+          value={formatEnumLabel(customer.portal_status ?? "invited")}
           icon={UserCircleIcon}
-          tone="amber"
+          tone={portalStatusTone}
           compact
           stretch
         />
         <AdminSummaryCard
           label="Lifetime Value"
           value={formatUsd(lifetimeValue)}
-          icon={BanknotesIcon}
-          tone="green"
+          icon={CurrencyDollarIcon}
+          tone="amber"
           compact
           stretch
         />
@@ -425,7 +445,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 history.map((entry) => (
                   <AdminAuditHistoryCard
                     key={entry.id}
-                    title={entry.field_name.replaceAll("_", " ")}
+                    title={formatCustomerHistoryTitle(entry.field_name)}
                     beforeValue={entry.old_value || "—"}
                     afterValue={entry.new_value || "—"}
                     changedAt={entry.created_at}
@@ -449,7 +469,9 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
             </div>
             <div className="mt-4 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">{customer.portal_status ?? "invited"}</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">
+                {formatEnumLabel(customer.portal_status ?? "invited")}
+              </div>
               {customer.deactivated_at ? (
                 <div className="mt-2 text-sm text-slate-500">
                   Deactivated {formatDate(customer.deactivated_at)}{customer.deactivation_reason ? ` • ${customer.deactivation_reason}` : ""}

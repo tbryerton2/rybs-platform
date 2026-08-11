@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant } from "@/lib/tenant/server";
 import { RETAIL_SITE_CMS_CONTENT_KEYS } from "@/lib/admin/cms";
 
 const VALID_KEYS: ReadonlySet<string> = new Set(RETAIL_SITE_CMS_CONTENT_KEYS);
@@ -55,7 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Invalid CMS action." }, { status: 400 });
   }
 
-  const tenant = await getCurrentTenant();
+  const businessId = adminAuth.session.business.id;
 
   if (action === "save_draft") {
     const results = await Promise.all(
@@ -64,7 +63,7 @@ export async function POST(req: Request) {
           .from("tenant_content_entries")
           .upsert(
             {
-              tenant_id: tenant.id,
+              tenant_id: businessId,
               key: entry.key,
               status: "draft",
               value_json: entry.value ?? {},
@@ -102,7 +101,7 @@ export async function POST(req: Request) {
         .from("tenant_content_entries")
         .upsert(
           {
-            tenant_id: tenant.id,
+            tenant_id: businessId,
             key: entry.key,
             status: "draft",
             value_json: entry.value ?? {},
@@ -118,7 +117,7 @@ export async function POST(req: Request) {
         .from("tenant_content_entries")
         .upsert(
           {
-            tenant_id: tenant.id,
+            tenant_id: businessId,
             key: entry.key,
             status: "published",
             value_json: entry.value ?? {},

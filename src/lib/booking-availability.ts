@@ -21,7 +21,7 @@ type DeliveryAvailabilityInput = {
   pickupDate?: string | null;
   excludeHoldIds?: string[];
   excludeBookingIds?: string[];
-  businessId?: string;
+  businessId: string;
   logContext: string;
 };
 

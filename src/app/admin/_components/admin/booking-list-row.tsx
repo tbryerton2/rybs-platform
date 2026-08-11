@@ -2,6 +2,7 @@ import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
 import { formatCustomerName } from "@/lib/customer-name";
+import { formatBookingStatusLabel } from "@/lib/admin/booking-status";
 
 type BookingListRowProps = {
   booking: {
@@ -90,7 +91,7 @@ export function BookingListRow({ booking }: BookingListRowProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={pillBase(statusPillClass(booking.status))}>
-              {(booking.status ?? "unknown").replace(/_/g, " ")}
+              {formatBookingStatusLabel(booking.status)}
             </span>
           </div>
         </div>
@@ -119,11 +120,15 @@ export function BookingListRow({ booking }: BookingListRowProps) {
           </div>
           <div className="flex items-baseline gap-2">
             <dt className="shrink-0 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">Delivery:</dt>
-            <dd className="min-w-0 font-medium text-slate-900">{formatDateLabel(booking.delivery_date)}</dd>
+            <dd className="min-w-0 font-medium text-slate-900">
+              {booking.status === "cancelled" ? "—" : formatDateLabel(booking.delivery_date)}
+            </dd>
           </div>
           <div className="flex items-baseline gap-2">
             <dt className="shrink-0 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">Pickup:</dt>
-            <dd className="min-w-0 font-medium text-slate-900">{formatDateLabel(booking.pickup_date)}</dd>
+            <dd className="min-w-0 font-medium text-slate-900">
+              {booking.status === "cancelled" ? "—" : formatDateLabel(booking.pickup_date)}
+            </dd>
           </div>
         </dl>
 

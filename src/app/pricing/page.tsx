@@ -2,6 +2,7 @@ import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { getPricingIntroContent, getPricingSizeGuideContent } from "@/lib/tenant/content";
+import { getCurrentTenant } from "@/lib/tenant/server";
 import BookOnlineButton from "@/components/BookOnlineButton";
 import { parseCustomerBulletPoints } from "@/lib/product-card-content";
 import PricingZipSwitcher from "./pricing-zip-switcher";
@@ -33,12 +34,14 @@ export default async function PricingPage({
   const zip = sanitizeZip(sp?.zip);
   const zipValid = zip.length === 5;
   const preview = sp?.preview === "1";
+  const tenant = await getCurrentTenant();
+  const contentOptions = { preview, tenantId: tenant.id };
 
   const [pricingIntro, inventoryProducts, pricingSettings, sizeGuideContent] = await Promise.all([
-    getPricingIntroContent({ preview }),
-    getPublicDumpsterProducts(zip),
-    getPricingSettingsSnapshot(),
-    getPricingSizeGuideContent({ preview }),
+    getPricingIntroContent(contentOptions),
+    getPublicDumpsterProducts(zip, tenant.id),
+    getPricingSettingsSnapshot(tenant.id),
+    getPricingSizeGuideContent(contentOptions),
   ]);
   const includedServicesBlurb = pricingSettings.includedServicesBlurb?.trim() || "";
   const showSizeGuide = sizeGuideContent.enabled && sizeGuideContent.rows.length > 0;

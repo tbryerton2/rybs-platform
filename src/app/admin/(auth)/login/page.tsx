@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { KeyIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
 import { signInAdminWithPasswordAction } from "./actions";
 
@@ -10,6 +11,11 @@ function readValue(params: SearchParams, key: string) {
 
 function getMessage(searchParams: SearchParams) {
   const error = readValue(searchParams, "error");
+  const success = readValue(searchParams, "success");
+
+  if (success === "password-updated") {
+    return { tone: "success", text: "Your password has been updated. Sign in with the new password." } as const;
+  }
 
   switch (error) {
     case "invalid-email":
@@ -63,7 +69,12 @@ export default async function AdminLoginPage({
 
           {message ? (
             <div
-              className="mt-6 rounded-[14px] bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200"
+              className={[
+                "mt-6 rounded-[14px] px-4 py-3 text-sm ring-1",
+                message.tone === "success"
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                  : "bg-rose-50 text-rose-700 ring-rose-200",
+              ].join(" ")}
             >
               {message.text}
             </div>
@@ -89,9 +100,17 @@ export default async function AdminLoginPage({
             </div>
 
             <div>
-              <label htmlFor="admin-password" className="text-sm font-medium text-slate-700">
-                Password
-              </label>
+              <div className="flex items-center justify-between gap-4">
+                <label htmlFor="admin-password" className="text-sm font-medium text-slate-700">
+                  Password
+                </label>
+                <Link
+                  href={`/admin/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
+                  className="text-sm font-medium text-slate-500 hover:text-slate-900"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 id="admin-password"
                 name="password"

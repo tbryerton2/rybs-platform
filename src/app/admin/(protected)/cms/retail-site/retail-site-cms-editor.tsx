@@ -48,8 +48,17 @@ const HOME_PAGE_KEYS = [
 ];
 const PRICING_PAGE_KEYS = [PRICING_PRODUCT_KEY];
 const TERMS_PAGE_KEYS = [TERMS_AND_CONDITIONS_KEY];
+const HOME_SECTION_CONTENT_KEYS: Record<string, string> = {
+  hero: HOME_HERO_KEY,
+  stats: HOME_STATS_BAR_KEY,
+  marketing: HOME_SECTIONS_KEY,
+  "dumpster-sizes": HOME_DUMPSTER_SIZES_KEY,
+  "service-area-lookup": HOME_SERVICE_AREA_LOOKUP_KEY,
+  faq: HOME_FAQ_KEY,
+};
 
 type CmsPageId = "home" | "pricing" | "terms";
+type CmsSourceLabel = "Using default" | "Draft" | "Published";
 
 type RetailSiteCmsEditorProps = {
   cms: RetailSiteCmsState;
@@ -182,6 +191,40 @@ function sectionTabClass(active: boolean) {
   ].join(" ");
 }
 
+function sourceLabelClass(label: CmsSourceLabel) {
+  if (label === "Draft") {
+    return "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+  }
+
+  if (label === "Published") {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
+  }
+
+  return "bg-slate-100 text-slate-600 ring-1 ring-slate-200";
+}
+
+function getContentSourceLabel(status: CmsEntryStatus | undefined, dirty: boolean): CmsSourceLabel {
+  if (dirty) return "Draft";
+  if (status?.source === "draft") return "Draft";
+  if (status?.source === "published" || status?.publishedUpdatedAt) return "Published";
+  if (status?.hasDraft) return "Draft";
+  return "Using default";
+}
+
+function SourceBadge({ label, compact = false }: { label: CmsSourceLabel; compact?: boolean }) {
+  return (
+    <span
+      className={[
+        "inline-flex shrink-0 items-center rounded-full font-semibold",
+        compact ? "px-2 py-0.5 text-[11px]" : "px-3 py-1 text-xs",
+        sourceLabelClass(label),
+      ].join(" ")}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const initialValuesByKey = useMemo(
     () => ({
@@ -201,46 +244,55 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const initialStatusByKey = useMemo<Record<string, CmsEntryStatus>>(
     () => ({
       [HOME_HERO_KEY]: {
+        source: cms.home.hero.source,
         hasDraft: cms.home.hero.hasDraft,
         draftUpdatedAt: cms.home.hero.draftUpdatedAt,
         publishedUpdatedAt: cms.home.hero.publishedUpdatedAt,
       },
       [HOME_STATS_BAR_KEY]: {
+        source: cms.home.statsBar.source,
         hasDraft: cms.home.statsBar.hasDraft,
         draftUpdatedAt: cms.home.statsBar.draftUpdatedAt,
         publishedUpdatedAt: cms.home.statsBar.publishedUpdatedAt,
       },
       [HOME_SECTIONS_KEY]: {
+        source: cms.home.sections.source,
         hasDraft: cms.home.sections.hasDraft,
         draftUpdatedAt: cms.home.sections.draftUpdatedAt,
         publishedUpdatedAt: cms.home.sections.publishedUpdatedAt,
       },
       [HOME_DUMPSTER_SIZES_KEY]: {
+        source: cms.home.dumpsterSizes.source,
         hasDraft: cms.home.dumpsterSizes.hasDraft,
         draftUpdatedAt: cms.home.dumpsterSizes.draftUpdatedAt,
         publishedUpdatedAt: cms.home.dumpsterSizes.publishedUpdatedAt,
       },
       [HOME_SERVICE_AREA_LOOKUP_KEY]: {
+        source: cms.home.serviceAreaLookup.source,
         hasDraft: cms.home.serviceAreaLookup.hasDraft,
         draftUpdatedAt: cms.home.serviceAreaLookup.draftUpdatedAt,
         publishedUpdatedAt: cms.home.serviceAreaLookup.publishedUpdatedAt,
       },
       [HOME_SERVICE_AREA_KEY]: {
+        source: cms.home.serviceAreaPopup.source,
         hasDraft: cms.home.serviceAreaPopup.hasDraft,
         draftUpdatedAt: cms.home.serviceAreaPopup.draftUpdatedAt,
         publishedUpdatedAt: cms.home.serviceAreaPopup.publishedUpdatedAt,
       },
       [HOME_FAQ_KEY]: {
+        source: cms.home.faq.source,
         hasDraft: cms.home.faq.hasDraft,
         draftUpdatedAt: cms.home.faq.draftUpdatedAt,
         publishedUpdatedAt: cms.home.faq.publishedUpdatedAt,
       },
       [PRICING_PRODUCT_KEY]: {
+        source: cms.pricing.productContent.source,
         hasDraft: cms.pricing.productContent.hasDraft,
         draftUpdatedAt: cms.pricing.productContent.draftUpdatedAt,
         publishedUpdatedAt: cms.pricing.productContent.publishedUpdatedAt,
       },
       [TERMS_AND_CONDITIONS_KEY]: {
+        source: cms.terms.rentalTerms.source,
         hasDraft: cms.terms.rentalTerms.hasDraft,
         draftUpdatedAt: cms.terms.rentalTerms.draftUpdatedAt,
         publishedUpdatedAt: cms.terms.rentalTerms.publishedUpdatedAt,
@@ -314,11 +366,25 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   );
 
   const currentPageStatus = {
-    hasDraft: currentPageKeys.some((key) => statusByKey[key]?.hasDraft),
     publishedUpdatedAt: latestTimestamp(
       currentPageKeys.map((key) => statusByKey[key]?.publishedUpdatedAt),
     ),
   };
+
+  function isContentKeyDirty(key: string) {
+    return JSON.stringify(valuesByKey[key]) !== JSON.stringify(savedByKey[key]);
+  }
+
+  function getSourceLabelForKey(key: string) {
+    return getContentSourceLabel(statusByKey[key], isContentKeyDirty(key));
+  }
+
+  function getPageSourceLabel(keys: string[]) {
+    if (keys.some(isContentKeyDirty)) return "Draft";
+    if (keys.some((key) => getContentSourceLabel(statusByKey[key], false) === "Draft")) return "Draft";
+    if (keys.some((key) => getContentSourceLabel(statusByKey[key], false) === "Published")) return "Published";
+    return "Using default";
+  }
 
   useEffect(() => {
     function onBeforeUnload(event: BeforeUnloadEvent) {
@@ -613,9 +679,11 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
 
       for (const key of currentPageKeys) {
         const update = updates.find((item: { key?: string }) => item?.key === key);
+        const nextSource = action === "publish" ? "published" : "draft";
         next[key] = {
-          hasDraft: true,
-          draftUpdatedAt: update?.draftUpdatedAt ?? current[key]?.draftUpdatedAt ?? null,
+          source: nextSource,
+          hasDraft: action === "save_draft",
+          draftUpdatedAt: action === "save_draft" ? update?.draftUpdatedAt ?? current[key]?.draftUpdatedAt ?? null : null,
           publishedUpdatedAt: update?.publishedUpdatedAt ?? current[key]?.publishedUpdatedAt ?? null,
         };
       }
@@ -684,7 +752,10 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             onChange={(items) => updateHero({ trustBullets: items })}
           />
           <div className="border-t border-slate-100 pt-6">
-            <div className="text-base font-semibold text-slate-900">Service Area Popup</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-base font-semibold text-slate-900">Service Area Popup</div>
+              <SourceBadge label={getSourceLabelForKey(HOME_SERVICE_AREA_KEY)} compact />
+            </div>
             <div className="mt-1 text-sm text-slate-500">
               Edit the service area popup shown from the Home page.
             </div>
@@ -1315,13 +1386,9 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     );
   }
 
-  const stateLabel = pageDirty
-    ? "Draft"
-    : saveState === "saved"
-      ? "Draft"
-      : currentPageStatus.hasDraft
-        ? "Draft"
-        : "Published";
+  const stateLabel = getPageSourceLabel(currentPageKeys);
+  const activeHomeSourceKey = HOME_SECTION_CONTENT_KEYS[resolvedHomeSectionId] ?? HOME_HERO_KEY;
+  const activeStateLabel = activePage === "home" ? getSourceLabelForKey(activeHomeSourceKey) : stateLabel;
 
   return (
     <div className="space-y-6">
@@ -1351,16 +1418,23 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
               <div className="mt-1 text-sm text-slate-500">Select a section to edit.</div>
             </div>
             <div className="mt-3 space-y-1">
-              {homeSectionOptions.map((section) => (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => setActiveHomeSectionId(section.id)}
-                  className={sectionTabClass(section.id === resolvedHomeSectionId)}
-                >
-                  {section.label}
-                </button>
-              ))}
+              {homeSectionOptions.map((section) => {
+                const sourceLabel = getSourceLabelForKey(HOME_SECTION_CONTENT_KEYS[section.id] ?? HOME_HERO_KEY);
+
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => setActiveHomeSectionId(section.id)}
+                    className={sectionTabClass(section.id === resolvedHomeSectionId)}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{section.label}</span>
+                      <SourceBadge label={sourceLabel} compact />
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </aside>
 
@@ -1368,15 +1442,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
             <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                      stateLabel === "Published"
-                        ? "bg-slate-100 text-slate-700"
-                        : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                    }`}
-                  >
-                    {stateLabel}
-                  </span>
+                  <SourceBadge label={activeStateLabel} />
                 </div>
                 <div className="mt-2 text-sm text-slate-500">
                   Last published {formatDateTime(currentPageStatus.publishedUpdatedAt)}
@@ -1428,15 +1494,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
           <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                    stateLabel === "Published"
-                      ? "bg-slate-100 text-slate-700"
-                      : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-                  }`}
-                >
-                  {stateLabel}
-                </span>
+                <SourceBadge label={stateLabel} />
               </div>
               <div className="mt-2 text-sm text-slate-500">
                 Last published {formatDateTime(currentPageStatus.publishedUpdatedAt)}

@@ -16,11 +16,12 @@ import {
 
 type PricingSettingsFormProps = {
   pricing: {
-    id: string;
+    id: string | null;
     maxRentalDays: number | null;
     allowExtendedRentalAtBooking: boolean;
     includedServicesBlurb: string | null;
     tonOveragePrice: number;
+    isPersisted: boolean;
   };
   highestActiveIncludedRentalDays: number | null;
 };
@@ -212,7 +213,7 @@ function TextareaField({
         <span className="h-3 w-3 shrink-0 rounded-full bg-orange-400" />
         <span>{label}</span>
       </div>
-      {helper ? <p className="mt-1 text-sm text-slate-600">{helper}</p> : null}
+      {helper ? <p className="mt-1 text-xs leading-5 text-slate-500">{helper}</p> : null}
 
       <textarea
         name={name}
@@ -420,12 +421,18 @@ export function PricingSettingsForm({
       className="space-y-6"
       onSubmit={handleSubmit}
     >
-      <input type="hidden" name="id" value={pricing.id} />
+      <input type="hidden" name="id" value={pricing.id ?? ""} />
 
       <Section
         title="Global booking behavior"
       >
         <div className="space-y-8">
+          {!pricing.isPersisted ? (
+            <div className="rounded-[14px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              These are suggested defaults. Save to configure pricing for this business.
+            </div>
+          ) : null}
+
           <FadingFormMessage
             key={`pricing-form-success-${state.messageKey}`}
             type="success"
@@ -436,7 +443,7 @@ export function PricingSettingsForm({
             <div className="grid gap-y-5 xl:grid-cols-[16rem_1px_16rem_20rem] xl:items-start xl:justify-start xl:gap-x-12">
               <div className="space-y-5">
                 <FormSectionHeading
-                  title="Booking rules"
+                  title="Rental duration"
                   tooltip="These settings apply across the booking flow. Size-specific price, included days, and included weight are managed in the dumpster product settings below."
                 />
                 <Field
@@ -453,6 +460,18 @@ export function PricingSettingsForm({
                   suffix="days"
                   placeholder="No hard cap"
                 />
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="allowExtendedRentalAtBooking"
+                    checked={values.allowExtendedRentalAtBooking}
+                    onChange={(event) =>
+                      updateBooleanValue("allowExtendedRentalAtBooking", event.target.checked)
+                    }
+                    className="h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-orange-200"
+                  />
+                  <span>Allow customers to request extra days during booking</span>
+                </label>
               </div>
 
               <div className="hidden w-px self-stretch bg-slate-300 xl:block" />
@@ -504,7 +523,7 @@ export function PricingSettingsForm({
               </div>
             </div>
 
-            <div className="mt-8">
+            <div className="mt-10 border-t border-slate-200 pt-7">
               <TextareaField
                 label="What’s included"
                 helper="Shown to customers when explaining what is included in the base rental price."
@@ -514,25 +533,6 @@ export function PricingSettingsForm({
                 error={mergedErrors.includedServicesBlurb}
                 placeholder="Includes delivery, pickup, and the standard weight allowance."
               />
-            </div>
-
-            <div className="w-full mt-10">
-              <label className="flex items-start gap-3 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-4">
-                <input
-                  type="checkbox"
-                  name="allowExtendedRentalAtBooking"
-                  checked={values.allowExtendedRentalAtBooking}
-                  onChange={(event) =>
-                    updateBooleanValue("allowExtendedRentalAtBooking", event.target.checked)
-                  }
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#F97316] focus:ring-orange-200"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-slate-900">
-                    Allow customers to request extra days during booking
-                  </span>
-                </span>
-              </label>
             </div>
           </div>
 

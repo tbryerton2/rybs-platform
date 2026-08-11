@@ -12,13 +12,25 @@ function getValue(formData: FormData, key: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getNormalizedPhoneDigits(value: string | null | undefined) {
+  const digits = (value ?? "").replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits.startsWith("1")) return digits.slice(1);
+  return null;
+}
+
+function normalizePhoneValue(value: string) {
+  if (!value) return null;
+  return getNormalizedPhoneDigits(value) ?? value;
+}
+
 export async function updateCustomerIdentityAction(formData: FormData) {
   const adminSession = await requireAdminOwner();
 
   const id = getValue(formData, "id");
   const email = getValue(formData, "email");
   const name = getValue(formData, "name");
-  const phone = getValue(formData, "phone");
+  const rawPhone = getValue(formData, "phone");
 
   if (!id) throw new Error("Missing customer id");
   if (!email || !isValidEmail(email)) throw new Error("A valid email is required.");
@@ -32,10 +44,18 @@ export async function updateCustomerIdentityAction(formData: FormData) {
 
   if (current.error || !current.data) throw new Error(current.error?.message ?? "Customer not found");
 
+  const nextPhone = normalizePhoneValue(rawPhone);
+  const currentPhoneDigits = getNormalizedPhoneDigits(current.data.phone);
+  const nextPhoneDigits = getNormalizedPhoneDigits(nextPhone);
+  const phone =
+    currentPhoneDigits && currentPhoneDigits === nextPhoneDigits
+      ? current.data.phone ?? null
+      : nextPhone;
+
   const updates = {
     email,
     name: name || null,
-    phone: phone || null,
+    phone,
   };
 
   const nullableHistoryEntries: Array<EntityHistoryEntry | null> = [

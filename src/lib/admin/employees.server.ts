@@ -2,7 +2,6 @@ import "server-only";
 
 import { diffEntityFields, recordEntityHistory } from "@/lib/entity-history";
 import { normalizeEmail } from "@/lib/identity";
-import { getCurrentTenant } from "@/lib/tenant/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   createEmptyEmployee,
@@ -330,12 +329,14 @@ async function getNextEmployeeCodeForBusiness(businessId: string) {
   return `EMP-${maxExisting + 1}`;
 }
 
-export async function listEmployeesForCurrentBusiness(filter?: EmployeeListFilter) {
-  const tenant = await getCurrentTenant();
+export async function listEmployeesForCurrentBusiness(
+  businessId: string,
+  filter?: EmployeeListFilter,
+) {
   let query = supabaseAdmin
     .from("business_employees")
     .select(BUSINESS_EMPLOYEE_SELECT)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .order("is_active", { ascending: false })
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
@@ -353,13 +354,12 @@ export async function listEmployeesForCurrentBusiness(filter?: EmployeeListFilte
   return ((data ?? []) as BusinessEmployeeRow[]).map(mapRowToEmployeeRecord);
 }
 
-export async function getEmployeeForCurrentBusiness(id: string) {
-  const tenant = await getCurrentTenant();
+export async function getEmployeeForCurrentBusiness(id: string, businessId: string) {
   const { data, error } = await supabaseAdmin
     .from("business_employees")
     .select(BUSINESS_EMPLOYEE_SELECT)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (error) {
@@ -373,17 +373,16 @@ export async function getEmployeeForCurrentBusiness(id: string) {
   return mapRowToEmployeeRecord(data as BusinessEmployeeRow);
 }
 
-export async function getNextEmployeeCodeForCurrentBusiness() {
-  const tenant = await getCurrentTenant();
-  return getNextEmployeeCodeForBusiness(tenant.id);
+export async function getNextEmployeeCodeForCurrentBusiness(businessId: string) {
+  return getNextEmployeeCodeForBusiness(businessId);
 }
 
 export async function createEmployeeForCurrentBusiness(
+  businessId: string,
   input: EmployeeMutationInput,
   actorUserId?: string | null,
 ): Promise<EmployeeMutationResult> {
-  const tenant = await getCurrentTenant();
-  const generatedEmployeeId = await getNextEmployeeCodeForBusiness(tenant.id);
+  const generatedEmployeeId = await getNextEmployeeCodeForBusiness(businessId);
   const normalizedInput = normalizeEmployeeMutationInput({
     ...input,
     employeeId: generatedEmployeeId,
@@ -398,7 +397,7 @@ export async function createEmployeeForCurrentBusiness(
   }
 
   const duplicateEmailId = await findDuplicateEmployeeField(
-    tenant.id,
+    businessId,
     "normalized_email",
     normalizeEmail(normalizedInput.email),
   );
@@ -411,17 +410,17 @@ export async function createEmployeeForCurrentBusiness(
   }
 
   const duplicateCodeId = await findDuplicateEmployeeField(
-    tenant.id,
+    businessId,
     "employee_code",
     cleanText(normalizedInput.employeeId)?.toUpperCase() ?? null,
   );
   if (duplicateCodeId) {
-    const regeneratedEmployeeId = await getNextEmployeeCodeForBusiness(tenant.id);
+    const regeneratedEmployeeId = await getNextEmployeeCodeForBusiness(businessId);
     normalizedInput.employeeId = regeneratedEmployeeId;
   }
 
   const duplicateRegeneratedCodeId = await findDuplicateEmployeeField(
-    tenant.id,
+    businessId,
     "employee_code",
     cleanText(normalizedInput.employeeId)?.toUpperCase() ?? null,
   );
@@ -434,7 +433,7 @@ export async function createEmployeeForCurrentBusiness(
   }
 
   const values = {
-    ...buildEmployeeWriteValues(tenant.id, normalizedInput, { actorUserId }),
+    ...buildEmployeeWriteValues(businessId, normalizedInput, { actorUserId }),
     created_by: actorUserId ?? null,
   };
 
@@ -470,7 +469,7 @@ export async function createEmployeeForCurrentBusiness(
       changedById: actorUserId ?? null,
       changeReason: "Employee record created from admin",
     },
-  ], tenant.id);
+  ], businessId);
 
   return {
     ok: true,
@@ -480,6 +479,7 @@ export async function createEmployeeForCurrentBusiness(
 }
 
 export async function updateEmployeeForCurrentBusiness(
+  businessId: string,
   id: string,
   input: EmployeeMutationInput,
   actorUserId?: string | null,
@@ -494,13 +494,11 @@ export async function updateEmployeeForCurrentBusiness(
     };
   }
 
-  const tenant = await getCurrentTenant();
-
   const currentLookup = await supabaseAdmin
     .from("business_employees")
     .select(BUSINESS_EMPLOYEE_SELECT)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (currentLookup.error || !currentLookup.data) {
@@ -512,7 +510,7 @@ export async function updateEmployeeForCurrentBusiness(
 
   const current = mapRowToEmployeeRecord(currentLookup.data as BusinessEmployeeRow);
   const duplicateEmailId = await findDuplicateEmployeeField(
-    tenant.id,
+    businessId,
     "normalized_email",
     normalizeEmail(normalizedInput.email),
     id,
@@ -526,7 +524,7 @@ export async function updateEmployeeForCurrentBusiness(
   }
 
   const duplicateCodeId = await findDuplicateEmployeeField(
-    tenant.id,
+    businessId,
     "employee_code",
     cleanText(normalizedInput.employeeId)?.toUpperCase() ?? null,
     id,
@@ -539,7 +537,7 @@ export async function updateEmployeeForCurrentBusiness(
     };
   }
 
-  const values = buildEmployeeWriteValues(tenant.id, normalizedInput, {
+  const values = buildEmployeeWriteValues(businessId, normalizedInput, {
     actorUserId,
     deactivatedAt: current.deactivatedAt,
   });
@@ -548,7 +546,7 @@ export async function updateEmployeeForCurrentBusiness(
     .from("business_employees")
     .update(values)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .select(BUSINESS_EMPLOYEE_SELECT)
     .single();
 
@@ -605,7 +603,7 @@ export async function updateEmployeeForCurrentBusiness(
         changeReason: "Employee record updated from admin",
       },
     ),
-    tenant.id,
+    businessId,
   );
 
   return {
@@ -616,32 +614,34 @@ export async function updateEmployeeForCurrentBusiness(
 }
 
 export async function deactivateEmployeeForCurrentBusiness(
+  businessId: string,
   id: string,
   actorUserId?: string | null,
   reason = "Soft-deactivated from the admin employees page.",
 ): Promise<EmployeeMutationResult> {
-  return setEmployeeStatusForCurrentBusiness(id, "inactive", actorUserId, reason);
+  return setEmployeeStatusForCurrentBusiness(businessId, id, "inactive", actorUserId, reason);
 }
 
 export async function reactivateEmployeeForCurrentBusiness(
+  businessId: string,
   id: string,
   actorUserId?: string | null,
 ): Promise<EmployeeMutationResult> {
-  return setEmployeeStatusForCurrentBusiness(id, "active", actorUserId, null);
+  return setEmployeeStatusForCurrentBusiness(businessId, id, "active", actorUserId, null);
 }
 
 async function setEmployeeStatusForCurrentBusiness(
+  businessId: string,
   id: string,
   status: Extract<EmployeeStatus, "active" | "inactive">,
   actorUserId?: string | null,
   reason?: string | null,
 ): Promise<EmployeeMutationResult> {
-  const tenant = await getCurrentTenant();
   const currentLookup = await supabaseAdmin
     .from("business_employees")
     .select(BUSINESS_EMPLOYEE_SELECT)
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .maybeSingle();
 
   if (currentLookup.error || !currentLookup.data) {
@@ -663,7 +663,7 @@ async function setEmployeeStatusForCurrentBusiness(
       updated_by: actorUserId ?? null,
     })
     .eq("id", id)
-    .eq("business_id", tenant.id)
+    .eq("business_id", businessId)
     .select(BUSINESS_EMPLOYEE_SELECT)
     .single();
 
@@ -690,7 +690,7 @@ async function setEmployeeStatusForCurrentBusiness(
           status === "inactive" ? "Employee soft-deactivated by admin" : "Employee reactivated by admin",
       },
     ),
-  ], tenant.id);
+  ], businessId);
 
   return {
     ok: true,

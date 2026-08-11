@@ -14,7 +14,7 @@ function pillSizeClasses(size: PillSize) {
 function statusClasses(status: DumpsterDerivedOperationalStatus) {
   switch (status) {
     case "Available":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+      return "bg-blue-50 text-blue-700 ring-blue-200";
     case "Scheduled":
       return "bg-amber-50 text-amber-700 ring-amber-200";
     case "On rent":

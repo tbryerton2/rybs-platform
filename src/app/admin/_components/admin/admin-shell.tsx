@@ -12,7 +12,13 @@ import {
   subscribeToSidebarState,
 } from "./admin-sidebar";
 
-function MobileNav({ pathname }: { pathname: string }) {
+function MobileNav({
+  pathname,
+  businessName,
+}: {
+  pathname: string;
+  businessName: string;
+}) {
   return (
     <div className="border-b border-slate-200 bg-white lg:hidden">
       <div className="px-4 pb-3 pt-4 sm:px-6">
@@ -22,7 +28,7 @@ function MobileNav({ pathname }: { pathname: string }) {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Tan Can Man
+              {businessName}
             </p>
             <p className="text-base font-semibold text-slate-900">Admin</p>
           </div>
@@ -55,7 +61,13 @@ function MobileNav({ pathname }: { pathname: string }) {
   );
 }
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({
+  children,
+  businessName,
+}: {
+  children: React.ReactNode;
+  businessName: string;
+}) {
   const pathname = usePathname();
   const activeItem = getActiveAdminNavItem(pathname);
   const showShellHeader =
@@ -89,11 +101,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <MobileNav pathname={pathname} />
+      <MobileNav pathname={pathname} businessName={businessName} />
 
       <div className="w-full lg:px-5 lg:pb-6 lg:pt-6 xl:px-6 2xl:px-8">
         <AdminSidebar
           pathname={pathname}
+          businessName={businessName}
           collapsed={sidebarCollapsed}
           onToggle={toggleSidebar}
         />
@@ -110,7 +123,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
-                      Tan Can Man Admin
+                      {businessName} Admin
                     </p>
                     <p className="mt-1 text-lg font-semibold text-slate-900">
                       {activeItem?.label ?? "Admin"}

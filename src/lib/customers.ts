@@ -164,6 +164,7 @@ async function ensureCustomerLocation(
   const { data: existing, error: existingError } = await supabase
     .from("customer_locations")
     .select("id, is_default")
+    .eq("business_id", businessId)
     .eq("customer_id", customerId)
     .eq("street", street)
     .eq("city", city)
@@ -180,6 +181,7 @@ async function ensureCustomerLocation(
   const { data: defaults, error: defaultsError } = await supabase
     .from("customer_locations")
     .select("id")
+    .eq("business_id", businessId)
     .eq("customer_id", customerId)
     .eq("is_default", true)
     .limit(1);

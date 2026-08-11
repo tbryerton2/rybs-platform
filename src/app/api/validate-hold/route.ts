@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCurrentTenant } from "@/lib/tenant/server";
+import { isTenantResolutionError } from "@/lib/tenant/resolution";
+import { resolvePublicTenantFromRequest } from "@/lib/tenant/server";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,28 +9,36 @@ const supabase = createClient(
 );
 
 export async function POST(req: Request) {
-  const tenant = await getCurrentTenant();
-  const { holdId } = await req.json();
+  try {
+    const tenant = await resolvePublicTenantFromRequest(req);
+    const { holdId } = await req.json();
 
-  if (!holdId) {
-    return NextResponse.json({ valid: false }, { status: 400 });
+    if (!holdId) {
+      return NextResponse.json({ valid: false }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from("booking_holds")
+      .select("id, expires_at, status")
+      .eq("id", holdId)
+      .eq("business_id", tenant.id)
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ valid: false });
+    }
+
+    const now = new Date();
+    const expires = new Date(data.expires_at);
+
+    const valid = data.status === "active" && expires > now;
+
+    return NextResponse.json({ valid });
+  } catch (error) {
+    if (isTenantResolutionError(error)) {
+      return NextResponse.json({ valid: false, error: error.publicMessage }, { status: 503 });
+    }
+
+    throw error;
   }
-
-  const { data, error } = await supabase
-    .from("booking_holds")
-    .select("id, expires_at, status")
-    .eq("id", holdId)
-    .eq("business_id", tenant.id)
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ valid: false });
-  }
-
-  const now = new Date();
-  const expires = new Date(data.expires_at);
-
-  const valid = data.status === "active" && expires > now;
-
-  return NextResponse.json({ valid });
 }

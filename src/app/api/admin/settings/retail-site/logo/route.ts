@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminOwnerForApi } from "@/lib/admin/auth";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant, getRuntimeSettings } from "@/lib/tenant/server";
+import { getRuntimeSettingsForTenant } from "@/lib/tenant/server";
 
 const LOGO_BUCKET = "retail-site-assets";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
@@ -81,7 +81,8 @@ export async function POST(req: Request) {
 
     await ensureLogoBucket();
 
-    const [tenant, runtime] = await Promise.all([getCurrentTenant(), getRuntimeSettings()]);
+    const tenant = adminAuth.session.business;
+    const runtime = await getRuntimeSettingsForTenant(tenant.id);
     const ext = fileExtension(file.type);
     const path = `${runtime.storageNamespace}/retail-header-logo/${tenant.id}/${crypto.randomUUID()}.${ext}`;
     const bytes = await file.arrayBuffer();
@@ -121,6 +122,11 @@ export async function DELETE(req: Request) {
 
     if (!path) {
       return NextResponse.json({ ok: false, error: "Missing file path." }, { status: 400 });
+    }
+
+    const runtime = await getRuntimeSettingsForTenant(adminAuth.session.business.id);
+    if (!path.startsWith(`${runtime.storageNamespace}/`)) {
+      return NextResponse.json({ ok: false, error: "Logo path is not available for this business." }, { status: 403 });
     }
 
     await ensureLogoBucket();

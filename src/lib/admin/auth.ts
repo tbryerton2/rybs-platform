@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getCurrentTenant, type TenantRecord } from "@/lib/tenant/server";
+import { getBrandSettingsForTenant, type TenantRecord } from "@/lib/tenant/server";
 
 export const ADMIN_ACCESS_TOKEN_COOKIE = "tcm_admin_access_token";
 export const ADMIN_REFRESH_TOKEN_COOKIE = "tcm_admin_refresh_token";
@@ -44,14 +44,34 @@ type AdminMembershipRow = {
 
 export type AdminSessionContext = {
   user: User;
-  business: TenantRecord;
+  userId: string;
+  email?: string;
+  businessId: string;
+  tenant: {
+    id: string;
+    slug: string;
+    status: TenantRecord["status"];
+    name: string;
+  };
+  business: TenantRecord & { name: string };
   membership: AdminMembership;
 };
 
+export type AdminAccessDeniedReason =
+  | "no_active_membership"
+  | "multiple_active_memberships"
+  | "inactive_tenant";
+
 export class AdminAccessDeniedError extends Error {
-  constructor(message = "Admin owner access is required.") {
+  reason: AdminAccessDeniedReason;
+
+  constructor(
+    message = "Admin owner access is required.",
+    reason: AdminAccessDeniedReason = "no_active_membership",
+  ) {
     super(message);
     this.name = "AdminAccessDeniedError";
+    this.reason = reason;
   }
 }
 
@@ -176,8 +196,55 @@ export async function getOptionalAdminSession(): Promise<AdminSessionContext | n
 
 type AdminSessionResolution =
   | { status: "unauthenticated" }
-  | { status: "unauthorized"; user: User; business: TenantRecord }
+  | { status: "unauthorized"; user: User; reason: AdminAccessDeniedReason }
   | { status: "authorized"; session: AdminSessionContext };
+
+type TenantLookupRow = TenantRecord;
+
+async function loadAdminBusinessTenant(membership: AdminMembership) {
+  const { data, error } = await supabaseAdmin
+    .from("tenants")
+    .select("id, slug, status, created_at, updated_at")
+    .eq("id", membership.businessId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data || (data as TenantLookupRow).status !== "active") {
+    return null;
+  }
+
+  const tenant = data as TenantLookupRow;
+  const brand = await getBrandSettingsForTenant(tenant);
+
+  return {
+    ...tenant,
+    name: brand.name,
+  };
+}
+
+export function buildAdminBusinessContext(input: {
+  user: User;
+  membership: AdminMembership;
+  business: TenantRecord & { name: string };
+}): AdminSessionContext {
+  return {
+    user: input.user,
+    userId: input.user.id,
+    email: input.user.email ?? undefined,
+    businessId: input.business.id,
+    tenant: {
+      id: input.business.id,
+      slug: input.business.slug,
+      status: input.business.status,
+      name: input.business.name,
+    },
+    business: input.business,
+    membership: input.membership,
+  };
+}
 
 async function resolveAdminSession(): Promise<AdminSessionResolution> {
   const cookieStore = await cookies();
@@ -199,28 +266,50 @@ async function resolveAdminSession(): Promise<AdminSessionResolution> {
 
   if (error || !data.user) return { status: "unauthenticated" };
 
-  const business = await getCurrentTenant();
   const membershipLookup = await supabaseAdmin
     .from("business_admin_memberships")
     .select("id, business_id, auth_user_id, role, status, created_at, updated_at")
-    .eq("business_id", business.id)
     .eq("auth_user_id", data.user.id)
     .eq("role", "owner")
-    .eq("status", "active")
-    .maybeSingle();
+    .eq("status", "active");
 
-  if (membershipLookup.error || !membershipLookup.data) {
-    return { status: "unauthorized", user: data.user, business };
+  if (membershipLookup.error) {
+    throw new Error(membershipLookup.error.message);
+  }
+
+  const memberships = ((membershipLookup.data ?? []) as AdminMembershipRow[]).map(mapAdminMembership);
+
+  if (memberships.length === 0) {
+    return { status: "unauthorized", user: data.user, reason: "no_active_membership" };
+  }
+
+  if (memberships.length > 1) {
+    return { status: "unauthorized", user: data.user, reason: "multiple_active_memberships" };
+  }
+
+  const membership = memberships[0];
+  if (!membership) {
+    return { status: "unauthorized", user: data.user, reason: "no_active_membership" };
+  }
+
+  const business = await loadAdminBusinessTenant(membership);
+
+  if (!business) {
+    return { status: "unauthorized", user: data.user, reason: "inactive_tenant" };
   }
 
   return {
     status: "authorized",
-    session: {
+    session: buildAdminBusinessContext({
       user: data.user,
       business,
-      membership: mapAdminMembership(membershipLookup.data as AdminMembershipRow),
-    },
+      membership,
+    }),
   };
+}
+
+export async function getAdminBusinessContext() {
+  return getOptionalAdminSession();
 }
 
 export async function requireAdminOwner(): Promise<AdminSessionContext> {
@@ -231,10 +320,23 @@ export async function requireAdminOwner(): Promise<AdminSessionContext> {
   }
 
   if (result.status === "unauthorized") {
-    throw new AdminAccessDeniedError();
+    throw new AdminAccessDeniedError(getAdminAccessDeniedMessage(result.reason), result.reason);
   }
 
   return result.session;
+}
+
+export const requireAdminBusinessContext = requireAdminOwner;
+
+function getAdminAccessDeniedMessage(reason: AdminAccessDeniedReason) {
+  switch (reason) {
+    case "multiple_active_memberships":
+      return "Multiple business memberships were found. Business switching is not available yet.";
+    case "inactive_tenant":
+      return "Your business is inactive. Contact support before using the admin.";
+    case "no_active_membership":
+      return "This account does not have active business admin access.";
+  }
 }
 
 export async function requireAdminOwnerForApi(): Promise<
@@ -253,9 +355,11 @@ export async function requireAdminOwnerForApi(): Promise<
   if (result.status === "unauthorized") {
     return {
       ok: false,
-      response: NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 }),
+      response: NextResponse.json({ ok: false, error: getAdminAccessDeniedMessage(result.reason) }, { status: 403 }),
     };
   }
 
   return { ok: true, session: result.session };
 }
+
+export const requireAdminBusinessContextForApi = requireAdminOwnerForApi;

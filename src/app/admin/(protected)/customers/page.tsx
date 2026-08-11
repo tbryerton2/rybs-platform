@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   ArrowPathIcon,
   ChevronRightIcon,
+  ClipboardDocumentListIcon,
+  MagnifyingGlassIcon,
   UserPlusIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
@@ -13,9 +15,12 @@ import { AdminPageHelpLink } from "@/app/admin/_components/admin/admin-page-help
 import { ClickableTableRow } from "@/app/admin/(protected)/analytics/zip-heatmap/clickable-table-row";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
+import { CardSectionHeader } from "@/app/admin/_components/admin/card-section-header";
+import { ShowCaption } from "@/app/admin/_components/admin/show-caption";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { combineCustomerNameParts } from "@/lib/customer-name";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { formatEnumLabel } from "@/lib/admin/enum-label";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type CustomerListView = "all" | "new" | "repeat";
@@ -83,6 +88,10 @@ function formatUsd(cents: number | null) {
     style: "currency",
     currency: "USD",
   }).format(cents / 100);
+}
+
+function formatCustomerCountLabel(count: number) {
+  return `${count} ${count === 1 ? "customer" : "customers"}`;
 }
 
 function includesTerm(value: string | null | undefined, search: string) {
@@ -200,6 +209,13 @@ export default async function AdminCustomersPage({
       )
     );
   });
+  const customerListDetail = query
+    ? `Matching “${query}”`
+    : selectedView === "new"
+      ? "This month"
+      : selectedView === "repeat"
+        ? "With repeat bookings"
+        : null;
 
   function buildCustomersHref(view: CustomerListView) {
     const params = new URLSearchParams();
@@ -222,41 +238,43 @@ export default async function AdminCustomersPage({
         }
       />
 
-      <section className="mb-8 grid gap-4 md:grid-cols-3">
-        <AdminSummaryCard
-          label="Total customers"
-          value={allCustomers.length}
-          icon={UsersIcon}
-          tone="rose"
-          layout="pricing"
-          stretch
-          href={buildCustomersHref("all")}
-          active={selectedView === "all"}
-        />
-        <AdminSummaryCard
-          label="New customers this month"
-          value={newCustomersThisMonth}
-          icon={UserPlusIcon}
-          tone="green"
-          layout="pricing"
-          stretch
-          href={buildCustomersHref("new")}
-          active={selectedView === "new"}
-        />
-        <AdminSummaryCard
-          label="Repeat customers"
-          value={repeatCustomers}
-          icon={ArrowPathIcon}
-          tone="blue"
-          layout="pricing"
-          stretch
-          href={buildCustomersHref("repeat")}
-          active={selectedView === "repeat"}
-        />
+      <section className="mb-8">
+        <ShowCaption />
+        <div className="grid gap-4 md:grid-cols-3">
+          <AdminSummaryCard
+            label="Total customers"
+            value={allCustomers.length}
+            icon={UsersIcon}
+            tone="slate"
+            layout="pricing"
+            stretch
+            href={buildCustomersHref("all")}
+          />
+          <AdminSummaryCard
+            label="New customers this month"
+            value={newCustomersThisMonth}
+            icon={UserPlusIcon}
+            tone="green"
+            layout="pricing"
+            stretch
+            href={buildCustomersHref("new")}
+            active={selectedView === "new"}
+          />
+          <AdminSummaryCard
+            label="Repeat customers"
+            value={repeatCustomers}
+            icon={ArrowPathIcon}
+            tone="blue"
+            layout="pricing"
+            stretch
+            href={buildCustomersHref("repeat")}
+            active={selectedView === "repeat"}
+          />
+        </div>
       </section>
 
       <section className="mb-8 rounded-[20px] bg-white px-6 pb-6 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-8 sm:pt-7">
-        <h2 className="text-lg font-semibold tracking-tight text-slate-900">Search customers</h2>
+        <CardSectionHeader title="Search customers" icon={<MagnifyingGlassIcon className="h-4 w-4" />} />
 
         <form className="mt-5 flex flex-col gap-3 sm:flex-row">
           <input type="hidden" name="view" value={selectedView} />
@@ -287,12 +305,14 @@ export default async function AdminCustomersPage({
       <section className="overflow-hidden rounded-[20px] bg-white shadow-xl ring-1 ring-slate-200/70">
         <div className="border-b border-slate-200 px-6 py-5 sm:px-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="text-lg font-semibold tracking-tight text-slate-900">Customer list</div>
-            <div className="text-sm font-medium text-slate-500">
-              {customers.length} {customers.length === 1 ? "customer" : "customers"}
-              {query ? <> matching “{query}”</> : null}
-              {!query && selectedView === "new" ? <> this month</> : null}
-              {!query && selectedView === "repeat" ? <> with repeat bookings</> : null}
+            <div>
+              <CardSectionHeader
+                title={`Customer list · ${formatCustomerCountLabel(customers.length)}`}
+                icon={<ClipboardDocumentListIcon className="h-4 w-4" />}
+              />
+              {customerListDetail ? (
+                <div className="mt-1 text-sm text-slate-500">{customerListDetail}</div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -384,7 +404,7 @@ export default async function AdminCustomersPage({
                               : "bg-slate-100 text-slate-700 ring-slate-200",
                         ].join(" ")}
                       >
-                        {customer.portal_status ?? "invited"}
+                        {formatEnumLabel(customer.portal_status ?? "invited")}
                       </span>
                     </td>
 

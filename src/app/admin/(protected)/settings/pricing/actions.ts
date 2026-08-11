@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin/pricing-settings-validation";
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import {
+  DEFAULT_PRICING_SETTINGS,
   isMissingPricingSettingsIncludedServicesBlurbColumnError,
   isMissingPricingSettingsRentalPeriodColumnsError,
 } from "@/lib/pricing-settings";
@@ -276,16 +277,6 @@ export async function updatePricingSettingsAction(
   const id = asString(formData.get("id")).trim();
   const values = buildValues(formData);
 
-  if (!id) {
-    return {
-      ...prevState,
-      success: false,
-      error: "Missing pricing settings record.",
-      message: "",
-      messageKey: Date.now(),
-    };
-  }
-
   const fieldErrors: PricingSettingsFieldErrors = {};
 
   const maxRentalDays = parseOptionalInteger(
@@ -326,17 +317,39 @@ export async function updatePricingSettingsAction(
     });
   }
 
-  const { error } = await supabaseAdmin
-    .from("pricing_settings")
-    .update({
-      max_rental_days: maxRentalDays,
-      allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
-      included_services_blurb: values.includedServicesBlurb || null,
-      ton_overage_price: tonOveragePrice,
-      business_id: adminSession.business.id,
-    })
-    .eq("id", id)
-    .eq("business_id", adminSession.business.id);
+  const payload = {
+    max_rental_days: maxRentalDays,
+    allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
+    included_services_blurb: values.includedServicesBlurb || null,
+    ton_overage_price: tonOveragePrice,
+    business_id: adminSession.business.id,
+  };
+
+  const query = id
+    ? supabaseAdmin
+        .from("pricing_settings")
+        .update(payload)
+        .eq("id", id)
+        .eq("business_id", adminSession.business.id)
+        .select("id")
+        .maybeSingle()
+    : supabaseAdmin
+        .from("pricing_settings")
+        .upsert(
+          {
+            standard_rental_price: DEFAULT_PRICING_SETTINGS.standardRentalPrice,
+            scheduled_pickup_price: DEFAULT_PRICING_SETTINGS.scheduledPickupPrice,
+            included_rental_days: DEFAULT_PRICING_SETTINGS.includedRentalDays,
+            daily_overage_price: DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
+            included_tons: DEFAULT_PRICING_SETTINGS.includedTons,
+            ...payload,
+          },
+          { onConflict: "business_id" },
+        )
+        .select("id")
+        .single();
+
+  const { data: savedPricing, error } = await query;
 
   if (error && isMissingPricingSettingsRentalPeriodColumnsError(error)) {
     return {
@@ -374,11 +387,22 @@ export async function updatePricingSettingsAction(
     };
   }
 
+  if (!savedPricing) {
+    return {
+      success: false,
+      message: "",
+      error: "We couldn't find pricing settings for this business. Refresh and try again.",
+      fieldErrors: {},
+      values,
+      messageKey: Date.now(),
+    };
+  }
+
   revalidatePath("/admin/settings/pricing");
 
   return {
     success: true,
-    message: "Pricing settings updated.",
+    message: id ? "Pricing settings updated." : "Pricing settings configured.",
     fieldErrors: {},
     values,
     messageKey: Date.now(),
