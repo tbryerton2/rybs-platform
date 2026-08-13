@@ -49,15 +49,27 @@ type VercelProjectDomainResponse = {
 };
 
 type VercelDomainConfigResponse = {
+  configuredBy?: string | null;
   configured?: boolean;
   misconfigured?: boolean;
-  recommendedCNAME?: string[] | string;
-  recommendedA?: string[] | string;
-  recommendedAValues?: string[] | string;
+  recommendedCNAME?: VercelRecommendedDnsValue[] | string[] | string;
+  recommendedIPv4?: VercelRecommendedIpv4Value[] | string[] | string;
+  recommendedA?: VercelRecommendedDnsValue[] | string[] | string;
+  recommendedAValues?: VercelRecommendedIpv4Value[] | string[] | string;
   acceptedChallenges?: Array<{
     type?: string;
     value?: string;
   }>;
+};
+
+type VercelRecommendedDnsValue = {
+  rank?: number;
+  value?: string;
+};
+
+type VercelRecommendedIpv4Value = {
+  rank?: number;
+  value?: string[] | string;
 };
 
 export type VercelDomainSnapshot = {
@@ -188,10 +200,16 @@ export function createVercelDomainClient(config = getVercelClientConfig()): Verc
   async function request<T>(input: {
     method: "GET" | "POST" | "DELETE";
     pathname: string;
+    query?: Record<string, string | undefined>;
     body?: Record<string, unknown>;
     ignoreMissing?: boolean;
   }) {
     const url = new URL(input.pathname, "https://api.vercel.com");
+    for (const [key, value] of Object.entries(input.query ?? {})) {
+      if (value) {
+        url.searchParams.set(key, value);
+      }
+    }
     appendTeamId(url, config.teamId);
 
     const response = await fetcher(url, {
@@ -201,6 +219,7 @@ export function createVercelDomainClient(config = getVercelClientConfig()): Verc
         "Content-Type": "application/json",
       },
       body: input.body ? JSON.stringify(input.body) : undefined,
+      cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
 
@@ -255,21 +274,63 @@ export function createVercelDomainClient(config = getVercelClientConfig()): Verc
       return request<VercelDomainConfigResponse>({
         method: "GET",
         pathname: `/v6/domains/${encodeURIComponent(hostname)}/config`,
+        query: { projectIdOrName: config.projectId },
       });
     },
   };
 }
 
-function arrayValues(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+function rankedDnsValues(value: unknown) {
+  if (!Array.isArray(value)) {
+    if (typeof value === "string" && value.trim()) {
+      return [value.trim()];
+    }
+
+    return [] as string[];
   }
 
-  if (typeof value === "string" && value.trim()) {
-    return [value.trim()];
+  const ranked = value
+    .map((item) => {
+      if (typeof item === "string") {
+        return { rank: Number.MAX_SAFE_INTEGER, values: [item.trim()] };
+      }
+
+      if (item && typeof item === "object" && "value" in item) {
+        const ranked = item as { rank?: unknown; value?: unknown };
+        const values = Array.isArray(ranked.value)
+          ? ranked.value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          : typeof ranked.value === "string" && ranked.value.trim()
+            ? [ranked.value.trim()]
+            : [];
+
+        return {
+          rank: typeof ranked.rank === "number" ? ranked.rank : Number.MAX_SAFE_INTEGER,
+          values,
+        };
+      }
+
+      return { rank: Number.MAX_SAFE_INTEGER, values: [] };
+    })
+    .sort((left, right) => left.rank - right.rank)
+    .filter((item) => item.values.length > 0);
+
+  const topRank = ranked[0]?.rank;
+  if (topRank === undefined) return [];
+
+  return ranked
+    .filter((item) => item.rank === topRank)
+    .flatMap((item) => item.values);
+}
+
+function dnsRecordNameForHostname(hostname: string, apexName?: string) {
+  const apex = normalizePublicHostname(apexName);
+  if (!apex) return hostname;
+  if (hostname === apex) return "@";
+  if (hostname.endsWith(`.${apex}`)) {
+    return hostname.slice(0, -(apex.length + 1));
   }
 
-  return [] as string[];
+  return hostname;
 }
 
 function isApexHostname(hostname: string) {
@@ -283,6 +344,9 @@ function buildDnsInstructions(input: {
 }) {
   const records: VercelDnsRecordInstruction[] = [];
   const notes: string[] = [];
+  const apex = normalizePublicHostname(input.projectDomain?.apexName);
+  const isApexDomain = apex ? input.hostname === apex : isApexHostname(input.hostname);
+  const shouldUseCname = !isApexDomain;
 
   for (const challenge of input.projectDomain?.verification ?? []) {
     if (!challenge.type || !challenge.domain || !challenge.value) continue;
@@ -295,27 +359,32 @@ function buildDnsInstructions(input: {
     });
   }
 
-  for (const value of arrayValues(input.domainConfig?.recommendedCNAME)) {
-    records.push({
-      type: "CNAME",
-      name: input.hostname,
-      value,
-      reason: "Point this subdomain at the Vercel project.",
-    });
+  if (shouldUseCname) {
+    for (const value of rankedDnsValues(input.domainConfig?.recommendedCNAME)) {
+      records.push({
+        type: "CNAME",
+        name: dnsRecordNameForHostname(input.hostname, input.projectDomain?.apexName),
+        value,
+        reason: "Point this subdomain at the Vercel project.",
+      });
+    }
   }
 
   const recommendedAValues = [
-    ...arrayValues(input.domainConfig?.recommendedA),
-    ...arrayValues(input.domainConfig?.recommendedAValues),
+    ...rankedDnsValues(input.domainConfig?.recommendedIPv4),
+    ...rankedDnsValues(input.domainConfig?.recommendedA),
+    ...rankedDnsValues(input.domainConfig?.recommendedAValues),
   ];
 
-  for (const value of recommendedAValues) {
-    records.push({
-      type: "A",
-      name: "@",
-      value,
-      reason: "Point this apex domain at the Vercel project.",
-    });
+  if (isApexDomain) {
+    for (const value of recommendedAValues) {
+      records.push({
+        type: "A",
+        name: "@",
+        value,
+        reason: "Point this apex domain at the Vercel project.",
+      });
+    }
   }
 
   if (records.length === 0 && input.domainConfig?.misconfigured) {

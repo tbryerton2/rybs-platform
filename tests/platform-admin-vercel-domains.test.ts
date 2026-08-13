@@ -31,14 +31,17 @@ test("Vercel client provisions a project domain with server-only bearer auth and
     }
 
     if (url.toString().includes("/v9/projects/prj_123/domains/book.example.com")) {
-      return jsonResponse({ name: "book.example.com", verified: true });
+      return jsonResponse({ name: "book.example.com", apexName: "example.com", verified: true });
     }
 
     if (url.toString().includes("/v6/domains/book.example.com/config")) {
       return jsonResponse({
         configured: false,
         misconfigured: true,
-        recommendedCNAME: "book-example.vercel-dns-016.com",
+        recommendedCNAME: [
+          { rank: 1, value: "book-example.vercel-dns-016.com." },
+          { rank: 2, value: "cname.vercel-dns.com." },
+        ],
       });
     }
 
@@ -54,12 +57,107 @@ test("Vercel client provisions a project domain with server-only bearer auth and
   const snapshot = await provisionVercelProjectDomain({ hostname: "book.example.com", client });
 
   assert.equal(snapshot.providerStatus, "awaiting_dns");
+  assert.equal(snapshot.dnsInstructions?.records.length, 1);
   assert.equal(snapshot.dnsInstructions?.records[0]?.type, "CNAME");
-  assert.equal(snapshot.dnsInstructions?.records[0]?.value, "book-example.vercel-dns-016.com");
+  assert.equal(snapshot.dnsInstructions?.records[0]?.name, "book");
+  assert.equal(snapshot.dnsInstructions?.records[0]?.value, "book-example.vercel-dns-016.com.");
   assert.ok(calls.every((call) => call.url.includes("teamId=team_123")));
+  assert.ok(
+    calls
+      .filter((call) => call.url.includes("/v6/domains/book.example.com/config"))
+      .every((call) => call.url.includes("projectIdOrName=prj_123")),
+  );
   assert.ok(calls.every((call) => call.authorization === "Bearer vercel_test_token"));
   assert.ok(calls.every((call) => !call.url.includes("vercel_test_token")));
   assert.ok(calls.every((call) => !call.body?.includes("vercel_test_token")));
+});
+
+test("Vercel domain config parser handles current ranked CNAME response shape", () => {
+  const snapshot = buildVercelDomainSnapshot({
+    hostname: "test.rybsoftware.com",
+    projectDomain: {
+      name: "test.rybsoftware.com",
+      apexName: "rybsoftware.com",
+      verified: true,
+    },
+    domainConfig: {
+      configuredBy: null,
+      misconfigured: true,
+      recommendedCNAME: [
+        {
+          rank: 1,
+          value: "78af62c253885206.vercel-dns-016.com.",
+        },
+        {
+          rank: 2,
+          value: "cname.vercel-dns.com.",
+        },
+      ],
+      recommendedIPv4: [
+        {
+          rank: 1,
+          value: ["216.150.1.1", "216.150.16.1"],
+        },
+      ],
+      acceptedChallenges: [],
+    },
+  });
+
+  assert.equal(snapshot.providerStatus, "awaiting_dns");
+  assert.equal(snapshot.dnsInstructions?.records.length, 1);
+  assert.deepEqual(snapshot.dnsInstructions?.records[0], {
+    type: "CNAME",
+    name: "test",
+    value: "78af62c253885206.vercel-dns-016.com.",
+    reason: "Point this subdomain at the Vercel project.",
+  });
+});
+
+test("Vercel domain config parser uses top-ranked IPv4 records for apex domains", () => {
+  const snapshot = buildVercelDomainSnapshot({
+    hostname: "rybsoftware.com",
+    projectDomain: {
+      name: "rybsoftware.com",
+      apexName: "rybsoftware.com",
+      verified: true,
+    },
+    domainConfig: {
+      configuredBy: null,
+      misconfigured: true,
+      recommendedCNAME: [
+        {
+          rank: 1,
+          value: "78af62c253885206.vercel-dns-016.com.",
+        },
+      ],
+      recommendedIPv4: [
+        {
+          rank: 1,
+          value: ["216.150.1.1", "216.150.16.1"],
+        },
+        {
+          rank: 2,
+          value: ["76.76.21.21"],
+        },
+      ],
+    },
+  });
+
+  assert.equal(snapshot.providerStatus, "awaiting_dns");
+  assert.deepEqual(snapshot.dnsInstructions?.records, [
+    {
+      type: "A",
+      name: "@",
+      value: "216.150.1.1",
+      reason: "Point this apex domain at the Vercel project.",
+    },
+    {
+      type: "A",
+      name: "@",
+      value: "216.150.16.1",
+      reason: "Point this apex domain at the Vercel project.",
+    },
+  ]);
 });
 
 test("Vercel ownership verification TXT records are surfaced separately from DNS configuration", () => {
