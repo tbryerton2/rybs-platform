@@ -102,6 +102,7 @@ test("Vercel provisioning/check/removal flows are exact-domain scoped and retry 
   assert.match(actions, /export async function provisionDomainAction/);
   assert.match(actions, /export async function checkDomainAction/);
   assert.match(actions, /await provisionPlatformTenantDomain\(/);
+  assert.match(actions, /checkedDomainId=\$\{result\.domainId\}#domain-\$\{result\.domainId\}/);
   assert.match(source, /await markDomainProvisioning\(domain\)/);
   assert.match(source, /await fetchVercelDomainSnapshot\(\{\s*hostname: domain\.hostname,\s*attemptVerification: true,/);
   assert.match(source, /await removeVercelProjectDomain\(\{ hostname: domain\.hostname \}\)/);
@@ -163,6 +164,9 @@ test("platform admin domain UI exposes compact management actions and warnings",
   assert.match(detailPage, /Activate/);
   assert.match(detailPage, /Provision on Vercel/);
   assert.match(detailPage, /Check domain/);
+  assert.match(detailPage, /checkedDomainId/);
+  assert.match(detailPage, /id=\{`domain-\$\{domain\.id\}`\}/);
+  assert.match(detailPage, /checkedDomainId === domain\.id/);
   assert.match(detailPage, /DNS required/);
   assert.match(detailPage, /Ownership TXT required/);
   assert.match(detailPage, /Disable/);

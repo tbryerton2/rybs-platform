@@ -291,7 +291,9 @@ export async function checkDomainAction(formData: FormData) {
     });
 
     revalidatePlatformBusiness(result.tenantId);
-    redirect(`/platform-admin/businesses/${result.tenantId}?status=domain-checked`);
+    redirect(
+      `/platform-admin/businesses/${result.tenantId}?status=domain-checked&checkedDomainId=${result.domainId}#domain-${result.domainId}`,
+    );
   } catch (error) {
     if (error instanceof PlatformDomainMutationError) {
       redirectDomainMutationError(tenantId, error);

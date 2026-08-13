@@ -43,7 +43,7 @@ export const revalidate = 0;
 
 type PageProps = {
   params: Promise<{ tenantId: string }>;
-  searchParams?: Promise<{ status?: string; error?: string }>;
+  searchParams?: Promise<{ status?: string; error?: string; checkedDomainId?: string }>;
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -192,7 +192,7 @@ function pageStatusMessage(status?: string, error?: string) {
     case "domain-provisioned":
       return { tone: "success" as const, text: "Vercel provisioning state was updated." };
     case "domain-checked":
-      return { tone: "success" as const, text: "Domain configuration was re-checked." };
+      return null;
     case "domain-updated":
       return { tone: "success" as const, text: "Domain mapping was updated." };
     case "domain-activated":
@@ -608,9 +608,11 @@ function DomainDnsInstructions({ domain }: { domain: PlatformTenantDomain }) {
 function TenantDomainsSection({
   tenant,
   domains,
+  checkedDomainId,
 }: {
   tenant: PlatformTenantSummary;
   domains: PlatformTenantDomain[];
+  checkedDomainId?: string;
 }) {
   const activeDomains = domains.filter((domain) => domain.status === "active");
   const hasPendingCustomDomain = domains.some(
@@ -662,7 +664,11 @@ function TenantDomainsSection({
             const isOnlyActiveDomain = domain.status === "active" && activeDomains.length <= 1;
 
             return (
-              <article key={domain.id} className="rounded-[8px] border border-slate-200 p-4">
+              <article
+                key={domain.id}
+                id={`domain-${domain.id}`}
+                className="scroll-mt-6 rounded-[8px] border border-slate-200 p-4"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="break-all font-mono text-sm font-semibold text-slate-900">
@@ -746,6 +752,12 @@ function TenantDomainsSection({
                     ) : null}
                   </div>
                 </div>
+
+                {checkedDomainId === domain.id ? (
+                  <div className="mt-4">
+                    <Alert tone="success">Domain configuration was re-checked.</Alert>
+                  </div>
+                ) : null}
 
                 <DomainDnsInstructions domain={domain} />
 
@@ -1187,7 +1199,11 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
       <DomainIntegrationStatusSection />
 
-      <TenantDomainsSection tenant={tenant} domains={domains} />
+      <TenantDomainsSection
+        tenant={tenant}
+        domains={domains}
+        checkedDomainId={search.checkedDomainId}
+      />
 
       <section id="setup-checklist" className="scroll-mt-6">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
