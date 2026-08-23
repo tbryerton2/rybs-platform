@@ -40,7 +40,6 @@ const iconMap = {
   serviceArea: MapIcon,
   retailSiteSettings: AdjustmentsHorizontalIcon,
   retailSiteContent: DocumentTextIcon,
-  reports: DocumentTextIcon,
   leadFunnel: FunnelIcon,
   zipHeatmap: ChartBarSquareIcon,
   guides: BookOpenIcon,

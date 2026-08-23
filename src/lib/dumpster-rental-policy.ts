@@ -1,6 +1,7 @@
 import "server-only";
 
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
+import { getPublicDumpsterProductSetting } from "@/lib/public-dumpster-product";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant } from "@/lib/tenant/server";
 
@@ -8,6 +9,7 @@ type DumpsterRentalPolicyInput = {
   dumpsterSize?: string | null;
   dumpsterProductId?: string | null;
   businessId?: string | null;
+  requirePublicProduct?: boolean;
 };
 
 export type DumpsterRentalPolicy = {
@@ -43,7 +45,13 @@ export async function getDumpsterRentalPolicy(
       }
     | null = null;
 
-  if (dumpsterProductId || dumpsterSize) {
+  if (input.requirePublicProduct) {
+    productSettings = await getPublicDumpsterProductSetting({
+      businessId,
+      dumpsterSize,
+      dumpsterProductId,
+    });
+  } else if (dumpsterProductId || dumpsterSize) {
     const query = supabaseAdmin
       .from("dumpster_product_settings")
       .select("included_rental_days, extra_day_price, base_price, display_name")

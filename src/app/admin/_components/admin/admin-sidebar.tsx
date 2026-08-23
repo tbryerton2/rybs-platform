@@ -57,7 +57,7 @@ export function AdminSidebar({
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full border border-orange-300 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-800 transition-colors hover:border-orange-400 hover:bg-orange-100 hover:text-orange-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/50 focus-visible:ring-offset-2"
+              className="inline-flex items-center rounded-full border border-[#F97316]/40 bg-orange-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#F97316] transition-colors hover:border-[#F97316]/60 hover:bg-orange-100 hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/50 focus-visible:ring-offset-2"
             >
               {businessName}
             </a>

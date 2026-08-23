@@ -66,11 +66,11 @@ export function ZipStatusToggleForm({
         disabled={pending}
         className={
           active
-            ? "admin-btn admin-btn-destructive h-10 px-4"
+            ? "admin-btn admin-btn-secondary h-10 px-4"
             : "admin-btn admin-btn-primary h-10 px-4"
         }
       >
-        {pending ? (active ? "Deactivating..." : "Activating...") : active ? "Deactivate" : "Activate"}
+        {pending ? (active ? "Disabling..." : "Activating...") : active ? "Disable" : "Activate"}
       </button>
     </form>
   );

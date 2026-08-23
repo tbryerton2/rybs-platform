@@ -1,10 +1,12 @@
 // src/app/api/hold/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { linkBookingHoldToFunnelSessionFromRequest } from "@/lib/analytics/booking-funnel-server";
 import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { addDaysYmd, getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { supabase } from "@/lib/supabase";
 import {
   getRetailCalendarClosureForDate,
@@ -55,13 +57,21 @@ export async function POST(req: Request) {
     const tenant = await getCurrentTenant();
     const body = await req.json().catch(() => ({}));
     const deliveryDate = (body?.deliveryDate || "").trim();
+    const analyticsBookingSessionToken =
+      typeof body?.analyticsBookingSessionToken === "string"
+        ? body.analyticsBookingSessionToken.trim()
+        : null;
     const rentalDaysRaw = body?.rentalDays;
     const zip = (body?.zip || "").trim();
     const selectedDumpster = resolveSelectedDumpster({
       dumpsterSize: body?.dumpsterSize,
       dumpsterProductId: body?.dumpsterProductId,
     });
-    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
+    const rentalPolicy = await getDumpsterRentalPolicy({
+      ...selectedDumpster,
+      businessId: tenant.id,
+      requirePublicProduct: true,
+    });
     const requestedRentalDays =
       Number.isFinite(Number(rentalDaysRaw)) && Number(rentalDaysRaw) > 0
         ? Math.floor(Number(rentalDaysRaw))
@@ -137,6 +147,14 @@ export async function POST(req: Request) {
         deliveryDate: existingHold.data.delivery_date,
         expiresAt: existingHold.data.expires_at,
         holdMinutes,
+      });
+
+      await linkBookingHoldToFunnelSessionFromRequest(req, {
+        businessId: tenant.id,
+        bookingSessionToken: analyticsBookingSessionToken,
+        bookingHoldId: existingHold.data.id,
+        dumpsterProductId: existingHold.data.dumpster_product_id,
+        dumpsterSize: existingHold.data.dumpster_size,
       });
 
       return setCookie ? await attachClientIdCookie(res, clientId, tenant.id) : res;
@@ -284,6 +302,14 @@ export async function POST(req: Request) {
       holdMinutes,
     });
 
+    await linkBookingHoldToFunnelSessionFromRequest(req, {
+      businessId: tenant.id,
+      bookingSessionToken: analyticsBookingSessionToken,
+      bookingHoldId: insert.data.id,
+      dumpsterProductId: insert.data.dumpster_product_id,
+      dumpsterSize: insert.data.dumpster_size,
+    });
+
     return setCookie ? await attachClientIdCookie(res, clientId, tenant.id) : res;
 
   } catch (e: unknown) {
@@ -291,6 +317,13 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: e.publicMessage },
         { status: 503 }
+      );
+    }
+
+    if (isPublicDumpsterProductError(e)) {
+      return NextResponse.json(
+        { ok: false, error: e.message },
+        { status: e.status },
       );
     }
 

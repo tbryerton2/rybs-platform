@@ -211,6 +211,49 @@ body {
   color: #991b1b;
 }
 
+.tcm-admin .reports-card-success {
+  border-color: rgb(167 243 208 / 0.8);
+  background-color: rgb(236 253 245 / 0.7);
+}
+
+.tcm-admin .reports-card-warning {
+  border-color: rgb(254 215 170 / 0.8);
+  background-color: rgb(255 247 237 / 0.8);
+}
+
+.tcm-admin .reports-card-neutral {
+  border-color: rgb(226 232 240 / 0.8);
+  background-color: #fff;
+}
+
+.tcm-admin .reports-trend-success {
+  background-color: rgb(236 253 245);
+  color: rgb(4 120 87);
+  --tw-ring-color: rgb(167 243 208);
+}
+
+.tcm-admin .reports-trend-warning {
+  background-color: rgb(255 247 237);
+  color: #f97316;
+  --tw-ring-color: rgb(254 215 170);
+}
+
+.tcm-admin .reports-trend-neutral {
+  background-color: rgb(241 245 249);
+  color: rgb(51 65 85);
+  --tw-ring-color: rgb(226 232 240);
+}
+
+.tcm-admin .reports-info-badge {
+  background-color: rgb(240 249 255);
+  color: rgb(3 105 161);
+  --tw-ring-color: rgb(186 230 253);
+}
+
+.tcm-admin .reports-info-fill {
+  background-color: rgb(14 165 233);
+}
+
 .tcm-zip-tooltip {
   border: 1px solid rgba(226, 232, 240, 0.98);
   border-radius: 18px;

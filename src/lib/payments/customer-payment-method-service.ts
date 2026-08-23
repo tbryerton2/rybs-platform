@@ -272,7 +272,7 @@ export async function saveCustomerPaymentMethod(
             email: clean(input.email),
             phone: clean(input.phone),
             address: input.address,
-            note: "Created by Tan Can Man card-on-file flow.",
+            note: "Created by card-on-file flow.",
           });
         } catch (error) {
           throw toSaveCustomerPaymentMethodError(error, {

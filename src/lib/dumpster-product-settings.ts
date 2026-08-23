@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getOfferedDumpsterProducts, type OfferedDumpsterProduct } from "@/lib/admin/dumpster-inventory";
+import { getDumpsterSizeCapacity } from "@/lib/booking-product";
 import { getZipPricingOverridesBySize } from "@/lib/pricing";
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -95,6 +96,39 @@ function fallbackProductId(size: string) {
   const normalized = size.trim().toLowerCase();
   if (normalized === "14 yard") return "default";
   return normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "default";
+}
+
+function normalizeSizeText(value: string | null | undefined) {
+  return value?.trim().toLowerCase().replace(/\s+/g, " ") || "";
+}
+
+function findSettingForSize(settings: DumpsterProductSetting[], size: string) {
+  const normalizedSize = normalizeSizeText(size);
+  const exact = settings.find((setting) => normalizeSizeText(setting.dumpsterSize) === normalizedSize);
+
+  if (exact) return exact;
+
+  const capacity = getDumpsterSizeCapacity(size);
+  if (capacity === null) return undefined;
+
+  return settings.find((setting) => getDumpsterSizeCapacity(setting.dumpsterSize) === capacity);
+}
+
+function findOverridePrice(overridesBySize: Map<string, number>, size: string) {
+  const normalizedSize = normalizeSizeText(size);
+
+  for (const [overrideSize, price] of overridesBySize) {
+    if (normalizeSizeText(overrideSize) === normalizedSize) return price;
+  }
+
+  const capacity = getDumpsterSizeCapacity(size);
+  if (capacity === null) return undefined;
+
+  for (const [overrideSize, price] of overridesBySize) {
+    if (getDumpsterSizeCapacity(overrideSize) === capacity) return price;
+  }
+
+  return undefined;
 }
 
 function mapRow(row: DumpsterProductSettingsRow): DumpsterProductSetting {
@@ -219,17 +253,13 @@ export async function getPublicDumpsterProducts(
     getZipPricingOverridesBySize(zip, resolvedBusinessId),
   ]);
 
-  const settingsBySize = new Map(
-    productSettings.map((setting) => [setting.dumpsterSize.trim().toLowerCase(), setting]),
-  );
-
   return offeredProducts
     .slice()
     .sort(compareOfferedProducts)
     .map((offered) => {
-      const setting = settingsBySize.get(offered.dumpsterSize.trim().toLowerCase());
+      const setting = findSettingForSize(productSettings, offered.dumpsterSize);
       const basePrice =
-        zipPricingOverrides.overridesBySize.get(offered.dumpsterSize.trim().toLowerCase()) ??
+        findOverridePrice(zipPricingOverrides.overridesBySize, offered.dumpsterSize) ??
         setting?.basePrice ??
         pricingSettings.basePrice ??
         DEFAULT_PRICING_SETTINGS.basePrice;

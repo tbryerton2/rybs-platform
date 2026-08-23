@@ -11,6 +11,7 @@ import {
   HoldCountdownBanner,
   useBookingHoldCountdown,
 } from "@/components/booking/hold-countdown-banner";
+import { BookingFunnelStepTracker } from "@/lib/analytics/booking-funnel-client";
 import { RENTAL_TERMS_VERSION } from "@/lib/booking-terms";
 import { formatUsdFromCents } from "@/lib/money";
 import {
@@ -305,6 +306,8 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
     if (
       priceQuoteMatchesSelection(draft.priceQuote, {
         zip: bookingZip,
+        dumpsterSize: selectedDumpsterSize,
+        dumpsterProductId: draft.dumpsterProductId,
         deliveryDate,
         pickupDate,
         pickupMode,
@@ -485,6 +488,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
 
   return (
     <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
+      <BookingFunnelStepTracker stepKey="review" />
       <div className="mx-auto max-w-2xl px-6 pt-10 pb-6 sm:pb-8">
         <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 sm:px-12 sm:pb-12 sm:pt-8 shadow-xl ring-1 ring-slate-200/70">
           <div className="space-y-3">

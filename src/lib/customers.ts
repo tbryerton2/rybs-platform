@@ -69,6 +69,16 @@ function isCustomerLocationForeignKeyError(errorLike: { message?: string | null 
   );
 }
 
+function isCustomerEmailUniquenessError(errorLike: { message?: string | null; code?: string | null } | null | undefined) {
+  const message = typeof errorLike?.message === "string" ? errorLike.message.toLowerCase() : "";
+
+  return (
+    errorLike?.code === "23505" &&
+    (message.includes("customers_business_id_normalized_email_key") ||
+      message.includes("customers_normalized_email_key"))
+  );
+}
+
 function getLegacyCustomerIdentifier(input: CustomerContactInput) {
   const normalizedEmail = normalizeEmail(input.email);
   if (normalizedEmail) {
@@ -345,9 +355,15 @@ export async function findOrCreateCustomerRecord(
         .single();
     }
 
-    if (inserted.error) throw new Error(inserted.error.message);
-    customer = inserted.data as CustomerRow;
-    customerCreated = true;
+    if (inserted.error && isCustomerEmailUniquenessError(inserted.error)) {
+      customer = await findMatchingCustomer(supabase, input, resolvedBusinessId);
+    }
+
+    if (inserted.error && !customer) throw new Error(inserted.error.message);
+    if (!customer) {
+      customer = inserted.data as CustomerRow;
+      customerCreated = true;
+    }
   } else {
     assertPortalAccessEnabled(customer);
     const updates: Record<string, string> = {};

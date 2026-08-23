@@ -8,6 +8,7 @@ import {
   HoldCountdownBanner,
   useBookingHoldCountdown,
 } from "@/components/booking/hold-countdown-banner";
+import { BookingFunnelStepTracker } from "@/lib/analytics/booking-funnel-client";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 import {
   ACCESS_ISSUES,
@@ -656,6 +657,7 @@ export default function PlacementStepPageClient({ content }: PlacementStepPageCl
 
   return (
     <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
+      <BookingFunnelStepTracker stepKey="placement_details" />
       <div className="mx-auto max-w-2xl px-6 pb-16 pt-10">
         <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
           {!hasHydratedDraft || !hasRequiredPriorSteps ? (

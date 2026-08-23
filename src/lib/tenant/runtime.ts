@@ -7,6 +7,8 @@ export const TENANT_STORAGE_KEYS = {
   portalRefreshToken: "portal_refresh_token",
   portalClientId: "client_id",
   portalLoginCooldownUntil: "portal_login_cooldown_until",
+  analyticsVisitor: "analytics_visitor",
+  analyticsBookingSession: "analytics_booking_session",
 } as const;
 
 export type TenantStorageKeyName =

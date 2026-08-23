@@ -26,7 +26,7 @@ type ServiceZipRow = {
 function StatusBadge({ active }: { active: boolean }) {
   return active ? (
     <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-      Enabled
+      Active
     </span>
   ) : (
     <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-200">
@@ -45,7 +45,7 @@ function PricingBadge({
   }
 
   return (
-    <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200">
+    <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200">
       Override: ${priceOverride}
     </span>
   );
@@ -74,18 +74,16 @@ function SummaryCard({
       onClick={onClick}
       aria-pressed={active}
       className={[
-        tone === "green"
-          ? "h-full w-full rounded-[14px] border border-slate-200 bg-white p-5 text-left shadow-sm ring-1 transition duration-200 ease-out"
-          : adminSummaryCardShell(
-              tone,
-              "h-full w-full p-5 text-left ring-1 transition duration-200 ease-out",
-            ),
+        adminSummaryCardShell(
+          tone,
+          "h-full w-full p-5 text-left ring-1 transition duration-200 ease-out",
+        ),
         "cursor-pointer hover:-translate-y-0.5 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-300",
         active
           ? tone === "blue"
             ? "ring-sky-300/90 shadow-[0_0_0_1px_rgba(125,211,252,0.5)] shadow-md"
             : tone === "green"
-              ? "ring-slate-300/90 shadow-[0_0_0_1px_rgba(203,213,225,0.55)] shadow-md"
+              ? "ring-emerald-300/90 shadow-[0_0_0_1px_rgba(110,231,183,0.45)] shadow-md"
               : "ring-amber-300/90 shadow-[0_0_0_1px_rgba(252,211,77,0.4)] shadow-md"
           : "ring-white/50 hover:ring-slate-200/80",
       ].join(" ")}
@@ -97,7 +95,7 @@ function SummaryCard({
             tone === "blue"
               ? "bg-sky-100/95 text-sky-700 ring-sky-200/90"
               : tone === "green"
-                ? "bg-slate-100/95 text-slate-600 ring-slate-200/90"
+                ? "bg-emerald-100/95 text-emerald-700 ring-emerald-200/90"
                 : "bg-amber-100/95 text-amber-700 ring-amber-200/90",
             active ? "scale-[1.02]" : "",
           ].join(" ")}

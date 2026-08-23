@@ -68,6 +68,23 @@ test("quote matching remains backward compatible when product identity is omitte
   );
 });
 
+test("product-specific included days and extra-day pricing are reflected in the quote", () => {
+  const quote = buildBookingPriceQuote({
+    ...baseQuoteInput,
+    dumpsterSize: "20 yard",
+    dumpsterProductId: "tenant-20-yard",
+    pickupDate: "2026-06-12",
+    standardRentalDays: 10,
+    dailyOveragePrice: 35,
+  });
+
+  assert.equal(quote.includedRentalDays, 10);
+  assert.equal(quote.dailyOveragePrice, 35);
+  assert.equal(quote.extraDays, 1);
+  assert.equal(quote.extraDaysChargeCents, 3500);
+  assert.equal(quote.rentalDurationDays, 11);
+});
+
 test("product-aware matching refreshes older quotes without product identity", () => {
   const { dumpsterSize, dumpsterProductId, ...olderQuote } = buildBookingPriceQuote(baseQuoteInput);
   assert.equal(dumpsterSize, "14 yard");

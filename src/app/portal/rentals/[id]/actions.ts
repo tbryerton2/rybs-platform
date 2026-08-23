@@ -1,9 +1,11 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePortalCustomer } from "@/lib/portal/auth";
 import { sendEmail } from "@/lib/email/ses";
+import { resolveTenantEmailSender, tenantSenderSendEmailOptions } from "@/lib/email/tenant-sender";
 import { buildAdminPortalRequestEmail } from "@/lib/email/templates/admin-portal-request";
 import { buildAdminIssueReportEmail } from "@/lib/email/templates/admin-issue-report";
 import {
@@ -20,6 +22,7 @@ import {
 import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant } from "@/lib/tenant/server";
+import { getTenantCommunicationSettings } from "@/lib/tenant/communications";
 
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
@@ -86,13 +89,6 @@ async function sendAdminPortalRequestEmail({
   priority?: string | null;
   details: Record<string, string | number | boolean | null | undefined>;
 }) {
-  const adminBookingEmail = process.env.ADMIN_BOOKING_EMAIL;
-
-  if (!adminBookingEmail) {
-    console.error(`[portal] skipped ${requestType} email because ADMIN_BOOKING_EMAIL is missing.`);
-    return;
-  }
-
   const serviceAddress = [
     booking.customer_street,
     booking.customer_city,
@@ -101,8 +97,23 @@ async function sendAdminPortalRequestEmail({
     .filter(Boolean)
     .join(", ");
 
-  const adminUrl = process.env.NEXT_PUBLIC_SITE_URL
-    ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/admin/portal-requests`
+  const tenant = await getCurrentTenant();
+  const headerStore = await headers();
+  const communication = await getTenantCommunicationSettings(tenant, {
+    host: headerStore.get("x-forwarded-host") ?? headerStore.get("host"),
+    protocol: headerStore.get("x-forwarded-proto"),
+  });
+
+  if (communication.bookingNotificationRecipients.length === 0) {
+    console.error(`[portal] skipped ${requestType} email because no tenant notification recipient is configured.`, {
+      businessId: tenant.id,
+      tenantSlug: tenant.slug,
+    });
+    return;
+  }
+
+  const adminUrl = communication.publicBaseUrl
+    ? `${communication.publicBaseUrl}/admin/portal-requests`
     : null;
 
   const adminNotification = buildAdminPortalRequestEmail({
@@ -117,11 +128,18 @@ async function sendAdminPortalRequestEmail({
   });
 
   try {
+    const sender = await resolveTenantEmailSender({
+      tenant,
+      businessName: communication.businessName,
+      supportEmail: communication.supportEmail,
+    });
+
     await sendEmail({
-      to: adminBookingEmail,
+      to: communication.bookingNotificationRecipients,
       subject: adminNotification.subject,
       text: adminNotification.text,
       html: adminNotification.html,
+      ...tenantSenderSendEmailOptions(sender),
     });
   } catch (portalRequestEmailError) {
     console.error(`[portal] ${requestType} email send failed:`, {
@@ -402,9 +420,6 @@ export async function submitPortalIssueReportAction(formData: FormData) {
     throw new Error(insertError.message);
   }
 
-    const adminBookingEmail = process.env.ADMIN_BOOKING_EMAIL;
-
-  if (adminBookingEmail) {
     const serviceAddress = [
       booking.customer_street,
       booking.customer_city,
@@ -413,39 +428,58 @@ export async function submitPortalIssueReportAction(formData: FormData) {
       .filter(Boolean)
       .join(", ");
 
-    const adminUrl = process.env.NEXT_PUBLIC_SITE_URL
-      ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")}/admin/portal-requests?filter=issue_report`
-      : null;
-
-    const issueReportEmail = buildAdminIssueReportEmail({
-      customerName: customer.name,
-      customerEmail: customer.email,
-      bookingId: booking.id,
-      issueCategory: details.issueCategory,
-      urgency: details.urgency,
-      description: details.description,
-      preferredContactMethod: details.preferredContactMethod,
-      serviceAddress,
-      adminUrl,
+    const tenant = await getCurrentTenant();
+    const headerStore = await headers();
+    const communication = await getTenantCommunicationSettings(tenant, {
+      host: headerStore.get("x-forwarded-host") ?? headerStore.get("host"),
+      protocol: headerStore.get("x-forwarded-proto"),
     });
 
-    try {
-      await sendEmail({
-        to: adminBookingEmail,
-        subject: issueReportEmail.subject,
-        text: issueReportEmail.text,
-        html: issueReportEmail.html,
-      });
-    } catch (issueReportEmailError) {
-      console.error("[portal] issue report email send failed:", {
+    if (communication.bookingNotificationRecipients.length > 0) {
+      const adminUrl = communication.publicBaseUrl
+        ? `${communication.publicBaseUrl}/admin/portal-requests?filter=issue_report`
+        : null;
+
+      const issueReportEmail = buildAdminIssueReportEmail({
+        businessName: communication.businessName,
+        customerName: customer.name,
+        customerEmail: customer.email,
         bookingId: booking.id,
-        customerId: customer.id,
-        error: issueReportEmailError,
+        issueCategory: details.issueCategory,
+        urgency: details.urgency,
+        description: details.description,
+        preferredContactMethod: details.preferredContactMethod,
+        serviceAddress,
+        adminUrl,
+      });
+
+      try {
+        const sender = await resolveTenantEmailSender({
+          tenant,
+          businessName: communication.businessName,
+          supportEmail: communication.supportEmail,
+        });
+
+        await sendEmail({
+          to: communication.bookingNotificationRecipients,
+          subject: issueReportEmail.subject,
+          text: issueReportEmail.text,
+          html: issueReportEmail.html,
+          ...tenantSenderSendEmailOptions(sender),
+        });
+      } catch (issueReportEmailError) {
+        console.error("[portal] issue report email send failed:", {
+          bookingId: booking.id,
+          customerId: customer.id,
+          error: issueReportEmailError,
+        });
+      }
+    } else {
+      console.error("[portal] skipped issue report email because no tenant notification recipient is configured.", {
+        businessId: tenant.id,
+        tenantSlug: tenant.slug,
       });
     }
-  } else {
-    console.error("[portal] skipped issue report email because ADMIN_BOOKING_EMAIL is missing.");
-  }
 
   revalidatePath(`/portal/rentals/${booking.id}`);
   revalidatePath(`/portal/rentals/${booking.id}/issue-report`);

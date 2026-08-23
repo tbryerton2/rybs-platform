@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getActiveServiceAreaZip, sanitizeServiceAreaZip } from "@/lib/service-area";
 import { getDumpsterPriceForZip } from "@/lib/pricing";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { isTenantResolutionError } from "@/lib/tenant/resolution";
 import { resolvePublicTenantFromRequest } from "@/lib/tenant/server";
 
@@ -13,10 +14,10 @@ export async function GET(req: Request) {
     const deliveryDate = searchParams.get("deliveryDate");
     const pickupDate = searchParams.get("pickupDate");
     const pickupMode = searchParams.get("pickupMode");
-    const selectedDumpster = resolveSelectedDumpster({
-      dumpsterSize: searchParams.get("dumpsterSize"),
-      dumpsterProductId: searchParams.get("dumpsterProductId"),
-    });
+    const rawDumpsterSize = searchParams.get("dumpsterSize");
+    const rawDumpsterProductId = searchParams.get("dumpsterProductId");
+    const hasSelectedDumpster =
+      Boolean(rawDumpsterSize?.trim()) || Boolean(rawDumpsterProductId?.trim());
 
     if (!/^\d{5}$/.test(zip)) {
       return NextResponse.json({ ok: false, error: "Invalid ZIP" }, { status: 400 });
@@ -26,6 +27,22 @@ export async function GET(req: Request) {
     if (!data) {
       return NextResponse.json({ ok: false, serviced: false });
     }
+
+    if (!hasSelectedDumpster) {
+      return NextResponse.json({
+        ok: true,
+        serviced: true,
+        zip: data.zip,
+        county: data.county,
+        town: data.town,
+        state: data.state,
+      });
+    }
+
+    const selectedDumpster = resolveSelectedDumpster({
+      dumpsterSize: rawDumpsterSize,
+      dumpsterProductId: rawDumpsterProductId,
+    });
 
     const pricing = await getDumpsterPriceForZip(
       zip,
@@ -70,6 +87,10 @@ export async function GET(req: Request) {
   } catch (error) {
     if (isTenantResolutionError(error)) {
       return NextResponse.json({ ok: false, error: error.publicMessage }, { status: 503 });
+    }
+
+    if (isPublicDumpsterProductError(error)) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
     }
 
     throw error;

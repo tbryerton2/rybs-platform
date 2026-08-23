@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BlockedZipPanel } from "@/components/BlockedZipPanel";
+import { BookingFunnelStepTracker } from "@/lib/analytics/booking-funnel-client";
 import { normalizeBookingOrigin, type BookingOrigin } from "@/lib/booking-origin";
 import type { BookingPriceQuote } from "@/lib/booking-pricing";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
@@ -279,6 +280,7 @@ export default function BookPageClient({
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
+      <BookingFunnelStepTracker stepKey="rental_options" />
       <div className="mx-auto max-w-2xl px-6 pb-16 pt-10">
         <section className="rounded-[32px] bg-white px-10 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
           <div className="space-y-3">

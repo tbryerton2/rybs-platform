@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  getTenantEmailIdentityByBusinessId,
+  type TenantEmailIdentity,
+} from "@/lib/email/tenant-email-identity";
 import { requirePlatformAdmin } from "@/lib/platform-admin/auth";
 import {
   CURRENT_SITE_DEACTIVATION_CONFIRMATION,
@@ -119,6 +123,7 @@ export type PlatformTenantIndex = {
 export type PlatformTenantDetail = {
   tenant: PlatformTenantSummary;
   domains: PlatformTenantDomain[];
+  emailIdentity: TenantEmailIdentity | null;
 };
 
 const TENANT_UUID_PATTERN =
@@ -679,22 +684,26 @@ export async function getPlatformTenantDetail(
   };
   const signalsByTenantId = await loadTenantSetupSignals([tenant.id]);
   const [summary] = buildPlatformTenantSummaries([tenantRecord], signalsByTenantId);
-  const { data: domainRows, error: domainError } = await supabaseAdmin
-    .from("tenant_domains")
-    .select(
-      "id, hostname, domain_type, status, is_primary, provider, provider_status, verification_status, dns_instructions, last_checked_at, last_error, created_at, updated_at",
-    )
-    .eq("tenant_id", tenant.id)
-    .order("is_primary", { ascending: false })
-    .order("hostname", { ascending: true });
+  const [domainResult, emailIdentity] = await Promise.all([
+    supabaseAdmin
+      .from("tenant_domains")
+      .select(
+        "id, hostname, domain_type, status, is_primary, provider, provider_status, verification_status, dns_instructions, last_checked_at, last_error, created_at, updated_at",
+      )
+      .eq("tenant_id", tenant.id)
+      .order("is_primary", { ascending: false })
+      .order("hostname", { ascending: true }),
+    getTenantEmailIdentityByBusinessId(tenant.id),
+  ]);
 
-  if (domainError) {
-    throw new Error(domainError.message);
+  if (domainResult.error) {
+    throw new Error(domainResult.error.message);
   }
 
   return {
     tenant: summary,
-    domains: ((domainRows ?? []) as TenantDomainRow[]).map(mapTenantDomainRow),
+    domains: ((domainResult.data ?? []) as TenantDomainRow[]).map(mapTenantDomainRow),
+    emailIdentity,
   };
 }
 

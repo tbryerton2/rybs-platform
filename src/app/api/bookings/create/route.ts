@@ -6,6 +6,7 @@ import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
 import { isValidEmail } from "@/lib/identity";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { supabaseServer } from "@/lib/supabase/server";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
@@ -90,7 +91,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "A valid customer_email is required" }, { status: 400 });
     }
 
-    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
+    const rentalPolicy = await getDumpsterRentalPolicy({
+      ...selectedDumpster,
+      businessId: tenant.id,
+      requirePublicProduct: true,
+    });
     const pickupMode = body.pickup_mode === "schedule" ? "date" : "unspecified";
     const rentalPeriod = getRentalPeriodDetails({
       deliveryDate: body.delivery_date ?? null,
@@ -239,6 +244,13 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: error.publicMessage },
         { status: 503 },
+      );
+    }
+
+    if (isPublicDumpsterProductError(error)) {
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: error.status },
       );
     }
 

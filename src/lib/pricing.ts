@@ -24,6 +24,7 @@ export async function getDumpsterPriceForZip(
     pickupDate?: string | null;
     pickupMode?: "unspecified" | "date" | null;
     businessId?: string | null;
+    requirePublicProduct?: boolean;
   },
 ) {
   const businessId = bookingInput?.businessId ?? (await getCurrentTenant()).id;
@@ -32,7 +33,11 @@ export async function getDumpsterPriceForZip(
   const selectedDumpster = resolveSelectedDumpster(selectedDumpsterInput);
   const [pricingSettings, rentalPolicy] = await Promise.all([
     getPricingSettingsSnapshot(businessId),
-    getDumpsterRentalPolicy({ ...selectedDumpster, businessId }),
+    getDumpsterRentalPolicy({
+      ...selectedDumpster,
+      businessId,
+      requirePublicProduct: bookingInput?.requirePublicProduct ?? true,
+    }),
   ]);
   const defaultPrice = rentalPolicy.basePrice;
   const buildQuote = (price: number, overridePrice: number | null, pricingSource: "zip_override" | "global_default") =>

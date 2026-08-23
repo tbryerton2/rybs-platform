@@ -5,6 +5,7 @@ import { recordEntityHistory } from "@/lib/entity-history";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant, getServerTenantStorageKey } from "@/lib/tenant/server";
 import { TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
+import { getBusinessTimeZone } from "@/lib/time";
 import { normalizeEmail } from "@/lib/customers";
 import { isPortalSchemaError } from "./schema";
 
@@ -13,6 +14,7 @@ export const PORTAL_LOGIN_COOLDOWN_SECONDS = 60;
 type PortalCustomer = {
   id: string;
   customerId: string;
+  businessId: string;
   authUserId: string;
   name: string | null;
   email: string | null;
@@ -23,6 +25,7 @@ type PortalCustomer = {
   primary_zip: string | null;
   portal_status: "invited" | "active" | "deactivated";
   last_login_at: string | null;
+  portal_activated_at?: string | null;
   deactivated_at?: string | null;
   deactivation_reason?: string | null;
 };
@@ -33,7 +36,7 @@ type PortalCustomerRow = PortalCustomer & {
 };
 
 const PORTAL_CUSTOMER_SELECT =
-  "id, name, email, phone, primary_street, primary_city, primary_state, primary_zip, portal_status, last_login_at, auth_user_id, normalized_email, deactivated_at, deactivation_reason";
+  "id, name, email, phone, primary_street, primary_city, primary_state, primary_zip, portal_status, last_login_at, portal_activated_at, auth_user_id, normalized_email, deactivated_at, deactivation_reason";
 const PORTAL_CUSTOMER_FALLBACK_SELECT =
   "id, name, email, phone, primary_street, primary_city, primary_zip";
 const PORTAL_CUSTOMER_ID_ONLY_SELECT = "id";
@@ -149,18 +152,31 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
   const now = new Date().toISOString();
   const tenant = await getCurrentTenant();
 
-  const targetLookup = await supabaseAdmin
+  let targetLookup = await supabaseAdmin
     .from("customers")
-    .select("id, auth_user_id")
+    .select("id, auth_user_id, portal_activated_at")
     .eq("id", customerId)
     .eq("business_id", tenant.id)
     .maybeSingle();
+
+  if (targetLookup.error && isPortalSchemaError(targetLookup.error)) {
+    targetLookup = await supabaseAdmin
+      .from("customers")
+      .select("id, auth_user_id")
+      .eq("id", customerId)
+      .eq("business_id", tenant.id)
+      .maybeSingle();
+  }
 
   if (targetLookup.error && !isPortalSchemaError(targetLookup.error)) {
     throw new Error(targetLookup.error.message);
   }
 
-  const targetCustomer = targetLookup.data as { id: string; auth_user_id: string | null } | null;
+  const targetCustomer = targetLookup.data as {
+    id: string;
+    auth_user_id: string | null;
+    portal_activated_at?: string | null;
+  } | null;
   if (!targetCustomer?.id) {
     throw new Error("Portal customer could not be found for auth attachment.");
   }
@@ -207,18 +223,37 @@ export async function attachPortalAuthUserToCustomer(customerId: string, userId:
     return;
   }
 
+  const attachFields = {
+    auth_user_id: userId,
+    portal_status: "active",
+    last_login_at: now,
+  };
+
   const { error: attachError } = await supabaseAdmin
     .from("customers")
-    .update({
-      auth_user_id: userId,
-      portal_status: "active",
-      last_login_at: now,
-    })
+    .update(attachFields)
     .eq("id", customerId)
     .eq("business_id", tenant.id);
 
+  if (attachError && isPortalSchemaError(attachError)) {
+    return;
+  }
+
   if (attachError && !isPortalSchemaError(attachError)) {
     throw new Error(attachError.message);
+  }
+
+  if (!targetCustomer.portal_activated_at) {
+    const { error: activationError } = await supabaseAdmin
+      .from("customers")
+      .update({ portal_activated_at: now })
+      .eq("id", customerId)
+      .eq("business_id", tenant.id)
+      .is("portal_activated_at", null);
+
+    if (activationError && !isPortalSchemaError(activationError)) {
+      throw new Error(activationError.message);
+    }
   }
 }
 
@@ -316,6 +351,7 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
   return {
     id: verifiedCustomerId,
     customerId: verifiedCustomerId,
+    businessId: tenant.id,
     authUserId: user.id,
     name: customer.name,
     email: customer.email,
@@ -326,7 +362,50 @@ export async function getOptionalPortalCustomer(): Promise<PortalCustomer | null
     primary_zip: customer.primary_zip,
     portal_status: customer.portal_status ?? "active",
     last_login_at: customer.last_login_at ?? null,
+    portal_activated_at: customer.portal_activated_at ?? null,
   };
+}
+
+async function recordPortalAccess(customer: Pick<PortalCustomer, "businessId" | "customerId">) {
+  const now = new Date();
+  const occurredAt = now.toISOString();
+  const occurredOn = formatDateInTimeZone(now, getBusinessTimeZone());
+
+  const { error } = await supabaseAdmin
+    .from("portal_activity_events")
+    .upsert(
+      {
+        business_id: customer.businessId,
+        customer_id: customer.customerId,
+        event_type: "portal_accessed",
+        occurred_at: occurredAt,
+        occurred_on: occurredOn,
+      },
+      {
+        onConflict: "business_id,customer_id,event_type,occurred_on",
+        ignoreDuplicates: true,
+      },
+    );
+
+  if (error) {
+    console.warn("[portal-auth] failed to record portal access", {
+      businessId: customer.businessId,
+      customerId: customer.customerId,
+      error: error.message,
+    });
+  }
+}
+
+function formatDateInTimeZone(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const lookup = new Map(parts.map((part) => [part.type, part.value]));
+
+  return `${lookup.get("year")}-${lookup.get("month")}-${lookup.get("day")}`;
 }
 
 export async function deactivatePortalAccess(
@@ -363,5 +442,14 @@ export async function deactivatePortalAccess(
 export async function requirePortalCustomer() {
   const customer = await getOptionalPortalCustomer();
   if (!customer) redirect("/portal/login");
+  try {
+    await recordPortalAccess(customer);
+  } catch (error) {
+    console.warn("[portal-auth] failed to record portal access", {
+      businessId: customer.businessId,
+      customerId: customer.customerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
   return customer;
 }

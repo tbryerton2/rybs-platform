@@ -1,4 +1,5 @@
 type AdminIssueReportEmailInput = {
+  businessName: string;
   customerName?: string | null;
   customerEmail?: string | null;
   bookingId: string;
@@ -19,6 +20,7 @@ function formatLabel(value?: string | null) {
 }
 
 export function buildAdminIssueReportEmail({
+  businessName,
   customerName,
   customerEmail,
   bookingId,
@@ -30,10 +32,10 @@ export function buildAdminIssueReportEmail({
   adminUrl,
 }: AdminIssueReportEmailInput) {
   const urgencyLabel = formatLabel(urgency);
-  const subject = `Customer issue reported: ${urgencyLabel}`;
+  const subject = `${businessName} customer issue reported: ${urgencyLabel}`;
 
   const text = `
-A customer submitted an issue report from the Tan Can Man portal.
+A customer submitted an issue report from the ${businessName} portal.
 
 Customer: ${customerName ?? "Not provided"}
 Email: ${customerEmail ?? "Not provided"}
@@ -54,7 +56,7 @@ ${adminUrl ? `Review in admin: ${adminUrl}` : ""}
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
       <h1 style="margin-bottom: 16px;">Customer issue reported</h1>
 
-      <p>A customer submitted an issue report from the Tan Can Man portal.</p>
+      <p>A customer submitted an issue report from the ${businessName} portal.</p>
 
       <h2 style="font-size: 18px; margin-top: 20px;">Customer</h2>
       <table style="border-collapse: collapse;">

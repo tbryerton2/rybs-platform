@@ -1,6 +1,6 @@
 // src/app/api/confirm-booking/route.ts
 import { NextResponse } from "next/server";
-import { getRentalPeriodDetails } from "@/lib/booking-pricing";
+import { recordBookingFunnelEventFromRequest } from "@/lib/analytics/booking-funnel-server";
 import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { findBookingConsent, linkBookingConsentsToBooking } from "@/lib/booking-consents";
 import { CARD_ON_FILE_CONSENT_VERSION } from "@/lib/booking-terms";
@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizePhone } from "@/lib/customers";
 import { getDumpsterPriceForZip } from "@/lib/pricing";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder.server";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -36,6 +37,7 @@ import {
 
 type ConfirmBody = {
   holdId?: string;
+  analyticsBookingSessionToken?: string | null;
   totalPriceCents?: number;
   totalDollars?: number;
   paymentProvider?: "square";
@@ -321,6 +323,40 @@ async function createCardOnFileSaveException(input: {
   });
 }
 
+async function recordBookingCompletionAnalytics(input: {
+  request: Request;
+  businessId: string;
+  bookingSessionToken?: string | null;
+  bookingId: string;
+  holdId: string;
+  dumpsterProductId?: string | null;
+  dumpsterSize?: string | null;
+}) {
+  const bookingSessionToken = input.bookingSessionToken?.trim();
+  if (!bookingSessionToken) return;
+
+  const result = await recordBookingFunnelEventFromRequest(input.request, {
+    businessId: input.businessId,
+    eventName: "booking_completed",
+    bookingSessionToken,
+    bookingId: input.bookingId,
+    bookingHoldId: input.holdId,
+    dumpsterProductId: input.dumpsterProductId,
+    dumpsterSize: input.dumpsterSize,
+    metadata: { source: "confirm_booking" },
+  });
+
+  if (!result.ok) {
+    console.warn("[confirm-booking] booking funnel completion analytics skipped", {
+      businessId: input.businessId,
+      bookingId: input.bookingId,
+      holdId: input.holdId,
+      status: result.status,
+      error: result.error,
+    });
+  }
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -336,6 +372,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as ConfirmBody;
 
     const holdId = (body.holdId || "").trim();
+    const analyticsBookingSessionToken = body.analyticsBookingSessionToken?.trim() || null;
     const draft = body.bookingDraft || {};
     const paymentProvider = (body.paymentProvider ?? "square") as PaymentProvider;
     const paymentMethodToken = body.paymentMethodToken?.trim() || "";
@@ -436,15 +473,62 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: placementError }, { status: 400 });
     }
 
+    const pricing = await getDumpsterPriceForZip(
+      customerZip,
+      selectedDumpster,
+      {
+        deliveryDate,
+        pickupDate,
+        pickupMode,
+        businessId: tenant.id,
+        requirePublicProduct: true,
+      },
+    );
+
+    if (!pricing.serviceable || !pricing.priceQuote) {
+      return NextResponse.json(
+        { ok: false, error: "We couldn’t calculate pricing for this ZIP. Please review the booking details." },
+        { status: 409 },
+      );
+    }
+
+    if (pricing.rentalValidationError) {
+      return NextResponse.json(
+        { ok: false, error: pricing.rentalValidationError },
+        { status: 409 },
+      );
+    }
+
+    const rentalPeriod = pricing.priceQuote;
+    const effectivePickup = rentalPeriod.effectivePickupDate;
+
+    if (rentalPeriod.validationError || effectivePickup == null) {
+      return NextResponse.json(
+        { ok: false, error: rentalPeriod.validationError || "Invalid rental period." },
+        { status: 409 },
+      );
+    }
+
+    if (normalizedTotalPriceCents != null && pricing.priceQuote.totalCents !== normalizedTotalPriceCents) {
+      return NextResponse.json(
+        { ok: false, error: "Pricing changed. Please review the updated total before booking." },
+        { status: 409 },
+      );
+    }
+
     // 1) Atomically "claim" the hold so two requests can't confirm the same hold
     const claim = await supabase
       .from("booking_holds")
       .update({ status: "converting" })
       .eq("id", holdId)
       .eq("business_id", tenant.id)
+      .eq("delivery_date", deliveryDate)
+      .eq("pickup_date", effectivePickup)
+      .eq("dumpster_size", selectedDumpster.dumpsterSize)
+      .eq("dumpster_product_id", selectedDumpster.dumpsterProductId)
       .eq("status", "active")
       .gt("expires_at", new Date().toISOString())
-      .select("id, delivery_date, expires_at")
+      .select("id, delivery_date, pickup_date, dumpster_size, dumpster_product_id, expires_at")
       .maybeSingle();
 
     if (claim.error) {
@@ -458,98 +542,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const pricing = await getDumpsterPriceForZip(
-      customerZip,
-      selectedDumpster,
-      {
-        deliveryDate,
-        pickupDate,
-        pickupMode,
-      },
-    );
-
-    if (!pricing.serviceable || !pricing.priceQuote) {
-      await supabase
-        .from("booking_holds")
-        .update({ status: "active" })
-        .eq("id", holdId)
-        .eq("business_id", tenant.id)
-        .eq("status", "converting");
-
-      return NextResponse.json(
-        { ok: false, error: "We couldn’t calculate pricing for this ZIP. Please review the booking details." },
-        { status: 409 },
-      );
-    }
-
-    if (pricing.rentalValidationError) {
-      await supabase
-        .from("booking_holds")
-        .update({ status: "active" })
-        .eq("id", holdId)
-        .eq("business_id", tenant.id)
-        .eq("status", "converting");
-
-      return NextResponse.json(
-        { ok: false, error: pricing.rentalValidationError },
-        { status: 409 },
-      );
-    }
-
-    const rentalPeriod = getRentalPeriodDetails({
-      deliveryDate,
-      pickupDate,
-      pickupMode,
-      standardRentalDays: pricing.pricingSettings.standardRentalDays,
-      dailyOveragePrice: pricing.pricingSettings.dailyOveragePrice,
-      maxRentalDays: pricing.pricingSettings.maxRentalDays,
-      allowExtendedRentalAtBooking: pricing.pricingSettings.allowExtendedRentalAtBooking,
-    });
-
-    if (rentalPeriod.validationError || rentalPeriod.effectivePickupDate == null) {
-      await supabase
-        .from("booking_holds")
-        .update({ status: "active" })
-        .eq("id", holdId)
-        .eq("business_id", tenant.id)
-        .eq("status", "converting");
-
-      return NextResponse.json(
-        { ok: false, error: rentalPeriod.validationError || "Invalid rental period." },
-        { status: 409 },
-      );
-    }
-
-    if (normalizedTotalPriceCents != null && pricing.priceQuote.totalCents !== normalizedTotalPriceCents) {
-      await supabase
-        .from("booking_holds")
-        .update({ status: "active" })
-        .eq("id", holdId)
-        .eq("business_id", tenant.id)
-        .eq("status", "converting");
-
-      return NextResponse.json(
-        { ok: false, error: "Pricing changed. Please review the updated total before booking." },
-        { status: 409 },
-      );
-    }
-
-    const effectivePickup = pricing.priceQuote.effectivePickupDate;
-
-    if (!effectivePickup) {
-      await supabase
-        .from("booking_holds")
-        .update({ status: "active" })
-        .eq("id", holdId)
-        .eq("business_id", tenant.id)
-        .eq("status", "converting");
-
-      return NextResponse.json(
-        { ok: false, error: "We couldn’t determine the rental duration for this booking." },
-        { status: 409 },
-      );
-    }
-
     try {
       await ensureRentalWindowAvailability({
         unavailableMessage:
@@ -557,7 +549,7 @@ export async function POST(req: Request) {
         check: () =>
           getDeliveryAvailabilitySnapshot({
             deliveryDate,
-            rpcDays: rentalPeriod.bookedRentalDays ?? pricing.pricingSettings.standardRentalDays,
+            rpcDays: rentalPeriod.bookedRentalDays ?? rentalPeriod.includedRentalDays,
             dumpsterSize: selectedDumpster.dumpsterSize,
             dumpsterProductId: selectedDumpster.dumpsterProductId,
             pickupDate: effectivePickup,
@@ -966,6 +958,25 @@ export async function POST(req: Request) {
 
     if (ev.error) console.error("booking_events insert failed:", ev.error);
 
+    try {
+      await recordBookingCompletionAnalytics({
+        request: req,
+        businessId: tenant.id,
+        bookingSessionToken: analyticsBookingSessionToken,
+        bookingId: createdBooking.bookingId,
+        holdId,
+        dumpsterProductId: selectedDumpster.dumpsterProductId,
+        dumpsterSize: selectedDumpster.dumpsterSize,
+      });
+    } catch (analyticsError) {
+      console.warn("[confirm-booking] booking funnel completion analytics failed", {
+        businessId: tenant.id,
+        bookingId: createdBooking.bookingId,
+        holdId,
+        error: analyticsError instanceof Error ? analyticsError.message : "Unknown analytics error.",
+      });
+    }
+
         let bookingEmailWarning: string | null = null;
 
     const serviceAddress = [
@@ -979,6 +990,11 @@ export async function POST(req: Request) {
 
     try {
       await sendBookingEmails({
+        tenant,
+        requestContext: {
+          host: req.headers.get("x-forwarded-host") ?? req.headers.get("host"),
+          protocol: req.headers.get("x-forwarded-proto"),
+        },
         bookingId: getCustomerFacingBookingLabel(createdBooking.bookingRef),
         customerName,
         customerEmail,
@@ -1003,7 +1019,7 @@ export async function POST(req: Request) {
           body: `Booking confirmed for ${deliveryDate}. Booking reference: ${getCustomerFacingBookingLabel(
             createdBooking.bookingRef,
           )}.`,
-          provider: "amazon_ses",
+          provider: "ses",
           status: "sent",
         })
         .select("id")
@@ -1036,7 +1052,7 @@ export async function POST(req: Request) {
           body: `Booking confirmed for ${deliveryDate}. Booking reference: ${getCustomerFacingBookingLabel(
             createdBooking.bookingRef,
           )}.`,
-          provider: "amazon_ses",
+          provider: "ses",
           status: "failed",
         })
         .select("id")
@@ -1093,6 +1109,13 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: error.publicMessage },
         { status: 503 }
+      );
+    }
+
+    if (isPublicDumpsterProductError(error)) {
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: error.status },
       );
     }
 

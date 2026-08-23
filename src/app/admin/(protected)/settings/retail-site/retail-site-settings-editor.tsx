@@ -8,11 +8,12 @@ import type {
   RetailSiteSettings,
 } from "@/lib/tenant/retail-site-settings";
 
-type RetailSettingsTab = "header" | "homeVisibility" | "calendarClosures";
+type RetailSettingsTab = "header" | "homeVisibility" | "notifications" | "calendarClosures";
 
 const TABS: Array<{ id: RetailSettingsTab; label: string }> = [
   { id: "header", label: "Header" },
   { id: "homeVisibility", label: "Landing Page" },
+  { id: "notifications", label: "Notifications" },
   { id: "calendarClosures", label: "Calendar Closures" },
 ];
 
@@ -242,6 +243,11 @@ export function RetailSiteSettingsEditor({
     settings.header.showEmailInHeader && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)
       ? "A valid email address is required when header email is enabled."
       : null;
+  const bookingNotificationEmailTrimmed = settings.notifications.bookingEmail.trim();
+  const bookingNotificationEmailError =
+    bookingNotificationEmailTrimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookingNotificationEmailTrimmed)
+      ? "Enter a valid booking notification email address."
+      : null;
 
   const blockedDateError = settings.calendarClosures.blockedDates.find(
     (entry) => !entry.date.trim(),
@@ -310,6 +316,7 @@ export function RetailSiteSettingsEditor({
 
       const response = await fetch("/api/admin/settings/retail-site/logo", {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
       const json = (await response.json().catch(() => ({}))) as {
@@ -382,6 +389,11 @@ export function RetailSiteSettingsEditor({
       return;
     }
 
+    if (bookingNotificationEmailError) {
+      setError(bookingNotificationEmailError);
+      return;
+    }
+
     if (blockedDateError) {
       setError(blockedDateError);
       return;
@@ -398,6 +410,7 @@ export function RetailSiteSettingsEditor({
     try {
       const response = await fetch("/api/admin/settings/retail-site", {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
@@ -513,7 +526,7 @@ export function RetailSiteSettingsEditor({
             </HeaderSettingsSection>
 
             <HeaderSettingsSection
-              title="Email address"
+              title="Public contact email"
               checked={settings.header.showEmailInHeader}
               toggleLabel="Show email in header"
               divided
@@ -526,7 +539,7 @@ export function RetailSiteSettingsEditor({
             >
               {settings.header.showEmailInHeader ? (
                 <TextInput
-                  label="Header email address"
+                  label="Public contact email"
                   type="email"
                   value={settings.header.emailAddress}
                   onChange={(value) =>
@@ -537,7 +550,7 @@ export function RetailSiteSettingsEditor({
                   }
                   placeholder="info@example.com"
                   error={emailError}
-                  helperText="Shown as a clickable link in the site header."
+                  helperText="Shown to customers on your website."
                 />
               ) : null}
             </HeaderSettingsSection>
@@ -676,6 +689,30 @@ export function RetailSiteSettingsEditor({
                 </label>
               ) : null}
             </HeaderSettingsSection>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {activeTab === "notifications" ? (
+        <SectionCard
+          title="Notifications"
+          description="Choose where internal booking alerts should be delivered."
+        >
+          <div className="max-w-xl">
+            <TextInput
+              label="Booking notification email"
+              type="email"
+              value={settings.notifications.bookingEmail}
+              onChange={(value) =>
+                updateSettings((current) => {
+                  current.notifications.bookingEmail = value;
+                  return current;
+                })
+              }
+              placeholder="bookings@example.com"
+              error={bookingNotificationEmailError}
+              helperText="Private. New booking notifications will be sent to this email address."
+            />
           </div>
         </SectionCard>
       ) : null}

@@ -129,7 +129,7 @@ export default async function AdminZipDetailPage({
           href="/admin/settings/zips"
           className="text-sm font-medium text-slate-600 hover:text-slate-900"
         >
-          ← Back to ZIP settings
+          ← Back to Service Area
         </Link>
       </div>
 
@@ -148,7 +148,10 @@ export default async function AdminZipDetailPage({
               <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                 <form action={deleteServiceZipAction}>
                   <input type="hidden" name="id" value={zip.id} />
-                  <DeleteZipButton zip={zip.zip} />
+                  <DeleteZipButton
+                    zip={zip.zip}
+                    className="admin-btn admin-btn-destructive h-10 !border-slate-300 px-4"
+                  />
                 </form>
 
                 <ZipStatusToggleForm

@@ -11,6 +11,10 @@ import {
   type BookingPriceQuote,
 } from "@/lib/booking-pricing";
 import {
+  BookingFunnelStepTracker,
+  getActiveBookingAnalyticsSessionToken,
+} from "@/lib/analytics/booking-funnel-client";
+import {
   buildBookingOriginBackHref,
   normalizeBookingOrigin,
   type BookingOrigin,
@@ -1114,6 +1118,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
           zip,
           dumpsterSize,
           dumpsterProductId,
+          analyticsBookingSessionToken: getActiveBookingAnalyticsSessionToken(),
         }),
       });
 
@@ -1165,6 +1170,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
 
   return (
     <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
+      <BookingFunnelStepTracker stepKey="rental_timing" />
       <div className="mx-auto max-w-2xl px-3 pt-10 pb-16 sm:px-6">
         <div className="min-w-0 rounded-[32px] bg-white px-4 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
           {/* Header stack (match Step 1 style) */}

@@ -1,4 +1,5 @@
 import { getOptionalPortalCustomer } from "@/lib/portal/auth";
+import { getBrandSettings } from "@/lib/tenant/server";
 import { redirect } from "next/navigation";
 import { sendPortalLoginLinkAction } from "./actions";
 import { PortalLoginForm } from "./login-form";
@@ -41,6 +42,7 @@ export default async function PortalLoginPage({
   const customer = await getOptionalPortalCustomer();
   if (customer) redirect("/portal");
 
+  const brand = await getBrandSettings();
   const resolvedSearchParams = (await searchParams) ?? {};
   const errorMessage = getErrorMessage(resolvedSearchParams);
   const email = readValue(resolvedSearchParams, "email") ?? "";
@@ -93,7 +95,7 @@ export default async function PortalLoginPage({
                   {email ? <span className="font-semibold">{email}</span> : "your email"}.
                 </p>
                 <p className="mt-3 text-sm leading-6 text-emerald-800">
-                  Use that link to open your Tan Can Man portal and manage your bookings.
+                  Use that link to open your {brand.name} portal and manage your bookings.
                 </p>
               </div>
 

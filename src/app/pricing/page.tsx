@@ -1,6 +1,6 @@
 import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
-import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
+import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
 import { getPricingIntroContent, getPricingSizeGuideContent } from "@/lib/tenant/content";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import BookOnlineButton from "@/components/BookOnlineButton";
@@ -45,25 +45,7 @@ export default async function PricingPage({
   ]);
   const includedServicesBlurb = pricingSettings.includedServicesBlurb?.trim() || "";
   const showSizeGuide = sizeGuideContent.enabled && sizeGuideContent.rows.length > 0;
-  const pricingProducts = inventoryProducts.length
-    ? inventoryProducts
-    : [
-        {
-          dumpsterSize: "14 yard",
-          dumpsterProductId: "default",
-          displayName: "14-yard dumpster",
-          shortDescription: "",
-          customerBulletPoints: "",
-          dimensions: "",
-          includedWeightTons: DEFAULT_PRICING_SETTINGS.includedTons,
-          tonOveragePrice: DEFAULT_PRICING_SETTINGS.tonOveragePrice,
-          includedRentalDays: DEFAULT_PRICING_SETTINGS.standardRentalDays,
-          extraDayPrice: DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
-          basePrice: DEFAULT_PRICING_SETTINGS.basePrice,
-          isPublic: true,
-          sortOrder: 10,
-        },
-      ];
+  const pricingProducts = inventoryProducts;
 
   const money = new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -120,8 +102,9 @@ export default async function PricingPage({
               <PricingSizeGuide content={sizeGuideContent} />
             </div>
           ) : null}
-          <div className="grid gap-8 md:grid-cols-2">
-            {pricingProducts.map((product) => (
+          {pricingProducts.length ? (
+            <div className="grid gap-8 md:grid-cols-2">
+              {pricingProducts.map((product) => (
               <div
                 key={`${product.dumpsterSize}:${product.dumpsterProductId}`}
                 className="rounded-[28px] bg-white p-8 shadow-sm ring-1 ring-slate-200"
@@ -199,8 +182,13 @@ export default async function PricingPage({
                   basePrice={product.basePrice}
                 />
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[28px] bg-white p-8 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+              No dumpster options are currently available online.
+            </div>
+          )}
         </section>
       </div>
     </main>

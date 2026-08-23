@@ -36,6 +36,13 @@ export type TrendPoint = {
   uniqueUsers: number;
 };
 
+export type BusinessTrendPoint = {
+  label: string;
+  revenue: number;
+  bookings: number;
+  repeatCustomerRate: number;
+};
+
 export type KpiMetric = {
   label: string;
   value: string;
@@ -47,7 +54,6 @@ export type KpiMetric = {
 export type Insight = {
   title: string;
   body: string;
-  tone: "orange" | "blue" | "emerald";
 };
 
 export type BreakdownRow = {
@@ -72,8 +78,31 @@ export type ValueStat = {
   helper: string;
 };
 
+export type FleetUtilizationRow = {
+  label: string;
+  units: number;
+  earningUnits: number;
+  idleUnits: number;
+  utilizationRate: number;
+  revenue: number;
+  note: string;
+};
+
+export type ProductMixRow = {
+  label: string;
+  revenue: number;
+  bookings: number;
+  revenueShare: number;
+  bookingShare: number;
+  avgOrderValue: number;
+};
+
 export type ConversionAnalyticsData = {
   filters: AnalyticsFilters;
+  businessKpis: KpiMetric[];
+  businessTrends: BusinessTrendPoint[];
+  fleetUtilization: FleetUtilizationRow[];
+  productMix: ProductMixRow[];
   bookingKpis: KpiMetric[];
   funnel: FunnelStep[];
   bookingInsights: Insight[];
@@ -93,7 +122,7 @@ export type ConversionAnalyticsData = {
 
 export const ANALYTICS_DATA_MODE = "demo";
 export const ANALYTICS_DATA_MODE_LABEL =
-  "Preview mode: showing sample analytics until live tracking is connected.";
+  "Preview mode: showing sample data until live tracking is connected.";
 
 export const DATE_RANGE_OPTIONS: Array<{ value: DateRangeKey; label: string }> = [
   { value: "7d", label: "7D" },
@@ -157,6 +186,14 @@ const mockConversionSeriesBase: RawTrendPoint[] = [
 
 function number(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function currency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function percent(value: number, digits = 1) {
@@ -485,8 +522,162 @@ function buildMockBreakdownData(totalStarted: number, totalCompleted: number) {
   };
 }
 
+const productBusinessProfiles: Array<{
+  key: ProductFilter;
+  label: string;
+  units: number;
+  avgOrderValue: number;
+  bookingShare: number;
+  utilizationRate: number;
+  note: string;
+}> = [
+  {
+    key: "14-yard",
+    label: "14-yard dumpster",
+    units: 18,
+    avgOrderValue: 465,
+    bookingShare: 0.55,
+    utilizationRate: 76,
+    note: "Highest volume and most reliable earning base.",
+  },
+  {
+    key: "20-yard",
+    label: "20-yard dumpster",
+    units: 10,
+    avgOrderValue: 585,
+    bookingShare: 0.32,
+    utilizationRate: 68,
+    note: "Strong revenue per rental, with some midweek idle capacity.",
+  },
+  {
+    key: "concrete",
+    label: "Concrete / heavy debris",
+    units: 6,
+    avgOrderValue: 690,
+    bookingShare: 0.13,
+    utilizationRate: 52,
+    note: "Higher value per booking, but more units sit idle between heavy-debris jobs.",
+  },
+];
+
+function selectedProductProfiles(product: ProductFilter) {
+  return product === "all"
+    ? productBusinessProfiles
+    : productBusinessProfiles.filter((profile) => profile.key === product);
+}
+
+function businessAverageOrderValue(product: ProductFilter) {
+  const profiles = selectedProductProfiles(product);
+  const totalShare = profiles.reduce((sum, profile) => sum + profile.bookingShare, 0);
+
+  return profiles.reduce((sum, profile) => {
+    const share = totalShare > 0 ? profile.bookingShare / totalShare : 0;
+    return sum + profile.avgOrderValue * share;
+  }, 0);
+}
+
+function buildBusinessPerformanceData(filters: AnalyticsFilters, bookingTrends: TrendPoint[]) {
+  const avgOrderValue = businessAverageOrderValue(filters.product);
+  const businessTrends: BusinessTrendPoint[] = bookingTrends.map((point, index) => {
+    const bookingLift = filters.product === "all" ? 1.18 : 1.08;
+    const bookings = Math.max(1, Math.round(point.completed * bookingLift + 4 + index * 1.4));
+    const revenueMomentum = 0.96 + index * 0.012;
+    const revenue = Math.round(bookings * avgOrderValue * revenueMomentum);
+
+    return {
+      label: point.label,
+      revenue,
+      bookings,
+      repeatCustomerRate: 23.5 + index * 0.55 + (filters.product === "20-yard" ? 1.8 : 0),
+    };
+  });
+
+  const totalRevenue = businessTrends.reduce((sum, point) => sum + point.revenue, 0);
+  const totalBookings = businessTrends.reduce((sum, point) => sum + point.bookings, 0);
+  const repeatCustomerRate =
+    businessTrends.reduce((sum, point) => sum + point.repeatCustomerRate, 0) / businessTrends.length;
+  const productProfiles = selectedProductProfiles(filters.product);
+  const productShareTotal = productProfiles.reduce((sum, profile) => sum + profile.bookingShare, 0);
+  const fleetUtilization = productProfiles.map((profile) => {
+    const normalizedShare = productShareTotal > 0 ? profile.bookingShare / productShareTotal : 0;
+    const revenue = Math.round(totalRevenue * normalizedShare * (profile.avgOrderValue / avgOrderValue));
+    const earningUnits = Math.min(profile.units, Math.max(1, Math.round(profile.units * (profile.utilizationRate / 100))));
+
+    return {
+      label: profile.label,
+      units: profile.units,
+      earningUnits,
+      idleUnits: Math.max(0, profile.units - earningUnits),
+      utilizationRate: profile.utilizationRate,
+      revenue,
+      note: profile.note,
+    };
+  });
+
+  const productMixRaw = productProfiles.map((profile) => {
+    const normalizedShare = productShareTotal > 0 ? profile.bookingShare / productShareTotal : 0;
+    const bookings = Math.max(1, Math.round(totalBookings * normalizedShare));
+    const revenue = Math.round(bookings * profile.avgOrderValue);
+
+    return {
+      label: profile.label,
+      revenue,
+      bookings,
+      avgOrderValue: profile.avgOrderValue,
+    };
+  });
+  const mixRevenueTotal = productMixRaw.reduce((sum, row) => sum + row.revenue, 0);
+  const mixBookingTotal = productMixRaw.reduce((sum, row) => sum + row.bookings, 0);
+  const productMix: ProductMixRow[] = productMixRaw.map((row) => ({
+    ...row,
+    revenueShare: mixRevenueTotal > 0 ? (row.revenue / mixRevenueTotal) * 100 : 0,
+    bookingShare: mixBookingTotal > 0 ? (row.bookings / mixBookingTotal) * 100 : 0,
+  }));
+  const totalUnits = fleetUtilization.reduce((sum, row) => sum + row.units, 0);
+  const earningUnits = fleetUtilization.reduce((sum, row) => sum + row.earningUnits, 0);
+  const fleetUtilizationRate = totalUnits > 0 ? (earningUnits / totalUnits) * 100 : 0;
+  const businessKpis: KpiMetric[] = [
+    {
+      label: "Booked revenue",
+      value: currency(totalRevenue),
+      change: "+14.8%",
+      tone: "success",
+      helper: "Estimated rental revenue in the selected period.",
+    },
+    {
+      label: "Booking volume",
+      value: number(totalBookings),
+      change: "+11.6%",
+      tone: "success",
+      helper: "Completed bookings across online and staff-assisted channels.",
+    },
+    {
+      label: "Fleet utilization",
+      value: percent(fleetUtilizationRate),
+      change: "+3.2 pts",
+      tone: fleetUtilizationRate >= 70 ? "success" : "warning",
+      helper: "Share of selected dumpster units earning revenue.",
+    },
+    {
+      label: "Repeat customer rate",
+      value: percent(repeatCustomerRate),
+      change: "+2.4 pts",
+      tone: "success",
+      helper: "Bookings from customers who have rented before.",
+    },
+  ];
+
+  return {
+    businessKpis,
+    businessTrends,
+    fleetUtilization,
+    productMix,
+  };
+}
+
 export function buildConversionAnalytics(filters: AnalyticsFilters): ConversionAnalyticsData {
   const bookingTrends = buildTrendPoints(filters);
+  const businessPerformance = buildBusinessPerformanceData(filters, bookingTrends);
   const started = bookingTrends.reduce((sum, point) => sum + point.started, 0);
   const completed = bookingTrends.reduce((sum, point) => sum + point.completed, 0);
   const funnel = buildMockBookingFunnelData(started, filters);
@@ -508,22 +699,18 @@ export function buildConversionAnalytics(filters: AnalyticsFilters): ConversionA
     {
       title: "Pricing is still the biggest abandonment point",
       body: `${number(biggestDropOff.dropOffCount)} sessions fell off before the next step after pricing, making it the clearest place to test messaging, fees, or reassurance.`,
-      tone: "orange",
     },
     {
       title: "Mobile traffic is converting below desktop",
       body: `Mobile finishes at 29.9% versus 46.8% on desktop, suggesting quote clarity and form friction matter most on smaller screens.`,
-      tone: "blue",
     },
     {
       title: "Customers who come back later are worth tracking",
       body: `${percent(returnResumeRate)} of starters return to resume later, and that group closes at a meaningfully higher rate than first-session bookings.`,
-      tone: "emerald",
     },
     {
       title: "Schedule/details is the slowest decision step",
       body: `The schedule/details step adds the most time in-flow, which usually points to date hesitation, placement questions, or unclear service rules.`,
-      tone: "blue",
     },
   ];
 
@@ -531,22 +718,20 @@ export function buildConversionAnalytics(filters: AnalyticsFilters): ConversionA
     {
       title: "Portal requests are deflecting operational follow-up",
       body: `${number(Math.round(selfServiceActions * 0.64))} actions came through self-service instead of phone or text, with pickup and extension requests leading the way.`,
-      tone: "emerald",
     },
     {
       title: "Repeat portal behavior suggests customers find it useful",
       body: `${percent(repeatUsageRate)} of portal users came back for a second action, which is a strong sign the portal is solving real post-booking needs.`,
-      tone: "blue",
     },
     {
       title: "Rental detail views are the anchor behavior",
       body: `The most common portal visit is simply checking rental details, which supports reminders, timing confidence, and fewer “what happens next” calls.`,
-      tone: "orange",
     },
   ];
 
   return {
     filters,
+    ...businessPerformance,
     bookingKpis: [
       {
         label: "Booking sessions started",

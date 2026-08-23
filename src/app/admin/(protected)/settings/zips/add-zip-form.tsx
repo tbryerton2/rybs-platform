@@ -125,7 +125,7 @@ export function AddZipForm({ compact = false }: { compact?: boolean }) {
             maxLength={5}
             placeholder="13421"
             autoComplete="postal-code"
-            className="h-12 w-full min-w-0 rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[#F97316]"
+            className="h-12 w-full min-w-0 rounded-[14px] border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-400"
             required
             aria-invalid={state.error ? true : false}
             aria-describedby={state.error ? "zip-error" : undefined}

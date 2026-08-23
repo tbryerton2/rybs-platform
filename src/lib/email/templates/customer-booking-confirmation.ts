@@ -1,6 +1,9 @@
 import { formatEmailUsdFromCents } from "../currency.ts";
 
 type CustomerBookingConfirmationEmailInput = {
+  businessName: string;
+  supportEmail?: string | null;
+  supportPhone?: string | null;
   customerName: string;
   bookingId: string;
   dumpsterSize?: string | null;
@@ -11,6 +14,9 @@ type CustomerBookingConfirmationEmailInput = {
 };
 
 export function buildCustomerBookingConfirmationEmail({
+  businessName,
+  supportEmail,
+  supportPhone,
   customerName,
   bookingId,
   dumpsterSize,
@@ -19,12 +25,17 @@ export function buildCustomerBookingConfirmationEmail({
   serviceAddress,
   totalPriceCents,
 }: CustomerBookingConfirmationEmailInput) {
-  const subject = "Your Tan Can Man booking is confirmed";
+  const subject = `Your ${businessName} booking is confirmed`;
+  const supportLine = supportEmail
+    ? `If you have any questions, reply to this email or contact us at ${supportEmail}.`
+    : supportPhone
+      ? `If you have any questions, call or text us at ${supportPhone}.`
+      : "If you have any questions, reply to this email and we’ll help.";
 
   const text = `
 Hi ${customerName},
 
-Thanks for booking with Tan Can Man. Your dumpster rental has been confirmed.
+Thanks for booking with ${businessName}. Your dumpster rental has been confirmed.
 
 Booking ID: ${bookingId}
 Dumpster: ${dumpsterSize ?? "Dumpster rental"}
@@ -33,10 +44,10 @@ Pickup date: ${pickupDate ?? "Not selected"}
 Service address: ${serviceAddress}
 Total: ${formatEmailUsdFromCents(totalPriceCents)}
 
-If you have any questions, reply to this email and we’ll help.
+${supportLine}
 
 Thank you,
-Tan Can Man
+${businessName}
 `.trim();
 
   const html = `
@@ -45,7 +56,7 @@ Tan Can Man
 
       <p>Hi ${customerName},</p>
 
-      <p>Thanks for booking with Tan Can Man. Your dumpster rental has been confirmed.</p>
+      <p>Thanks for booking with ${businessName}. Your dumpster rental has been confirmed.</p>
 
       <table style="border-collapse: collapse; margin-top: 16px;">
         <tr>
@@ -74,9 +85,9 @@ Tan Can Man
         </tr>
       </table>
 
-      <p style="margin-top: 20px;">If you have any questions, reply to this email and we’ll help.</p>
+      <p style="margin-top: 20px;">${supportLine}</p>
 
-      <p>Thank you,<br />Tan Can Man</p>
+      <p>Thank you,<br />${businessName}</p>
     </div>
   `.trim();
 

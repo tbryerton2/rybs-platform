@@ -4,6 +4,7 @@ import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { getValidActiveHoldExclusionId } from "@/lib/booking-hold-exclusion";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { isTenantResolutionError } from "@/lib/tenant/resolution";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import {
@@ -32,7 +33,11 @@ export async function GET(req: Request) {
   try {
     const tenant = await getCurrentTenant();
     const retailSiteSettings = await getRetailSiteSettingsForTenant(tenant);
-    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
+    const rentalPolicy = await getDumpsterRentalPolicy({
+      ...selectedDumpster,
+      businessId: tenant.id,
+      requirePublicProduct: true,
+    });
     const closure = getRetailCalendarClosureForDate(date, retailSiteSettings);
     if (closure.blocked) {
       return NextResponse.json({
@@ -76,6 +81,10 @@ export async function GET(req: Request) {
   } catch (error) {
     if (isTenantResolutionError(error)) {
       return NextResponse.json({ ok: false, error: error.publicMessage }, { status: 503 });
+    }
+
+    if (isPublicDumpsterProductError(error)) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
     }
 
     const message = error instanceof Error ? error.message : "Availability check failed.";

@@ -3,67 +3,25 @@ export const revalidate = 0;
 
 import Link from "next/link";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { requireAdminOwner } from "@/lib/admin/auth";
+import {
+  buildReportsFilterHref,
+  DATE_RANGE_OPTIONS,
+  getAdminReportsData,
+  parseReportsFilters,
+  type BusinessTrendPoint,
+  type DateRangeKey,
+  type FilterOption,
+  type KpiMetric,
+  type ProductMixRow,
+  type ReportsFilters,
+} from "@/lib/admin/reports";
 import {
   ArrowTrendingDownIcon,
   ArrowTrendingUpIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ANALYTICS_DATA_MODE,
-  ANALYTICS_DATA_MODE_LABEL,
-  AREA_OPTIONS,
-  buildConversionAnalytics,
-  DATE_RANGE_OPTIONS,
-  DEVICE_OPTIONS,
-  PRODUCT_OPTIONS,
-  type AnalyticsFilters,
-  type BreakdownRow,
-  type DateRangeKey,
-  type FunnelStep,
-  type Insight,
-  type KpiMetric,
-  type TrendPoint,
-  type UsageRow,
-  VISITOR_OPTIONS,
-} from "./mock-data";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-
-function sp(obj: SearchParams, key: string) {
-  const value = obj[key];
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function toFilters(searchParams: SearchParams): AnalyticsFilters {
-  const range = sp(searchParams, "range");
-  const device = sp(searchParams, "device");
-  const area = sp(searchParams, "area");
-  const product = sp(searchParams, "product");
-  const visitorType = sp(searchParams, "visitorType");
-
-  return {
-    range:
-      range === "7d" || range === "90d" || range === "6m" || range === "12m" || range === "all"
-        ? range
-        : "30d",
-    device: device === "desktop" || device === "mobile" || device === "tablet" ? device : "all",
-    area: area === "19124" || area === "19125" || area === "19134" || area === "19053" ? area : "all",
-    product: product === "14-yard" || product === "20-yard" || product === "concrete" ? product : "all",
-    visitorType: visitorType === "new" || visitorType === "returning" ? visitorType : "all",
-  };
-}
-
-function buildFilterHref(filters: AnalyticsFilters, patch: Partial<AnalyticsFilters>) {
-  const next = { ...filters, ...patch };
-  const params = new URLSearchParams();
-
-  params.set("range", next.range);
-  if (next.device !== "all") params.set("device", next.device);
-  if (next.area !== "all") params.set("area", next.area);
-  if (next.product !== "all") params.set("product", next.product);
-  if (next.visitorType !== "all") params.set("visitorType", next.visitorType);
-
-  return `/admin/analytics/conversion?${params.toString()}`;
-}
 
 function percent(value: number, digits = 1) {
   return `${value.toFixed(digits)}%`;
@@ -73,47 +31,54 @@ function number(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
-function cardToneClasses(tone: KpiMetric["tone"]) {
-  if (tone === "success") return "border-emerald-200/80 bg-emerald-50/70";
-  if (tone === "warning") return "border-orange-200/80 bg-orange-50/80";
-  return "border-slate-200/80 bg-white";
+function currency(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
-function insightToneClasses(tone: Insight["tone"]) {
-  if (tone === "emerald") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-  if (tone === "blue") return "bg-sky-50 text-sky-700 ring-sky-200";
-  return "bg-orange-50 text-[#F97316] ring-orange-200";
+function cardToneClasses(tone: KpiMetric["tone"]) {
+  if (tone === "success") return "reports-card-success";
+  if (tone === "warning") return "reports-card-warning";
+  return "reports-card-neutral";
+}
+
+function trendToneClasses(tone: KpiMetric["tone"]) {
+  if (tone === "success") return "reports-trend-success";
+  if (tone === "warning") return "reports-trend-warning";
+  return "reports-trend-neutral";
 }
 
 function sectionCardClasses(extra = "") {
   return `rounded-[20px] border border-slate-200/80 bg-white shadow-sm ${extra}`;
 }
 
-function FilterBar({ filters }: { filters: AnalyticsFilters }) {
+function FilterBar({
+  filters,
+  productOptions,
+}: {
+  filters: ReportsFilters;
+  productOptions: FilterOption[];
+}) {
   return (
     <div className="space-y-4">
-      <section className={sectionCardClasses("px-6 py-6")}>
-        <AdminPageHeader
-          title="Website Analytics"
-          description="See where bookings stall, how conversion is trending, and whether the customer portal is reducing manual follow-up."
-          className="mb-0"
-          actions={
-            ANALYTICS_DATA_MODE === "demo" ? (
-              <div className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
-                {ANALYTICS_DATA_MODE_LABEL}
-              </div>
-            ) : undefined
-          }
-        />
-      </section>
+      <AdminPageHeader
+        title="Reports"
+        description="See how your business is performing, from bookings to customer portal requests."
+        className="mb-0"
+      />
 
       <section className={sectionCardClasses("px-6 py-5")}>
         <form
-          className="grid gap-4 2xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)] 2xl:items-end"
+          className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(260px,0.55fr)_auto] xl:items-end"
           action="/admin/analytics/conversion"
         >
           <input type="hidden" name="range" value={filters.range} />
-          <div className="min-w-0 2xl:col-span-3">
+          <input type="hidden" name="device" value={filters.device} />
+          <input type="hidden" name="visitorType" value={filters.visitorType} />
+          <div className="min-w-0">
             <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Date range</div>
             <div className="flex flex-wrap items-center gap-2">
               {DATE_RANGE_OPTIONS.map((option) => {
@@ -121,7 +86,7 @@ function FilterBar({ filters }: { filters: AnalyticsFilters }) {
                 return (
                   <Link
                     key={option.value}
-                    href={buildFilterHref(filters, { range: option.value as DateRangeKey })}
+                    href={buildReportsFilterHref(filters, { range: option.value as DateRangeKey })}
                     className={[
                       "inline-flex h-10 items-center rounded-full px-4 text-sm font-semibold transition",
                       active
@@ -135,16 +100,8 @@ function FilterBar({ filters }: { filters: AnalyticsFilters }) {
               })}
             </div>
           </div>
-          <FilterField label="Device type" name="device" value={filters.device} options={DEVICE_OPTIONS} />
-          <FilterField label="Service area / ZIP" name="area" value={filters.area} options={AREA_OPTIONS} />
-          <FilterField label="Dumpster type" name="product" value={filters.product} options={PRODUCT_OPTIONS} />
-          <FilterField
-            label="New vs returning"
-            name="visitorType"
-            value={filters.visitorType}
-            options={VISITOR_OPTIONS}
-          />
-          <div className="flex min-w-0 items-end gap-3 md:justify-start 2xl:col-span-3 2xl:justify-end">
+          <FilterField label="Dumpster type" name="product" value={filters.product} options={productOptions} />
+          <div className="flex min-w-0 items-end gap-3 md:justify-start xl:justify-end">
             <button
               type="submit"
               className="admin-btn admin-btn-primary h-11 min-w-[132px] px-5"
@@ -161,6 +118,46 @@ function FilterBar({ filters }: { filters: AnalyticsFilters }) {
         </form>
       </section>
     </div>
+  );
+}
+
+function FunnelFilterBar({
+  filters,
+  deviceOptions,
+  visitorTypeOptions,
+}: {
+  filters: ReportsFilters;
+  deviceOptions: FilterOption[];
+  visitorTypeOptions: FilterOption[];
+}) {
+  return (
+    <section className={sectionCardClasses("mt-6 px-6 py-5")}>
+      <form
+        className="grid gap-4 lg:grid-cols-[minmax(180px,0.45fr)_minmax(220px,0.45fr)_auto] lg:items-end"
+        action="/admin/analytics/conversion"
+      >
+        <input type="hidden" name="range" value={filters.range} />
+        <input type="hidden" name="product" value={filters.product} />
+        <FilterField label="Device type" name="device" value={filters.device} options={deviceOptions} />
+        <FilterField
+          label="New vs returning"
+          name="visitorType"
+          value={filters.visitorType}
+          options={visitorTypeOptions}
+        />
+        <div className="flex min-w-0 items-end gap-3 lg:justify-end">
+          <button type="submit" className="admin-btn admin-btn-primary h-11 min-w-[132px] px-5">
+            Apply filters
+          </button>
+          <Link
+            href={buildReportsFilterHref(filters, { device: "all", visitorType: "all" })}
+            className="admin-btn admin-btn-secondary h-11 min-w-[96px] px-5"
+          >
+            Reset
+          </Link>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -200,7 +197,7 @@ function SectionHeading({
 }: {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
 }) {
   return (
     <div>
@@ -208,7 +205,7 @@ function SectionHeading({
       <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p>
+          {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</p> : null}
         </div>
       </div>
     </div>
@@ -216,7 +213,8 @@ function SectionHeading({
 }
 
 function KpiCard({ metric }: { metric: KpiMetric }) {
-  const isPositive = metric.tone === "success";
+  const isIncreasing = metric.change?.trim().startsWith("+") ?? false;
+  const isDecreasing = metric.change?.trim().startsWith("-") ?? false;
 
   return (
     <div className={`rounded-[14px] border p-5 shadow-sm ${cardToneClasses(metric.tone)}`}>
@@ -227,148 +225,31 @@ function KpiCard({ metric }: { metric: KpiMetric }) {
             {metric.value}
           </div>
         </div>
-        <div
-          className={[
-            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset",
-            isPositive
-              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-              : metric.tone === "warning"
-                ? "bg-orange-50 text-[#F97316] ring-orange-200"
-                : "bg-slate-100 text-slate-700 ring-slate-200",
-          ].join(" ")}
-        >
-          {isPositive ? <ArrowTrendingUpIcon className="h-3.5 w-3.5" /> : <ArrowTrendingDownIcon className="h-3.5 w-3.5" />}
-          {metric.change}
-        </div>
+        {metric.change ? (
+          <div
+            className={[
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset",
+              trendToneClasses(metric.tone),
+            ].join(" ")}
+          >
+            {isIncreasing ? <ArrowTrendingUpIcon className="h-3.5 w-3.5" /> : null}
+            {isDecreasing ? <ArrowTrendingDownIcon className="h-3.5 w-3.5" /> : null}
+            {metric.change}
+          </div>
+        ) : null}
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{metric.helper}</p>
-    </div>
-  );
-}
-
-function FunnelStageCard({ step, maxSessions }: { step: FunnelStep; maxSessions: number }) {
-  const width = maxSessions > 0 ? Math.max(14, Math.round((step.sessions / maxSessions) * 100)) : 0;
-
-  return (
-    <div className="rounded-[14px] border border-slate-200 bg-slate-50/80 p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-900">{step.label}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-500">
-            <span>{number(step.sessions)} sessions</span>
-            <span>{percent(step.shareOfStarters)} of starters</span>
-            {step.stepConversionRate !== null ? <span>{percent(step.stepConversionRate)} from prior step</span> : <span>Entry step</span>}
-          </div>
-        </div>
-        <div className="flex w-full max-w-[290px] flex-col gap-2">
-          <div className="h-3 overflow-hidden rounded-full bg-white ring-1 ring-slate-200">
-            <div className="h-full rounded-full bg-[#F97316]" style={{ width: `${width}%` }} />
-          </div>
-          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-            <span>{step.dropOffCount > 0 ? `${number(step.dropOffCount)} dropped` : "No drop-off yet"}</span>
-            <span>{step.avgMinutesFromPrevious > 0 ? `${step.avgMinutesFromPrevious.toFixed(1)} min step time` : "Start"}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InsightPanel({ title, insights }: { title: string; insights: Insight[] }) {
-  return (
-    <section className={sectionCardClasses("p-6")}>
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-      <p className="mt-1 text-sm text-slate-500">The main business signals to act on next.</p>
-
-      <div className="mt-6 space-y-5">
-        {insights.map((insight, index) => (
-          <article key={insight.title} className={index === 0 ? "" : "border-t border-slate-200 pt-5"}>
-            <div
-              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${insightToneClasses(
-                insight.tone,
-              )}`}
-            >
-              Standout
+      {metric.helper ? <p className="mt-3 text-sm leading-6 text-slate-600">{metric.helper}</p> : null}
+      {metric.details?.length ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {metric.details.map((detail) => (
+            <div key={detail.label} className="rounded-[10px] bg-white/75 px-3 py-2 ring-1 ring-inset ring-slate-200/80">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{detail.label}</div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">{detail.value}</div>
             </div>
-            <h4 className="mt-3 text-base font-semibold text-slate-900">{insight.title}</h4>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{insight.body}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function LineChart({
-  data,
-  series,
-  minValue,
-  maxValue,
-}: {
-  data: TrendPoint[];
-  series: Array<{ key: keyof TrendPoint; color: string }>;
-  minValue?: number;
-  maxValue?: number;
-}) {
-  const width = 600;
-  const height = 220;
-  const paddingX = 18;
-  const paddingY = 18;
-
-  const values = data.flatMap((point) => series.map((line) => Number(point[line.key])));
-  const lower = minValue ?? Math.min(...values);
-  const upper = maxValue ?? Math.max(...values);
-  const span = Math.max(1, upper - lower);
-
-  function pointX(index: number) {
-    return paddingX + (index * (width - paddingX * 2)) / Math.max(1, data.length - 1);
-  }
-
-  function pointY(value: number) {
-    return height - paddingY - ((value - lower) / span) * (height - paddingY * 2);
-  }
-
-  function toPath(key: keyof TrendPoint) {
-    return data
-      .map((point, index) => `${index === 0 ? "M" : "L"} ${pointX(index)} ${pointY(Number(point[key]))}`)
-      .join(" ");
-  }
-
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full">
-      {[0, 1, 2, 3].map((line) => {
-        const y = paddingY + (line * (height - paddingY * 2)) / 3;
-        return <line key={line} x1={paddingX} x2={width - paddingX} y1={y} y2={y} className="stroke-slate-200" strokeDasharray="4 6" />;
-      })}
-
-      {series.map((line) => (
-        <path
-          key={String(line.key)}
-          d={toPath(line.key)}
-          fill="none"
-          stroke={line.color}
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ))}
-
-      {data.map((point, index) => (
-        <g key={point.label}>
-          {series.map((line) => (
-            <circle
-              key={`${point.label}-${String(line.key)}`}
-              cx={pointX(index)}
-              cy={pointY(Number(point[line.key]))}
-              r="4.5"
-              fill={line.color}
-              className="stroke-white"
-              strokeWidth="2"
-            />
           ))}
-        </g>
-      ))}
-    </svg>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -409,51 +290,103 @@ function ChartCard({
   );
 }
 
-function ChartAxisLabels({ data }: { data: TrendPoint[] }) {
-  return (
-    <div className="mt-2 grid grid-cols-4 gap-2 text-xs font-medium text-slate-400 sm:grid-cols-8">
-      {data.map((point) => (
-        <div key={point.label} className="min-w-0 truncate">
-          {point.label}
-        </div>
-      ))}
-    </div>
-  );
+function parseTrendBucketDate(point: BusinessTrendPoint) {
+  if (!point.bucketStart) return null;
+
+  const parsed = new Date(point.bucketStart);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function DropOffChart({ data }: { data: TrendPoint[] }) {
-  const maxValue = Math.max(
-    ...data.map((point) => point.pricingDropOff + point.scheduleDropOff + point.contactDropOff + point.reviewDropOff),
-  );
+function formatTrendTickLabel(point: BusinessTrendPoint, range: DateRangeKey) {
+  const date = parseTrendBucketDate(point);
+  if (!date) return point.label;
+
+  if (range === "6m" || range === "12m") {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+    }).format(date);
+  }
+
+  if (range === "all") {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      year: "2-digit",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function evenlySpacedIndexes(length: number, targetCount: number) {
+  if (length <= 0 || targetCount <= 0) return [];
+  if (length <= targetCount) return Array.from({ length }, (_, index) => index);
+
+  const indexes = new Set<number>();
+  const lastIndex = length - 1;
+
+  for (let step = 0; step < targetCount; step += 1) {
+    indexes.add(Math.round((step * lastIndex) / (targetCount - 1)));
+  }
+
+  indexes.add(0);
+  indexes.add(lastIndex);
+
+  return [...indexes].sort((a, b) => a - b);
+}
+
+function monthBoundaryIndexes(data: BusinessTrendPoint[], maxCount: number) {
+  if (data.length === 0) return [];
+
+  const indexes: number[] = [];
+  let previousMonthKey: string | null = null;
+
+  data.forEach((point, index) => {
+    const date = parseTrendBucketDate(point);
+    const monthKey = date ? `${date.getUTCFullYear()}-${date.getUTCMonth()}` : point.label;
+
+    if (monthKey !== previousMonthKey) {
+      indexes.push(index);
+      previousMonthKey = monthKey;
+    }
+  });
+
+  if (indexes.length <= maxCount) return indexes;
+
+  return evenlySpacedIndexes(data.length, maxCount);
+}
+
+function trendTickIndexes(data: BusinessTrendPoint[], range: DateRangeKey) {
+  if (range === "7d") return evenlySpacedIndexes(data.length, data.length);
+  if (range === "30d" || range === "90d") return evenlySpacedIndexes(data.length, 7);
+  if (range === "6m") return monthBoundaryIndexes(data, 7);
+  if (range === "12m") return data.length <= 12 ? evenlySpacedIndexes(data.length, data.length) : evenlySpacedIndexes(data.length, 8);
+
+  if (data.length <= 12) return evenlySpacedIndexes(data.length, data.length);
+  return evenlySpacedIndexes(data.length, 8);
+}
+
+function BusinessAxisLabels({ data, range }: { data: BusinessTrendPoint[]; range: DateRangeKey }) {
+  const tickIndexes = trendTickIndexes(data, range);
 
   return (
-    <div className="space-y-4">
-      {data.map((point) => {
-        const total = point.pricingDropOff + point.scheduleDropOff + point.contactDropOff + point.reviewDropOff;
+    <div
+      className="mt-2 grid gap-2 text-xs font-medium text-slate-400"
+      style={{ gridTemplateColumns: `repeat(${Math.max(1, tickIndexes.length)}, minmax(0, 1fr))` }}
+    >
+      {tickIndexes.map((index) => {
+        const point = data[index];
+
+        if (!point) return null;
+
         return (
-          <div key={point.label}>
-            <div className="mb-2 flex items-center justify-between text-sm">
-              <span className="font-medium text-slate-700">{point.label}</span>
-              <span className="text-slate-500">{number(total)} total drop-offs</span>
-            </div>
-            <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full bg-[#F97316]"
-                style={{ width: `${(point.pricingDropOff / maxValue) * 100}%` }}
-              />
-              <div
-                className="h-full bg-sky-500"
-                style={{ width: `${(point.scheduleDropOff / maxValue) * 100}%` }}
-              />
-              <div
-                className="h-full bg-emerald-500"
-                style={{ width: `${(point.contactDropOff / maxValue) * 100}%` }}
-              />
-              <div
-                className="h-full bg-slate-400"
-                style={{ width: `${(point.reviewDropOff / maxValue) * 100}%` }}
-              />
-            </div>
+          <div key={`${point.bucketStart ?? point.label}-${index}`} className="min-w-0 truncate whitespace-nowrap">
+            {formatTrendTickLabel(point, range)}
           </div>
         );
       })}
@@ -461,136 +394,143 @@ function DropOffChart({ data }: { data: TrendPoint[] }) {
   );
 }
 
-function VerticalBarChart({
+function BusinessLineChartMarkers({
   data,
-  getValue,
-  color,
-  formatValue,
+  range,
+  series,
+  pointX,
+  pointY,
 }: {
-  data: TrendPoint[];
-  getValue: (point: TrendPoint) => number;
-  color: string;
-  formatValue: (value: number) => string;
+  data: BusinessTrendPoint[];
+  range: DateRangeKey;
+  series: Array<{ key: keyof BusinessTrendPoint; color: string }>;
+  pointX: (index: number) => number;
+  pointY: (key: keyof BusinessTrendPoint, value: number) => number;
 }) {
-  const maxValue = Math.max(...data.map(getValue));
+  if (range !== "7d" && data.length > 1) return null;
 
   return (
-    <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
-      {data.map((point) => {
-        const value = getValue(point);
-        const height = maxValue > 0 ? Math.max(16, Math.round((value / maxValue) * 168)) : 16;
-        return (
-          <div key={point.label} className="min-w-0 flex flex-col items-center gap-3">
-            <div className="text-xs font-semibold text-slate-500">{formatValue(value)}</div>
-            <div className="flex h-44 items-end">
-              <div className="w-9 rounded-t-2xl" style={{ height, backgroundColor: color }} />
-            </div>
-            <div className="max-w-full truncate text-xs font-medium text-slate-400">{point.label}</div>
-          </div>
-        );
-      })}
-    </div>
+    <>
+      {data.map((point, index) => (
+        <g key={point.bucketStart ?? point.label}>
+          {series.map((line) => (
+            <circle
+              key={`${point.bucketStart ?? point.label}-${String(line.key)}`}
+              cx={pointX(index)}
+              cy={pointY(line.key, Number(point[line.key]))}
+              r="4.5"
+              fill={line.color}
+              className="stroke-white"
+              strokeWidth="2"
+            />
+          ))}
+        </g>
+      ))}
+    </>
   );
 }
 
-function BreakdownTable({ title, rows }: { title: string; rows: BreakdownRow[] }) {
-  const keySignal = [...rows].sort((a, b) => a.conversionRate - b.conversionRate)[0];
+function BusinessLineChart({
+  data,
+  range,
+  series,
+}: {
+  data: BusinessTrendPoint[];
+  range: DateRangeKey;
+  series: Array<{ key: keyof BusinessTrendPoint; color: string }>;
+}) {
+  const width = 600;
+  const height = 220;
+  const paddingX = 18;
+  const paddingY = 18;
 
+  function pointX(index: number) {
+    return paddingX + (index * (width - paddingX * 2)) / Math.max(1, data.length - 1);
+  }
+
+  function toPath(key: keyof BusinessTrendPoint) {
+    const values = data.map((point) => Number(point[key]));
+    const lower = Math.min(...values);
+    const upper = Math.max(...values);
+    const span = Math.max(1, upper - lower);
+
+    return data
+      .map((point, index) => {
+        const y = height - paddingY - ((Number(point[key]) - lower) / span) * (height - paddingY * 2);
+        return `${index === 0 ? "M" : "L"} ${pointX(index)} ${y}`;
+      })
+      .join(" ");
+  }
+
+  function pointY(key: keyof BusinessTrendPoint, value: number) {
+    const values = data.map((point) => Number(point[key]));
+    const lower = Math.min(...values);
+    const upper = Math.max(...values);
+    const span = Math.max(1, upper - lower);
+    return height - paddingY - ((value - lower) / span) * (height - paddingY * 2);
+  }
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full">
+      {[0, 1, 2, 3].map((line) => {
+        const y = paddingY + (line * (height - paddingY * 2)) / 3;
+        return <line key={line} x1={paddingX} x2={width - paddingX} y1={y} y2={y} className="stroke-slate-200" strokeDasharray="4 6" />;
+      })}
+
+      {series.map((line) => (
+        <path
+          key={String(line.key)}
+          d={toPath(line.key)}
+          fill="none"
+          stroke={line.color}
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+
+      <BusinessLineChartMarkers data={data} range={range} series={series} pointX={pointX} pointY={pointY} />
+    </svg>
+  );
+}
+
+function ProductMixTable({ rows }: { rows: ProductMixRow[] }) {
   return (
     <section className={sectionCardClasses("overflow-hidden")}>
       <div className="border-b border-slate-200 px-6 py-4">
-        <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+        <h3 className="text-lg font-semibold text-slate-900">Revenue and booking mix by dumpster type</h3>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              <th className="px-6 py-3">Segment</th>
-              <th className="px-6 py-3">Started</th>
-              <th className="px-6 py-3">Completed</th>
-              <th className="px-6 py-3">Conversion</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.map((row) => (
-              <tr key={row.label}>
-                <td className="px-6 py-4 font-semibold text-slate-900">{row.label}</td>
-                <td className="px-6 py-4 text-slate-600">{number(row.started)}</td>
-                <td className="px-6 py-4 text-slate-600">{number(row.completed)}</td>
-                <td className="px-6 py-4">
-                  <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
-                    {percent(row.conversionRate)}
-                  </span>
-                </td>
+        {rows.length > 0 ? (
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr className="text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <th className="px-6 py-3">Dumpster type</th>
+                <th className="px-6 py-3">Revenue</th>
+                <th className="px-6 py-3">Bookings</th>
+                <th className="px-6 py-3">Avg order</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="border-t border-slate-200 bg-slate-50/70 px-6 py-4 text-sm leading-6 text-slate-600">
-        <span className="font-semibold text-slate-900">Signal:</span> {keySignal.note}
-      </div>
-    </section>
-  );
-}
-
-function RankedUsageList({ title, rows }: { title: string; rows: UsageRow[] }) {
-  const maxCount = Math.max(...rows.map((row) => row.count));
-
-  return (
-    <section className={sectionCardClasses("p-6")}>
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-      <div className="mt-6 space-y-1">
-        {rows.map((row, index) => {
-          const width = maxCount > 0 ? Math.max(16, Math.round((row.count / maxCount) * 100)) : 0;
-          return (
-            <div key={row.label} className={index === 0 ? "" : "border-t border-slate-200 pt-4"}>
-              <div className="grid gap-3 lg:grid-cols-[44px_minmax(0,1fr)_auto] lg:items-start">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
-                  {index + 1}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">{row.label}</div>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">{row.detail}</p>
-                </div>
-                <div className="shrink-0 lg:text-right">
-                  <div className="text-xl font-semibold tracking-tight text-slate-900">{number(row.count)}</div>
-                  <div className="mt-1 text-xs font-medium text-slate-500">{row.share}% share</div>
-                  <div className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                    {row.trend}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-slate-900" style={{ width: `${width}%` }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function ValuePanel({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: Array<{ label: string; value: string; helper: string }>;
-}) {
-  return (
-    <section className={sectionCardClasses("p-6")}>
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-      <p className="mt-1 text-sm leading-6 text-slate-500">The directional measures most likely to reflect time saved and support deflection.</p>
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {rows.map((row) => (
-          <div key={row.label} className="rounded-[14px] border border-slate-200 bg-slate-50/70 p-5">
-            <div className="text-sm font-medium text-slate-500">{row.label}</div>
-            <div className="mt-2 text-[30px] font-semibold leading-none tracking-tight text-slate-900">{row.value}</div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">{row.helper}</p>
-          </div>
-        ))}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row) => (
+                <tr key={row.label}>
+                  <td className="px-6 py-4 font-semibold text-slate-900">{row.label}</td>
+                  <td className="px-6 py-4 text-slate-600">
+                    {currency(row.revenue)}
+                    <div className="mt-1 text-xs text-slate-400">{percent(row.revenueShare, 0)} of revenue</div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600">
+                    {number(row.bookings)}
+                    <div className="mt-1 text-xs text-slate-400">{percent(row.bookingShare, 0)} of bookings</div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600">{currency(row.avgOrderValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="px-6 py-10 text-sm text-slate-500">No booking data for this period.</div>
+        )}
       </div>
     </section>
   );
@@ -602,163 +542,102 @@ export default async function ConversionAnalyticsPage({
   searchParams?: Promise<SearchParams>;
 }) {
   const resolvedSearchParams = (await searchParams) ?? {};
-  const filters = toFilters(resolvedSearchParams);
-  const analytics = buildConversionAnalytics(filters);
-  const maxFunnelSessions = Math.max(...analytics.funnel.map((step) => step.sessions));
+  const filters = parseReportsFilters(resolvedSearchParams);
+  const adminSession = await requireAdminOwner();
+  const reports = await getAdminReportsData({
+    businessId: adminSession.business.id,
+    filters,
+  });
 
   return (
     <AdminPage className="min-w-0 pt-8">
-      <FilterBar filters={filters} />
+      <FilterBar filters={reports.filters} productOptions={reports.productOptions} />
 
-      <section className="mt-10 rounded-[20px] border border-slate-200/80 bg-white/80 p-6 shadow-sm lg:p-8">
+      <section className="mt-10 rounded-[20px] border border-slate-200/80 bg-white p-6 shadow-sm lg:p-8">
         <SectionHeading
-          eyebrow="Website Analytics"
-          title="Where customers are falling out of the booking flow"
-          description="This is the clearest view of booking health: how many people start, where they hesitate, and whether pricing or another step deserves attention first."
+          eyebrow="Business performance"
+          title="How the business is performing"
+          description="Booked rental value, booking volume, dumpster mix, and repeat business signals for the selected period."
         />
 
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {analytics.bookingKpis.map((metric) => (
+          {reports.businessKpis.map((metric) => (
             <KpiCard key={metric.label} metric={metric} />
           ))}
         </section>
 
-        <div className="mt-8 grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1.7fr)_300px]">
-          <section className={sectionCardClasses("p-6")}>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">Booking funnel</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-500">The main path from start to booked order, with drop-off and step efficiency at each stage.</p>
-              </div>
-              <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
-                {analytics.funnel.length} stages
-              </div>
-            </div>
-            <div className="mt-6 space-y-3.5">
-              {analytics.funnel.map((step) => (
-                <FunnelStageCard key={step.key} step={step} maxSessions={maxFunnelSessions} />
-              ))}
-            </div>
-          </section>
-
-          <InsightPanel title="What stands out" insights={analytics.bookingInsights} />
-        </div>
-
-        <div className="mt-8 space-y-6">
-          <div className="grid min-w-0 gap-6 2xl:grid-cols-2">
-            <ChartCard
-              title="Conversion rate over time"
-              subtitle="Use this to judge whether booking changes are improving close rate."
-              footer="Conversion should improve before traffic growth matters."
-            >
-              <LineChart data={analytics.bookingTrends} series={[{ key: "conversionRate", color: "#0f172a" }]} minValue={20} maxValue={60} />
-              <ChartAxisLabels data={analytics.bookingTrends} />
-            </ChartCard>
-
-            <ChartCard
-              title="Sessions started vs completed"
-              subtitle="Compares demand entering the flow with bookings actually closed."
-              legend={[
-                { label: "Started", color: "#F97316" },
-                { label: "Completed", color: "#0f172a" },
-              ]}
-              footer="If started grows but completed stalls, the booking flow is leaking demand."
-            >
-              <LineChart
-                data={analytics.bookingTrends}
-                series={[
-                  { key: "started", color: "#F97316" },
-                  { key: "completed", color: "#0f172a" },
-                ]}
-              />
-              <ChartAxisLabels data={analytics.bookingTrends} />
-            </ChartCard>
-          </div>
-
-          <div className="grid min-w-0 gap-6 2xl:grid-cols-2">
-            <ChartCard
-              title="Drop-off by step over time"
-              subtitle="Shows where abandonment is concentrating from period to period."
-              legend={[
-                { label: "Pricing", color: "#F97316" },
-                { label: "Schedule/details", color: "#0ea5e9" },
-                { label: "Contact", color: "#10b981" },
-                { label: "Review", color: "#94a3b8" },
-              ]}
-              footer="Pricing should remain the first place to investigate unless another step overtakes it."
-            >
-              <DropOffChart data={analytics.bookingTrends} />
-            </ChartCard>
-
-            <ChartCard
-              title="Average booking completion time"
-              subtitle="Longer completion time usually means more hesitation or more interruption."
-              footer="Use this with resume rate to tell the difference between healthy shopping and real friction."
-            >
-              <VerticalBarChart
-                data={analytics.bookingTrends}
-                getValue={(point) => point.avgCompletionMinutes}
-                color="#0f172a"
-                formatValue={(value) => `${value.toFixed(1)}m`}
-              />
-            </ChartCard>
-          </div>
-        </div>
-
         <div className="mt-8 grid min-w-0 gap-6 2xl:grid-cols-2">
-          <BreakdownTable title="Conversion by device type" rows={analytics.breakdowns.devices} />
-          <BreakdownTable title="Conversion by dumpster type" rows={analytics.breakdowns.products} />
-          <BreakdownTable title="Conversion by ZIP / service area" rows={analytics.breakdowns.areas} />
-          <BreakdownTable title="Conversion by day of week" rows={analytics.breakdowns.weekdays} />
+          <ChartCard
+            title="Revenue trend over time"
+            subtitle="Booked rental revenue across the selected period."
+            legend={[{ label: "Revenue", color: "#0f172a" }]}
+            footer={`Accepted bookings created during the selected ${reports.dateRangeLabel} range.`}
+          >
+            <BusinessLineChart
+              data={reports.businessTrends}
+              range={reports.filters.range}
+              series={[{ key: "revenue", color: "#0f172a" }]}
+            />
+            <BusinessAxisLabels data={reports.businessTrends} range={reports.filters.range} />
+          </ChartCard>
+
+          <ChartCard
+            title="Booking volume trend over time"
+            subtitle="Accepted bookings created during the selected period."
+            legend={[{ label: "Bookings", color: "#F97316" }]}
+            footer="Use this with revenue to spot whether growth is volume-led or value-led."
+          >
+            <BusinessLineChart
+              data={reports.businessTrends}
+              range={reports.filters.range}
+              series={[{ key: "bookings", color: "#F97316" }]}
+            />
+            <BusinessAxisLabels data={reports.businessTrends} range={reports.filters.range} />
+          </ChartCard>
         </div>
+
+        <div className="mt-8">
+          <ProductMixTable rows={reports.productMix} />
+        </div>
+      </section>
+
+      <section className="mt-14 rounded-[20px] border border-slate-200/80 bg-white p-6 shadow-sm lg:p-8">
+        <SectionHeading
+          eyebrow="Website funnel health"
+          title="How website visitors move through booking"
+          description="See where customers enter, complete, or leave the online booking process"
+        />
+
+        <FunnelFilterBar
+          filters={reports.filters}
+          deviceOptions={reports.deviceOptions}
+          visitorTypeOptions={reports.visitorTypeOptions}
+        />
+
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {reports.websiteFunnelKpis.map((metric) => (
+            <KpiCard key={metric.label} metric={metric} />
+          ))}
+        </section>
+
+        {!reports.websiteFunnelHasData ? (
+          <div className="mt-6 rounded-[14px] border border-slate-200 bg-slate-50 px-5 py-4 text-sm leading-6 text-slate-600">
+            No tracked website funnel sessions match the selected filters for this period.
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-14 rounded-[20px] border border-slate-200/80 bg-slate-50/70 p-6 shadow-sm lg:p-8">
         <SectionHeading
-          eyebrow="Portal adoption & self-service"
-          title="Whether the portal is creating real operational value"
-          description="The portal matters if customers actually use it, come back to it, and complete actions that would otherwise become calls, texts, or manual office work."
+          eyebrow="Customer portal value"
+          title="How customers are using portal workflows"
         />
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {analytics.portalKpis.map((metric) => (
+        <section className="mt-6 grid gap-4 md:grid-cols-2">
+          {reports.portalKpis.map((metric) => (
             <KpiCard key={metric.label} metric={metric} />
           ))}
         </section>
-
-        <div className="mt-8 grid min-w-0 gap-6 2xl:grid-cols-2">
-          <ChartCard
-            title="Portal logins over time"
-            subtitle="Shows whether the portal is becoming routine instead of one-time usage."
-            footer="Login growth should translate into fewer simple status and pickup inquiries."
-          >
-            <LineChart data={analytics.bookingTrends} series={[{ key: "portalLogins", color: "#0f172a" }]} />
-            <ChartAxisLabels data={analytics.bookingTrends} />
-          </ChartCard>
-
-          <ChartCard
-            title="Unique portal users over time"
-            subtitle="Tracks how many distinct customers are engaging, not just total sessions."
-            footer="Adoption depends on unique users; stickiness depends on repeat sessions."
-          >
-            <VerticalBarChart
-              data={analytics.bookingTrends}
-              getValue={(point) => point.uniqueUsers}
-              color="#F97316"
-              formatValue={(value) => number(value)}
-            />
-          </ChartCard>
-        </div>
-
-        <div className="mt-8 grid gap-6 2xl:grid-cols-2">
-          <RankedUsageList title="Most-used portal features" rows={analytics.portalFeatureUsage} />
-          <RankedUsageList title="Most common self-service actions" rows={analytics.portalActionUsage} />
-        </div>
-
-        <div className="mt-8 grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-          <InsightPanel title="What this means for the business" insights={analytics.portalInsights} />
-          <ValuePanel title="Operational value summary" rows={analytics.portalValueStats} />
-        </div>
       </section>
     </AdminPage>
   );

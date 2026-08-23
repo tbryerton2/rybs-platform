@@ -1,6 +1,7 @@
 import { formatEmailUsdFromCents } from "../currency.ts";
 
 type AdminNewBookingEmailInput = {
+  businessName: string;
   customerName: string;
   customerEmail?: string | null;
   customerPhone?: string | null;
@@ -14,6 +15,7 @@ type AdminNewBookingEmailInput = {
 };
 
 export function buildAdminNewBookingEmail({
+  businessName,
   customerName,
   customerEmail,
   customerPhone,
@@ -25,10 +27,10 @@ export function buildAdminNewBookingEmail({
   totalPriceCents,
   adminBookingUrl,
 }: AdminNewBookingEmailInput) {
-  const subject = `New Tan Can Man booking: ${customerName}`;
+  const subject = `New ${businessName} booking: ${customerName}`;
 
   const text = `
-New Tan Can Man booking received.
+New ${businessName} booking received.
 
 Customer: ${customerName}
 Email: ${customerEmail ?? "Not provided"}
@@ -46,7 +48,7 @@ ${adminBookingUrl ? `View booking: ${adminBookingUrl}` : ""}
 
   const html = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h1 style="margin-bottom: 16px;">New Tan Can Man booking</h1>
+      <h1 style="margin-bottom: 16px;">New ${businessName} booking</h1>
 
       <h2 style="font-size: 18px; margin-top: 20px;">Customer</h2>
       <table style="border-collapse: collapse;">

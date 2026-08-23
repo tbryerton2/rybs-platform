@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BlockedZipPanel } from "@/components/BlockedZipPanel";
+import { BookingFunnelStepTracker } from "@/lib/analytics/booking-funnel-client";
 import { normalizeBookingOrigin } from "@/lib/booking-origin";
 import type { BookingPriceQuote } from "@/lib/booking-pricing";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
@@ -315,12 +316,12 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
 
     setZipStatus({ state: "checking" });
 
-    const params = new URLSearchParams({
-      zip: nextZip,
-      dumpsterSize: selectedDumpsterFromQuery.dumpsterSize,
-    });
-    if (selectedDumpsterFromQuery.dumpsterProductId) {
-      params.set("dumpsterProductId", selectedDumpsterFromQuery.dumpsterProductId);
+    const params = new URLSearchParams({ zip: nextZip });
+    if (hasSelectedDumpsterInQuery) {
+      params.set("dumpsterSize", selectedDumpsterFromQuery.dumpsterSize);
+      if (selectedDumpsterFromQuery.dumpsterProductId) {
+        params.set("dumpsterProductId", selectedDumpsterFromQuery.dumpsterProductId);
+      }
     }
 
     const res = await fetch(`/api/zip-check?${params.toString()}`, { cache: "no-store" });
@@ -374,6 +375,7 @@ export default function AddressStepPageClient({ content }: AddressStepPageClient
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#F8FAFC] to-[#EEF2F7] text-[#0F172A]">
+      <BookingFunnelStepTracker stepKey="service_area" />
       <div className="mx-auto max-w-2xl px-6 pb-16 pt-10">
         <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 shadow-xl ring-1 ring-slate-200/70 sm:px-12 sm:pb-12 sm:pt-8">
           <div className="space-y-3">

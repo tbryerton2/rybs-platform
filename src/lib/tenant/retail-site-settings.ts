@@ -42,17 +42,23 @@ export type RetailCalendarClosuresSettings = {
   blockedRanges: RetailBlockedRange[];
 };
 
+export type RetailNotificationsSettings = {
+  bookingEmail: string;
+};
+
 export type RetailSiteSettings = {
   header: RetailHeaderSettings;
   home: {
     visibility: RetailHomeVisibilitySettings;
   };
   calendarClosures: RetailCalendarClosuresSettings;
+  notifications: RetailNotificationsSettings;
 };
 
 const SETTINGS_CATEGORY_HEADER = "settings.header";
 const SETTINGS_CATEGORY_HOME_VISIBILITY = "settings.home.visibility";
 const SETTINGS_CATEGORY_CALENDAR_CLOSURES = "settings.calendarClosures";
+const SETTINGS_CATEGORY_NOTIFICATIONS = "notifications";
 
 function asBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
@@ -143,6 +149,10 @@ export function sanitizeRetailSiteSettings(input: unknown): RetailSiteSettings {
     value.calendarClosures && typeof value.calendarClosures === "object"
       ? (value.calendarClosures as Record<string, unknown>)
       : {};
+  const notifications =
+    value.notifications && typeof value.notifications === "object"
+      ? (value.notifications as Record<string, unknown>)
+      : {};
 
   return {
     header: {
@@ -167,6 +177,9 @@ export function sanitizeRetailSiteSettings(input: unknown): RetailSiteSettings {
     calendarClosures: {
       blockedDates: sanitizeBlockedDates(calendarClosures.blockedDates),
       blockedRanges: sanitizeBlockedRanges(calendarClosures.blockedRanges),
+    },
+    notifications: {
+      bookingEmail: asString(notifications.bookingEmail),
     },
   };
 }
@@ -212,6 +225,9 @@ export async function getRetailSiteSettingsForTenant(tenant: TenantRecord): Prom
       blockedDates: settings.get(`${SETTINGS_CATEGORY_CALENDAR_CLOSURES}.blockedDates`) ?? [],
       blockedRanges: settings.get(`${SETTINGS_CATEGORY_CALENDAR_CLOSURES}.blockedRanges`) ?? [],
     },
+    notifications: {
+      bookingEmail: settings.get(`${SETTINGS_CATEGORY_NOTIFICATIONS}.bookingEmail`) ?? "",
+    },
   });
 }
 
@@ -232,6 +248,10 @@ export async function saveRetailSiteSettingsForTenant(
 
   if (settings.header.showEmailInHeader && !isValidEmail(settings.header.emailAddress)) {
     throw new Error("A valid email address is required when header email is enabled.");
+  }
+
+  if (settings.notifications.bookingEmail && !isValidEmail(settings.notifications.bookingEmail)) {
+    throw new Error("A valid booking notification email address is required.");
   }
 
   const { error } = await supabaseAdmin.from("tenant_settings").upsert(
@@ -325,6 +345,12 @@ export async function saveRetailSiteSettingsForTenant(
         category: SETTINGS_CATEGORY_CALENDAR_CLOSURES,
         key: "blockedRanges",
         value_json: settings.calendarClosures.blockedRanges,
+      },
+      {
+        tenant_id: tenant.id,
+        category: SETTINGS_CATEGORY_NOTIFICATIONS,
+        key: "bookingEmail",
+        value_json: settings.notifications.bookingEmail,
       },
     ],
     { onConflict: "tenant_id,category,key" },

@@ -3,6 +3,7 @@ import { getDeliveryAvailabilitySnapshot } from "@/lib/booking-availability";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { addDaysYmd, getMaximumBookablePickupDate } from "@/lib/booking-pricing";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { isTenantResolutionError } from "@/lib/tenant/resolution";
 import { getCurrentTenant } from "@/lib/tenant/server";
 
@@ -24,7 +25,11 @@ export async function GET(req: Request) {
 
   try {
     const tenant = await getCurrentTenant();
-    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
+    const rentalPolicy = await getDumpsterRentalPolicy({
+      ...selectedDumpster,
+      businessId: tenant.id,
+      requirePublicProduct: true,
+    });
     const defaultEnd = addDaysYmd(deliveryDate, rentalPolicy.standardRentalDays);
     const pricingMaxPickupDate =
       getMaximumBookablePickupDate(deliveryDate, rentalPolicy, null) ?? defaultEnd;
@@ -75,6 +80,10 @@ export async function GET(req: Request) {
   } catch (error) {
     if (isTenantResolutionError(error)) {
       return NextResponse.json({ ok: false, error: error.publicMessage }, { status: 503 });
+    }
+
+    if (isPublicDumpsterProductError(error)) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
     }
 
     const message = error instanceof Error ? error.message : "Pickup-cap availability check failed.";

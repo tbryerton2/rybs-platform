@@ -13,7 +13,6 @@ type Filter = { column: string; value: unknown };
 const originalEnv = {
   SES_FROM_EMAIL: process.env.SES_FROM_EMAIL,
   SES_REPLY_TO_EMAIL: process.env.SES_REPLY_TO_EMAIL,
-  RESEND_API_KEY: process.env.RESEND_API_KEY,
 };
 
 afterEach(() => {
@@ -148,8 +147,6 @@ function createMockSupabase(initial: { booking_messages?: Row[]; booking_charges
 }
 
 test("processQueuedBookingMessages sends SES receipt and updates message and charge", async () => {
-  process.env.SES_FROM_EMAIL = "bookings@tancanman.com";
-  process.env.SES_REPLY_TO_EMAIL = "info@tancanman.com";
   const supabase = createMockSupabase({
     booking_messages: [queuedMessage()],
     booking_charges: [bookingCharge()],
@@ -163,6 +160,15 @@ test("processQueuedBookingMessages sends SES receipt and updates message and cha
       sentInputs.push(input);
       return { MessageId: "ses-message-1" };
     },
+    resolveTenantEmailSender: async (businessId) => {
+      assert.equal(businessId, BUSINESS_ID);
+      return {
+        senderDisplayName: "Tan Can Man",
+        senderEmail: "bookings@tancanman.com",
+        replyToEmail: "support@tancanman.com",
+        sesRegion: "us-east-1",
+      };
+    },
   });
 
   assert.equal(result.ok, true);
@@ -173,7 +179,11 @@ test("processQueuedBookingMessages sends SES receipt and updates message and cha
     subject: "Additional charge for your dumpster rental",
     text: "Your saved card was charged.",
     html: '<div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827; white-space: pre-wrap;">Your saved card was charged.</div>',
-    replyTo: "info@tancanman.com",
+    fromEmail: "bookings@tancanman.com",
+    fromDisplayName: "Tan Can Man",
+    replyTo: "support@tancanman.com",
+    region: "us-east-1",
+    useDefaultReplyTo: false,
   });
   assert.equal(supabase.tables.booking_messages[0].status, "sent");
   assert.equal(supabase.tables.booking_messages[0].provider, "ses");
@@ -186,8 +196,6 @@ test("processQueuedBookingMessages sends SES receipt and updates message and cha
 });
 
 test("processQueuedBookingMessages tracks SES failure on message and charge without changing paid charge", async () => {
-  process.env.SES_FROM_EMAIL = "bookings@tancanman.com";
-  process.env.SES_REPLY_TO_EMAIL = "info@tancanman.com";
   const supabase = createMockSupabase({
     booking_messages: [queuedMessage()],
     booking_charges: [bookingCharge()],
@@ -199,6 +207,12 @@ test("processQueuedBookingMessages tracks SES failure on message and charge with
     sendSesEmail: async () => {
       throw new Error("SES rejected the message because of a test failure.");
     },
+    resolveTenantEmailSender: async () => ({
+      senderDisplayName: "Tan Can Man",
+      senderEmail: "bookings@tancanman.com",
+      replyToEmail: "support@tancanman.com",
+      sesRegion: "us-east-1",
+    }),
   });
 
   assert.equal(result.ok, true);
@@ -212,8 +226,6 @@ test("processQueuedBookingMessages tracks SES failure on message and charge with
 });
 
 test("processQueuedBookingMessages can process only a specific queued message id", async () => {
-  process.env.SES_FROM_EMAIL = "bookings@tancanman.com";
-  process.env.SES_REPLY_TO_EMAIL = "info@tancanman.com";
   const supabase = createMockSupabase({
     booking_messages: [
       queuedMessage({ id: "message-1" }),
@@ -242,6 +254,15 @@ test("processQueuedBookingMessages can process only a specific queued message id
       sentInputs.push(input);
       return { MessageId: "ses-message-1" };
     },
+    resolveTenantEmailSender: async (businessId) => {
+      assert.equal(businessId, BUSINESS_ID);
+      return {
+        senderDisplayName: "Tan Can Man",
+        senderEmail: "bookings@tancanman.com",
+        replyToEmail: "support@tancanman.com",
+        sesRegion: "us-east-1",
+      };
+    },
   });
 
   assert.equal(result.ok, true);
@@ -251,4 +272,35 @@ test("processQueuedBookingMessages can process only a specific queued message id
   assert.equal(supabase.tables.booking_messages[1].status, "queued");
   assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "sent");
   assert.equal(supabase.tables.booking_charges[1].customer_receipt_email_status, "queued");
+});
+
+test("processQueuedBookingMessages fails clearly when tenant sender is not verified", async () => {
+  const supabase = createMockSupabase({
+    booking_messages: [queuedMessage({
+      business_id: "55555555-5555-4555-8555-555555555555",
+      booking_charge_id: null,
+      template: "status_confirmed",
+    })],
+    booking_charges: [],
+  });
+  const sentInputs: unknown[] = [];
+
+  const result = await processQueuedBookingMessages({
+    supabase: supabase.client as never,
+    now: () => new Date("2026-06-25T18:50:00.000Z"),
+    sendSesEmail: async (input) => {
+      sentInputs.push(input);
+      return { MessageId: "ses-message-1" };
+    },
+    resolveTenantEmailSender: async (businessId) => {
+      assert.equal(businessId, "55555555-5555-4555-8555-555555555555");
+      throw new Error("Tenant email sender is not verified.");
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.processed, 0);
+  assert.equal(sentInputs.length, 0);
+  assert.equal(supabase.tables.booking_messages[0].status, "failed");
+  assert.equal(supabase.tables.booking_messages[0].error, "Tenant email sender is not verified.");
 });

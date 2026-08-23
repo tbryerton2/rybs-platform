@@ -11,6 +11,10 @@ import {
   CARD_ON_FILE_CONSENT_TEXT,
   CARD_ON_FILE_CONSENT_VERSION,
 } from "@/lib/booking-terms";
+import {
+  BookingFunnelStepTracker,
+  getActiveBookingAnalyticsSessionToken,
+} from "@/lib/analytics/booking-funnel-client";
 import { formatUsdFromCents } from "@/lib/money";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
 
@@ -311,6 +315,8 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
       !selectedDumpsterSize ||
       priceQuoteMatchesSelection(draft.priceQuote, {
         zip: bookingZip,
+        dumpsterSize: selectedDumpsterSize,
+        dumpsterProductId: draft.dumpsterProductId,
         deliveryDate: draft.deliveryDate,
         pickupDate: draft.pickupDate,
         pickupMode: draft.pickupMode,
@@ -602,12 +608,14 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
           bookingDraft: draft,
           paymentProvider: "square",
           paymentMethodToken: payment.paymentMethodToken,
+          analyticsBookingSessionToken: getActiveBookingAnalyticsSessionToken(),
         }
       : {
           holdId: draft.holdId,
           deliveryDate: details.deliveryDateYMD, // ✅ IMPORTANT: send YYYY-MM-DD explicitly
           bookingDraft: draft,
           totalPriceCents: totalCents,
+          analyticsBookingSessionToken: getActiveBookingAnalyticsSessionToken(),
         };
 
     // ✅ Convert hold -> booking
@@ -771,6 +779,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
   return (
     <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
+      <BookingFunnelStepTracker stepKey="checkout" />
       <div className="mx-auto max-w-2xl px-6 pt-10 pb-16">
         <div className="rounded-[32px] bg-white px-10 pb-12 pt-5 sm:px-12 sm:pb-12 sm:pt-8 shadow-xl ring-1 ring-slate-200/70">
           <div className="space-y-3">

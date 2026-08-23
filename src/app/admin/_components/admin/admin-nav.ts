@@ -17,7 +17,6 @@ export type AdminNavItem = {
     | "serviceArea"
     | "retailSiteSettings"
     | "retailSiteContent"
-    | "reports"
     | "leadFunnel"
     | "zipHeatmap"
     | "guides"
@@ -88,12 +87,6 @@ const allAdminNavGroups: AdminNavGroup[] = [
     items: [
       {
         label: "Reports",
-        href: "/admin/analytics/reports",
-        icon: "reports",
-        matchers: ["/admin/analytics/reports"],
-      },
-      {
-        label: "Website Analytics",
         href: "/admin/analytics/conversion",
         icon: "leadFunnel",
         matchers: ["/admin/analytics/conversion"],

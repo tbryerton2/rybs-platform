@@ -81,10 +81,11 @@ const bookingRef = existing.booking_ref ?? id;
 let queued = false;
 
 if (shouldNotify && toEmail) {
+  const businessName = adminAuth.session.business.name;
   const subjectByStatus: Record<string, string> = {
-    confirmed: "Tin Can Man — Booking confirmed",
-    scheduled: "Tin Can Man — Your delivery is scheduled",
-    cancelled: "Tin Can Man — Booking cancelled",
+    confirmed: `${businessName} - Booking confirmed`,
+    scheduled: `${businessName} - Your delivery is scheduled`,
+    cancelled: `${businessName} - Booking cancelled`,
   };
 
   const bodyByStatus: Record<string, string> = {
@@ -100,9 +101,9 @@ if (shouldNotify && toEmail) {
     direction: "outbound",
     template: `status_${nextStatus}`,
     to: toEmail,
-    subject: subjectByStatus[nextStatus] ?? "Tin Can Man — Update",
+    subject: subjectByStatus[nextStatus] ?? `${businessName} - Update`,
     body: bodyByStatus[nextStatus] ?? `Status updated to ${nextStatus}. Booking reference: ${bookingRef}`,
-    provider: null,
+    provider: "ses",
     provider_message_id: null,
     status: "queued",
     error: null,

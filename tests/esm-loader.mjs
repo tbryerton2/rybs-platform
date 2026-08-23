@@ -1,10 +1,19 @@
 const SERVER_ONLY_STUB_URL = "data:text/javascript,export default undefined;";
+const NEXT_HEADERS_STUB_URL =
+  "data:text/javascript,export async function headers(){return new Map();} export async function cookies(){return {get(){return undefined;},set(){}};}";
 
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === "server-only") {
     return {
       shortCircuit: true,
       url: SERVER_ONLY_STUB_URL,
+    };
+  }
+
+  if (specifier === "next/headers") {
+    return {
+      shortCircuit: true,
+      url: NEXT_HEADERS_STUB_URL,
     };
   }
 

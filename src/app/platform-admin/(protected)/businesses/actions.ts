@@ -14,6 +14,14 @@ import {
   updatePlatformTenantDomain,
 } from "@/lib/platform-admin/domains";
 import {
+  PlatformEmailIdentityMutationError,
+  checkPlatformTenantEmailIdentity,
+  disablePlatformTenantEmailIdentity,
+  provisionPlatformTenantEmailIdentity,
+  removePlatformTenantEmailIdentity,
+  savePlatformTenantEmailIdentity,
+} from "@/lib/platform-admin/email-identities";
+import {
   PlatformTenantMutationError,
   assignExistingUserAsBusinessAdmin,
   createPlatformTenant,
@@ -68,6 +76,13 @@ function revalidatePlatformBusiness(tenantId: string) {
 
 function redirectDomainMutationError(tenantId: string, error: PlatformDomainMutationError): never {
   redirect(`/platform-admin/businesses/${tenantId}?error=${encodeURIComponent(error.message)}`);
+}
+
+function redirectEmailIdentityMutationError(
+  tenantId: string,
+  error: PlatformEmailIdentityMutationError,
+): never {
+  redirect(`/platform-admin/businesses/${tenantId}?error=${encodeURIComponent(error.message)}#email-sending`);
 }
 
 export async function createBusinessAction(
@@ -380,6 +395,102 @@ export async function removeDomainAction(formData: FormData) {
   } catch (error) {
     if (error instanceof PlatformDomainMutationError) {
       redirectDomainMutationError(tenantId, error);
+    }
+
+    throw error;
+  }
+}
+
+export async function saveEmailIdentityAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+
+  try {
+    const result = await savePlatformTenantEmailIdentity({
+      tenantId,
+      senderDomain: formString(formData, "senderDomain"),
+      senderLocalPart: formString(formData, "senderLocalPart"),
+      senderDisplayName: formString(formData, "senderDisplayName"),
+      replyToEmail: formString(formData, "replyToEmail"),
+    });
+
+    revalidatePlatformBusiness(result.tenantId);
+    redirect(`/platform-admin/businesses/${result.tenantId}?status=email-identity-saved#email-sending`);
+  } catch (error) {
+    if (error instanceof PlatformEmailIdentityMutationError) {
+      redirectEmailIdentityMutationError(tenantId, error);
+    }
+
+    throw error;
+  }
+}
+
+export async function provisionEmailIdentityAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+
+  try {
+    const result = await provisionPlatformTenantEmailIdentity({ tenantId });
+
+    revalidatePlatformBusiness(result.tenantId);
+    redirect(`/platform-admin/businesses/${result.tenantId}?status=email-identity-provisioned#email-sending`);
+  } catch (error) {
+    if (error instanceof PlatformEmailIdentityMutationError) {
+      redirectEmailIdentityMutationError(tenantId, error);
+    }
+
+    throw error;
+  }
+}
+
+export async function checkEmailIdentityAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+
+  try {
+    const result = await checkPlatformTenantEmailIdentity({ tenantId });
+
+    revalidatePlatformBusiness(result.tenantId);
+    redirect(
+      `/platform-admin/businesses/${result.tenantId}?status=email-identity-checked&checkedEmailIdentity=1#email-sending`,
+    );
+  } catch (error) {
+    if (error instanceof PlatformEmailIdentityMutationError) {
+      redirectEmailIdentityMutationError(tenantId, error);
+    }
+
+    throw error;
+  }
+}
+
+export async function disableEmailIdentityAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+
+  try {
+    const result = await disablePlatformTenantEmailIdentity({ tenantId });
+
+    revalidatePlatformBusiness(result.tenantId);
+    redirect(`/platform-admin/businesses/${result.tenantId}?status=email-identity-disabled#email-sending`);
+  } catch (error) {
+    if (error instanceof PlatformEmailIdentityMutationError) {
+      redirectEmailIdentityMutationError(tenantId, error);
+    }
+
+    throw error;
+  }
+}
+
+export async function removeEmailIdentityAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+
+  try {
+    const result = await removePlatformTenantEmailIdentity({
+      tenantId,
+      confirmation: formString(formData, "confirmation"),
+    });
+
+    revalidatePlatformBusiness(result.tenantId);
+    redirect(`/platform-admin/businesses/${result.tenantId}?status=email-identity-removed#email-sending`);
+  } catch (error) {
+    if (error instanceof PlatformEmailIdentityMutationError) {
+      redirectEmailIdentityMutationError(tenantId, error);
     }
 
     throw error;

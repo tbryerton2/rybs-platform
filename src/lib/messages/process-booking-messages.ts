@@ -1,5 +1,3 @@
-import { Resend } from "resend";
-
 type QueuedBookingMessage = {
   id: string;
   business_id: string | null;
@@ -46,28 +44,33 @@ type SendEmailInput = {
   subject: string;
   html: string;
   text: string;
-  replyTo?: string;
+  replyTo?: string | null;
+  fromEmail?: string;
+  fromDisplayName?: string | null;
+  region?: string | null;
+  useDefaultReplyTo?: boolean;
 };
 
 type SendEmailResult = {
   messageId: string | null;
 };
 
+type QueuedTenantEmailSender = {
+  senderDisplayName: string;
+  senderEmail: string;
+  replyToEmail: string | null;
+  sesRegion: string | null;
+};
+
 export type ProcessMessagesOptions = {
   supabase?: SupabaseClient;
   messageId?: string;
   sendSesEmail?: (input: SendEmailInput) => Promise<unknown>;
-  createResend?: (apiKey: string) => Pick<Resend["emails"], "send">;
+  resolveTenantEmailSender?: (businessId: string) => Promise<QueuedTenantEmailSender>;
   now?: () => Date;
 };
 
-type ResendSendResult = Awaited<ReturnType<Resend["emails"]["send"]>> & {
-  id?: string | null;
-};
-
 const POST_BOOKING_CHARGE_RECEIPT_TEMPLATE = "post_booking_charge_paid";
-const EXPECTED_SES_FROM_EMAIL = "bookings@tancanman.com";
-const EXPECTED_SES_REPLY_TO_EMAIL = "info@tancanman.com";
 
 function truncateError(value: unknown) {
   const message = value instanceof Error ? value.message : typeof value === "string" ? value : "Email send failed.";
@@ -109,26 +112,21 @@ async function defaultSendSesEmail(input: SendEmailInput) {
   return sendEmail(input);
 }
 
-function defaultCreateResend(apiKey: string) {
-  return new Resend(apiKey).emails;
+async function defaultResolveTenantEmailSender(businessId: string): Promise<QueuedTenantEmailSender> {
+  const { resolveTenantEmailSender } = await import("../email/tenant-sender.ts");
+  const sender = await resolveTenantEmailSender({ businessId });
+
+  return {
+    senderDisplayName: sender.senderDisplayName,
+    senderEmail: sender.senderEmail,
+    replyToEmail: sender.replyToEmail,
+    sesRegion: sender.sesRegion,
+  };
 }
 
 async function getDefaultSupabase() {
   const { supabaseAdmin } = await import("../supabaseAdmin.ts");
   return supabaseAdmin as unknown as SupabaseClient;
-}
-
-function validateSesReceiptEnv() {
-  const fromEmail = process.env.SES_FROM_EMAIL?.trim();
-  const replyToEmail = process.env.SES_REPLY_TO_EMAIL?.trim();
-
-  if (fromEmail !== EXPECTED_SES_FROM_EMAIL) {
-    throw new Error(`SES_FROM_EMAIL must be ${EXPECTED_SES_FROM_EMAIL} for customer booking receipts.`);
-  }
-
-  if (replyToEmail !== EXPECTED_SES_REPLY_TO_EMAIL) {
-    throw new Error(`SES_REPLY_TO_EMAIL must be ${EXPECTED_SES_REPLY_TO_EMAIL} for customer booking receipts.`);
-  }
 }
 
 async function updateMessageStatus(
@@ -170,49 +168,41 @@ async function updateLinkedChargeReceiptStatus(
 
 async function sendQueuedMessage(
   message: QueuedBookingMessage,
-  options: Required<Pick<ProcessMessagesOptions, "sendSesEmail" | "createResend">>,
+  options: Required<Pick<ProcessMessagesOptions, "sendSesEmail" | "resolveTenantEmailSender">>,
 ): Promise<SendEmailResult> {
   const toEmail = (message.to ?? "").trim();
-  const subject = (message.subject ?? "").trim() || "Tin Can Man - Update";
+  const subject = (message.subject ?? "").trim() || "Booking update";
   const body = (message.body ?? "").trim();
-  const provider = (message.provider ?? "resend").trim().toLowerCase();
+  const provider = (message.provider ?? "ses").trim().toLowerCase();
 
-  if (provider === "ses") {
-    if (isPostBookingChargeReceipt(message)) {
-      validateSesReceiptEnv();
-    }
-
-    const result = await options.sendSesEmail({
-      to: toEmail,
-      subject,
-      text: body,
-      html: textToHtml(body),
-      replyTo: process.env.SES_REPLY_TO_EMAIL,
-    });
-
-    return { messageId: getSesMessageId(result) };
+  if (!message.business_id) {
+    throw new Error("Tenant email sender requires queued message business_id.");
   }
 
-  const resendKey = process.env.RESEND_API_KEY;
-  if (!resendKey) {
-    throw new Error("Missing RESEND_API_KEY");
+  if (provider && !["ses", "amazon_ses", "resend"].includes(provider)) {
+    throw new Error(`Unsupported queued email provider: ${provider}`);
   }
 
-  const resendEmails = options.createResend(resendKey);
-  const result = (await resendEmails.send({
-    from: "Tin Can Man <no-reply@yourdomain.com>",
+  const sender = await options.resolveTenantEmailSender(message.business_id);
+  const result = await options.sendSesEmail({
     to: toEmail,
     subject,
     text: body,
-  })) as ResendSendResult;
+    html: textToHtml(body),
+    fromEmail: sender.senderEmail,
+    fromDisplayName: sender.senderDisplayName,
+    replyTo: sender.replyToEmail,
+    region: sender.sesRegion,
+    useDefaultReplyTo: false,
+  });
 
-  return { messageId: result.data?.id ?? result.id ?? null };
+  return { messageId: getSesMessageId(result) };
 }
 
 export async function processQueuedBookingMessages(options: ProcessMessagesOptions = {}) {
   const supabase = options.supabase ?? (await getDefaultSupabase());
   const sendSesEmail = options.sendSesEmail ?? defaultSendSesEmail;
-  const createResend = options.createResend ?? defaultCreateResend;
+  const resolveTenantEmailSender = options.resolveTenantEmailSender ?? defaultResolveTenantEmailSender;
   const now = options.now ?? (() => new Date());
 
   let query = supabase
@@ -262,13 +252,12 @@ export async function processQueuedBookingMessages(options: ProcessMessagesOptio
 
     try {
       const sentAt = now().toISOString();
-      const result = await sendQueuedMessage(message, { sendSesEmail, createResend });
-      const provider = (message.provider ?? "resend").trim().toLowerCase() || "resend";
+      const result = await sendQueuedMessage(message, { sendSesEmail, resolveTenantEmailSender });
 
       await updateMessageStatus(supabase, message.id, message.business_id ?? null, {
         status: "sent",
         sent_at: sentAt,
-        provider,
+        provider: "ses",
         provider_message_id: result.messageId,
         error: null,
       });

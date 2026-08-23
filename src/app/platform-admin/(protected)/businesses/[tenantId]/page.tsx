@@ -1,6 +1,7 @@
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
+  EnvelopeIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
   PauseCircleIcon,
@@ -19,17 +20,24 @@ import {
   activateBusinessAction,
   activateDomainAction,
   assignBusinessAdminAction,
+  checkEmailIdentityAction,
   checkDomainAction,
   deactivateBusinessAction,
+  disableEmailIdentityAction,
   disableDomainAction,
   makePrimaryDomainAction,
+  provisionEmailIdentityAction,
   provisionDomainAction,
+  removeEmailIdentityAction,
   removeDomainAction,
+  saveEmailIdentityAction,
   updateImplementationTypeAction,
 } from "@/app/platform-admin/(protected)/businesses/actions";
 import { getPlatformDomainIntegrationStatus } from "@/lib/platform-admin/domains";
+import { getPlatformEmailIdentityIntegrationStatus } from "@/lib/platform-admin/email-identities";
 import { CURRENT_SITE_DEACTIVATION_CONFIRMATION } from "@/lib/platform-admin/tenant-validation";
 import { getPlatformTenantDetail, type PlatformTenantDomain } from "@/lib/platform-admin/tenants";
+import type { TenantEmailIdentity, TenantEmailIdentityStatus } from "@/lib/email/tenant-email-identity";
 import type {
   PlatformTenantSummary,
   SetupAreaKey,
@@ -43,7 +51,12 @@ export const revalidate = 0;
 
 type PageProps = {
   params: Promise<{ tenantId: string }>;
-  searchParams?: Promise<{ status?: string; error?: string; checkedDomainId?: string }>;
+  searchParams?: Promise<{
+    status?: string;
+    error?: string;
+    checkedDomainId?: string;
+    checkedEmailIdentity?: string;
+  }>;
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -203,6 +216,16 @@ function pageStatusMessage(status?: string, error?: string) {
       return { tone: "success" as const, text: "Primary domain was updated." };
     case "domain-removed":
       return { tone: "success" as const, text: "Domain mapping was removed." };
+    case "email-identity-saved":
+      return { tone: "success" as const, text: "Email sender identity was saved." };
+    case "email-identity-provisioned":
+      return { tone: "success" as const, text: "SES email identity provisioning state was updated." };
+    case "email-identity-checked":
+      return null;
+    case "email-identity-disabled":
+      return { tone: "success" as const, text: "Email sender identity was disabled." };
+    case "email-identity-removed":
+      return { tone: "success" as const, text: "Email sender identity was removed." };
     case "implementation-updated":
       return { tone: "success" as const, text: "Implementation type was updated." };
     case "admin-assigned":
@@ -967,6 +990,345 @@ function DomainIntegrationStatusSection() {
   );
 }
 
+function EmailIdentityStatusBadge({ status }: { status: TenantEmailIdentityStatus }) {
+  const className =
+    status === "verified"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : status === "failed"
+        ? "bg-red-50 text-red-700 ring-red-200"
+        : status === "dns_required"
+          ? "bg-amber-50 text-amber-700 ring-amber-200"
+          : "bg-slate-100 text-slate-600 ring-slate-200";
+  const label =
+    status === "dns_required"
+      ? "DNS required"
+      : status.charAt(0).toUpperCase() + status.slice(1);
+
+  return (
+    <span className={joinClasses("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", className)}>
+      {label}
+    </span>
+  );
+}
+
+function getEmailDnsInstructionRecords(identity: TenantEmailIdentity) {
+  const instructions = identity.dnsInstructions as
+    | { records?: Array<{ type?: string; name?: string; value?: string; reason?: string | null }>; notes?: string[] }
+    | null
+    | undefined;
+
+  return {
+    records: (instructions?.records ?? []).filter((record) => record.type && record.name && record.value),
+    notes: instructions?.notes ?? [],
+  };
+}
+
+function EmailDnsInstructions({ identity }: { identity: TenantEmailIdentity }) {
+  const { records, notes } = getEmailDnsInstructionRecords(identity);
+
+  if (records.length === 0 && notes.length === 0 && !identity.lastError) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-3 border-t border-slate-100 pt-4">
+      {identity.lastError ? (
+        <Alert tone="error">{identity.lastError}</Alert>
+      ) : null}
+      {records.length ? (
+        <div className="overflow-hidden rounded-[8px] border border-slate-200">
+          <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-0 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>Type</div>
+            <div>Name</div>
+            <div>Value</div>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {records.map((record, index) => (
+              <div
+                key={`${record.type}-${record.name}-${index}`}
+                className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-3 px-3 py-3 text-xs"
+              >
+                <div className="font-mono font-semibold text-slate-900">{record.type}</div>
+                <input
+                  readOnly
+                  value={record.name}
+                  className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
+                  aria-label={`${identity.senderDomain} email DNS record name`}
+                />
+                <input
+                  readOnly
+                  value={record.value}
+                  className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
+                  aria-label={`${identity.senderDomain} email DNS record value`}
+                />
+                {record.reason ? (
+                  <div className="col-span-3 text-slate-500">{record.reason}</div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {notes.length ? (
+        <div className="grid gap-1 text-xs leading-5 text-slate-600">
+          {notes.map((note) => (
+            <p key={note}>{note}</p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EmailIdentityReadiness({ emailIdentity }: { emailIdentity: TenantEmailIdentity | null }) {
+  if (!emailIdentity) {
+    return (
+      <Alert tone="warning">
+        No tenant sender identity is configured yet. Current email delivery still uses the existing SES environment sender.
+      </Alert>
+    );
+  }
+
+  if (emailIdentity.verificationStatus === "verified") {
+    return (
+      <Alert tone="success">
+        SES reports this sender identity is verified. Current email delivery still uses the existing SES environment sender.
+      </Alert>
+    );
+  }
+
+  if (emailIdentity.verificationStatus === "dns_required") {
+    return (
+      <Alert tone="warning">
+        SES returned DKIM records. Add the CNAMEs below, then check verification again.
+      </Alert>
+    );
+  }
+
+  if (emailIdentity.verificationStatus === "failed") {
+    return (
+      <Alert tone="error">
+        SES could not verify this identity. Review the provider error and DNS records before retrying.
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert tone="warning">
+      This sender identity is saved but not ready for tenant-aware email sending.
+    </Alert>
+  );
+}
+
+function EmailSendingSection({
+  tenant,
+  emailIdentity,
+  checkedEmailIdentity,
+}: {
+  tenant: PlatformTenantSummary;
+  emailIdentity: TenantEmailIdentity | null;
+  checkedEmailIdentity?: string;
+}) {
+  const integration = getPlatformEmailIdentityIntegrationStatus();
+  const canProvision = emailIdentity &&
+    (emailIdentity.providerStatus === "pending" || emailIdentity.providerStatus === "failed");
+  const canDisable = emailIdentity && emailIdentity.providerStatus !== "disabled";
+
+  return (
+    <section id="email-sending" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Email sending</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Tenant-branded sender identity metadata and SES verification state.
+          </p>
+        </div>
+        <span
+          className={joinClasses(
+            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+            emailIdentity?.verificationStatus === "verified"
+              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+              : "bg-amber-50 text-amber-700 ring-amber-200",
+          )}
+        >
+          {emailIdentity?.verificationStatus === "verified" ? "Ready" : "Setup needed"}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        <EmailIdentityReadiness emailIdentity={emailIdentity} />
+        {!integration.configured ? (
+          <Alert tone="warning">
+            SES identity provisioning needs AWS_REGION or SES_REGION, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.
+          </Alert>
+        ) : null}
+      </div>
+
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Region</dt>
+          <dd className="mt-1 text-slate-900">{integration.regionConfigured ? "Set" : "Missing"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Access key</dt>
+          <dd className="mt-1 text-slate-900">{integration.accessKeyConfigured ? "Set" : "Missing"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Secret key</dt>
+          <dd className="mt-1 text-slate-900">{integration.secretKeyConfigured ? "Set" : "Missing"}</dd>
+        </div>
+      </dl>
+
+      {emailIdentity ? (
+        <div className="mt-4 grid gap-3 rounded-[8px] border border-slate-200 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="break-all font-mono text-sm font-semibold text-slate-900">
+                {emailIdentity.fromEmail}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <EmailIdentityStatusBadge status={emailIdentity.providerStatus} />
+                <span>Display name: {emailIdentity.senderDisplayName ?? "Not set"}</span>
+                <span>Reply-To: {emailIdentity.replyToEmail ?? "Not set"}</span>
+                <span>Last checked {formatDateTime(emailIdentity.lastCheckedAt)}</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {canProvision ? (
+                <form action={provisionEmailIdentityAction}>
+                  <input type="hidden" name="tenantId" value={tenant.id} />
+                  <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
+                    <PlayCircleIcon className="h-4 w-4" />
+                    Provision on SES
+                  </button>
+                </form>
+              ) : null}
+              <form action={checkEmailIdentityAction}>
+                <input type="hidden" name="tenantId" value={tenant.id} />
+                <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
+                  <CheckCircleIcon className="h-4 w-4" />
+                  Check SES
+                </button>
+              </form>
+              {canDisable ? (
+                <form action={disableEmailIdentityAction}>
+                  <input type="hidden" name="tenantId" value={tenant.id} />
+                  <button type="submit" className="admin-btn admin-btn-secondary">
+                    <PauseCircleIcon className="h-4 w-4" />
+                    Disable
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          </div>
+
+          {checkedEmailIdentity ? (
+            <Alert tone="success">SES email identity verification was re-checked.</Alert>
+          ) : null}
+
+          <EmailDnsInstructions identity={emailIdentity} />
+
+          <form action={removeEmailIdentityAction} className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <div>
+              <label htmlFor="remove-email-identity" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Remove confirmation
+              </label>
+              <input
+                id="remove-email-identity"
+                name="confirmation"
+                type="text"
+                placeholder={emailIdentity.senderDomain}
+                className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+              />
+            </div>
+            <button type="submit" className="admin-btn admin-btn-destructive">
+              <TrashIcon className="h-4 w-4" />
+              Remove
+            </button>
+          </form>
+        </div>
+      ) : null}
+
+      <form action={saveEmailIdentityAction} className="mt-5 grid gap-4 border-t border-slate-100 pt-5">
+        <input type="hidden" name="tenantId" value={tenant.id} />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor="senderDomain" className="text-sm font-semibold text-slate-700">
+              Sender domain
+            </label>
+            <input
+              id="senderDomain"
+              name="senderDomain"
+              type="text"
+              defaultValue={emailIdentity?.senderDomain ?? ""}
+              placeholder="demodumpstercompany.com"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="senderLocalPart" className="text-sm font-semibold text-slate-700">
+              Sender local part
+            </label>
+            <input
+              id="senderLocalPart"
+              name="senderLocalPart"
+              type="text"
+              defaultValue={emailIdentity?.senderLocalPart ?? "bookings"}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="senderDisplayName" className="text-sm font-semibold text-slate-700">
+              Display name
+            </label>
+            <input
+              id="senderDisplayName"
+              name="senderDisplayName"
+              type="text"
+              defaultValue={emailIdentity?.senderDisplayName ?? tenant.displayName}
+              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+          <div>
+            <label htmlFor="replyToEmail" className="text-sm font-semibold text-slate-700">
+              Reply-To email
+            </label>
+            <input
+              id="replyToEmail"
+              name="replyToEmail"
+              type="email"
+              defaultValue={emailIdentity?.replyToEmail ?? ""}
+              autoComplete="email"
+              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-slate-600">
+            Derived From address:{" "}
+            <span className="font-mono font-semibold text-slate-900">
+              {emailIdentity?.fromEmail ?? "sender-local-part@sender-domain"}
+            </span>
+          </div>
+          <FormSubmitButton loadingLabel="Saving...">
+            <EnvelopeIcon className="h-4 w-4" />
+            Save sender identity
+          </FormSubmitButton>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary }) {
   return (
     <section id="business-admin-access" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -1116,7 +1478,7 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
     notFound();
   }
 
-  const { tenant, domains } = detail;
+  const { tenant, domains, emailIdentity } = detail;
   const message = pageStatusMessage(search.status, search.error);
   const configuredCurrentSiteSlug = getConfiguredCurrentTenantSlug();
   const isCurrentSiteTenant = tenant.slug === configuredCurrentSiteSlug;
@@ -1198,6 +1560,12 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
       <BusinessAdminAccessSection tenant={tenant} />
 
       <DomainIntegrationStatusSection />
+
+      <EmailSendingSection
+        tenant={tenant}
+        emailIdentity={emailIdentity}
+        checkedEmailIdentity={search.checkedEmailIdentity}
+      />
 
       <TenantDomainsSection
         tenant={tenant}

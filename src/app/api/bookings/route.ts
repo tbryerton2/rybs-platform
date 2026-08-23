@@ -7,6 +7,7 @@ import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { isValidEmail } from "@/lib/identity";
+import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
 import { normalizePhone } from "@/lib/customers";
 import { sanitizePlacementDetails, validatePlacementDetails } from "@/lib/placement";
 import { attachReorderReference } from "@/lib/reorder.server";
@@ -121,7 +122,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "A valid 2-letter customer_state is required." }, { status: 400 });
     }
 
-    const rentalPolicy = await getDumpsterRentalPolicy({ ...selectedDumpster, businessId: tenant.id });
+    const rentalPolicy = await getDumpsterRentalPolicy({
+      ...selectedDumpster,
+      businessId: tenant.id,
+      requirePublicProduct: true,
+    });
     const pickupModeForAvailability = pickup_mode === "schedule" ? "date" : "unspecified";
     const rentalPeriod = getRentalPeriodDetails({
       deliveryDate: delivery_date ?? null,
@@ -269,6 +274,13 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { ok: false, error: error.publicMessage },
         { status: 503 }
+      );
+    }
+
+    if (isPublicDumpsterProductError(error)) {
+      return NextResponse.json(
+        { ok: false, error: error.message },
+        { status: error.status },
       );
     }
 
