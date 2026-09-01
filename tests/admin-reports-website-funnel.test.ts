@@ -28,6 +28,21 @@ test("website funnel report filters are explicit and persisted in report hrefs",
   assert.match(source, /params\.set\("visitorType", next\.visitorType\)/);
 });
 
+test("admin reports dumpster type filter uses tenant product catalog options", () => {
+  const source = readRepoFile("src/lib/admin/reports.ts");
+  const pageSource = readRepoFile("src/app/admin/(protected)/analytics/conversion/page.tsx");
+
+  assert.match(source, /getPublicDumpsterProducts\(undefined, input\.businessId\)/);
+  assert.match(source, /getDumpsterSizeCapacity\(left\.dumpsterSize\)/);
+  assert.match(source, /return leftCapacity - rightCapacity/);
+  assert.match(source, /product\.displayName\.trim\(\)/);
+  assert.match(source, /`product:\$\{productId\}`/);
+  assert.match(source, /\{ value: "all", label: "All dumpster types" \}/);
+  assert.doesNotMatch(pageSource, /14-yard dumpster/);
+  assert.doesNotMatch(pageSource, /20-yard dumpster/);
+  assert.doesNotMatch(pageSource, /50-yard dumpster/);
+});
+
 test("website funnel RPC migration is tenant-scoped and clamps to reliable tracking start", () => {
   const source = readRepoFile("supabase/migrations/202608140101_admin_reports_website_funnel_metrics.sql");
 

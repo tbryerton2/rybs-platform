@@ -688,7 +688,12 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
             <section className="rounded-2xl border border-slate-300/80 bg-white px-5 py-5 shadow-md ring-1 ring-slate-200/60">
               <div className="space-y-4">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Rental Terms and Conditions</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-semibold text-slate-900">Rental Terms and Conditions</h2>
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      Required
+                    </span>
+                  </div>
                   <p className="mt-2 text-sm leading-6 text-slate-700">
                     Review the rental terms before continuing. They cover the included weight limit,
                     overage fees, damage responsibility, prohibited materials, access and placement
@@ -709,6 +714,7 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
                   <input
                     type="checkbox"
                     checked={rentalTermsAccepted}
+                    aria-describedby={!rentalTermsAccepted ? "rental-terms-helper" : undefined}
                     onChange={(event) => {
                       setRentalTermsAccepted(event.target.checked);
                       if (event.target.checked) setError(null);
@@ -717,6 +723,11 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
                   />
                   <span>I have read and agree to the Rental Terms and Conditions.</span>
                 </label>
+                {!rentalTermsAccepted ? (
+                  <p id="rental-terms-helper" className="text-xs font-medium leading-5 text-amber-700">
+                    You must accept the Rental Terms and Conditions before continuing.
+                  </p>
+                ) : null}
               </div>
             </section>
 

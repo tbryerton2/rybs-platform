@@ -258,6 +258,25 @@ function HeroTrustList({ items }: { items: string[] }) {
 
 type DumpsterSizesContent = HomePageClientProps["dumpsterSizesContent"];
 type DumpsterSizeContent = DumpsterSizesContent["items"][number];
+const DUMPSTER_DETAIL_SCROLL_PADDING_PX = 28;
+const DUMPSTER_DETAIL_SCROLL_DURATION_MS = 800;
+
+function easeInOutCubic(progress: number) {
+  return progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+}
+
+function getStickyHeaderHeight() {
+  const headers = Array.from(document.querySelectorAll<HTMLElement>("header"));
+  const stickyHeader = headers.find((header) => {
+    const position = window.getComputedStyle(header).position;
+    const rect = header.getBoundingClientRect();
+    return (position === "sticky" || position === "fixed") && rect.bottom > 0 && rect.top <= 0;
+  });
+
+  return stickyHeader?.getBoundingClientRect().height ?? 0;
+}
 
 function getDumpsterStats(item: DumpsterSizeContent) {
   const stats: Array<{ label: string; value: string }> = [];
@@ -355,11 +374,78 @@ function DumpsterSizesSection({
   const defaultItem = items.find((item) => item.isFeatured) ?? items[0];
   const defaultItemId = defaultItem?.id ?? "";
   const [selectedId, setSelectedId] = useState(defaultItemId);
-
-  if (!defaultItem) return null;
-
-  const selectedItem = items.find((item) => item.id === selectedId) ?? defaultItem;
+  const [detailScrollTargetId, setDetailScrollTargetId] = useState<string | null>(null);
+  const detailPanelRef = useRef<HTMLDivElement | null>(null);
+  const detailScrollAnimationRef = useRef<number | null>(null);
+  const selectedItem = defaultItem ? (items.find((item) => item.id === selectedId) ?? defaultItem) : null;
   const intro = content.intro.trim();
+
+  useEffect(() => {
+    return () => {
+      if (detailScrollAnimationRef.current !== null) {
+        cancelAnimationFrame(detailScrollAnimationRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!detailScrollTargetId || !selectedItem || detailScrollTargetId !== selectedItem.id) return;
+
+    const frame = requestAnimationFrame(() => {
+      const detailPanel = detailPanelRef.current;
+      if (!detailPanel) return;
+
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const headerHeight = getStickyHeaderHeight();
+      const top =
+        detailPanel.getBoundingClientRect().top +
+        window.scrollY -
+        headerHeight -
+        DUMPSTER_DETAIL_SCROLL_PADDING_PX;
+      const targetY = Math.max(top, 0);
+
+      if (detailScrollAnimationRef.current !== null) {
+        cancelAnimationFrame(detailScrollAnimationRef.current);
+        detailScrollAnimationRef.current = null;
+      }
+
+      if (reduceMotion) {
+        window.scrollTo({ top: targetY });
+        setDetailScrollTargetId(null);
+        return;
+      }
+
+      const startY = window.scrollY;
+      const distance = targetY - startY;
+      const startTime = performance.now();
+
+      function scrollStep(now: number) {
+        const progress = Math.min((now - startTime) / DUMPSTER_DETAIL_SCROLL_DURATION_MS, 1);
+        const easedProgress = easeInOutCubic(progress);
+
+        window.scrollTo({ top: startY + distance * easedProgress });
+
+        if (progress < 1) {
+          detailScrollAnimationRef.current = requestAnimationFrame(scrollStep);
+          return;
+        }
+
+        detailScrollAnimationRef.current = null;
+      }
+
+      detailScrollAnimationRef.current = requestAnimationFrame(scrollStep);
+      setDetailScrollTargetId(null);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [detailScrollTargetId, selectedItem]);
+
+  function handleDumpsterSelect(itemId: string) {
+    setSelectedId(itemId);
+    setDetailScrollTargetId(itemId);
+  }
+
+  if (!defaultItem || !selectedItem) return null;
 
   if (items.length === 1) {
     const description = selectedItem.longDescription.trim() || selectedItem.shortDescription.trim();
@@ -424,7 +510,7 @@ function DumpsterSizesSection({
             <button
               key={item.id}
               type="button"
-              onClick={() => setSelectedId(item.id)}
+              onClick={() => handleDumpsterSelect(item.id)}
               aria-pressed={selected}
               className={joinClasses(
                 "flex h-full min-h-[250px] flex-col rounded-[16px] border p-6 text-left shadow-[0_14px_34px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]",
@@ -471,6 +557,7 @@ function DumpsterSizesSection({
       </div>
 
       <div
+        ref={detailPanelRef}
         className={joinClasses(
           "mt-8 rounded-[18px] border border-[#E5D8C8] p-6 shadow-[0_18px_44px_rgba(15,23,42,0.06)] sm:p-8",
           getLandingBackgroundClass(cardBackground),

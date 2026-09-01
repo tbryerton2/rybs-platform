@@ -776,6 +776,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const dumpsterLabel = (draft.dumpsterDisplayName || draft.dumpsterSize || "").trim() || "—";
   const showExtraDaysRow = Boolean(draft.priceQuote?.extraDays && extraDaysChargeCents > 0);
   const showSalesTaxRow = salesTaxCents > 0;
+  const showCardOnFileConsentHelper = !cardOnFileConsentAccepted;
 
   return (
     <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
@@ -862,10 +863,17 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                 )}
 
                 <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-semibold text-slate-900">Card-on-file authorization</div>
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                      Required
+                    </span>
+                  </div>
                   <label className="flex items-start gap-3 text-sm text-slate-800">
                     <input
                       type="checkbox"
                       checked={cardOnFileConsentAccepted}
+                      aria-describedby={showCardOnFileConsentHelper ? "card-on-file-consent-helper" : undefined}
                       onChange={(event) => {
                         setCardOnFileConsentAccepted(event.target.checked);
                         if (event.target.checked) setError(null);
@@ -879,6 +887,11 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                       Rental Terms.
                     </span>
                   </label>
+                  {showCardOnFileConsentHelper ? (
+                    <p id="card-on-file-consent-helper" className="mt-3 text-xs font-medium leading-5 text-amber-700">
+                      You must authorize today’s payment and documented rental charges before continuing.
+                    </p>
+                  ) : null}
                   <details className="mt-3 text-xs leading-5 text-slate-600">
                     <summary className="cursor-pointer font-semibold text-[#F97316]">
                       View card-on-file authorization
@@ -891,6 +904,15 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
                 {squareConfigured ? (
                   <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold text-slate-900">Card information</div>
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                          Required
+                        </span>
+                      </div>
+                      <div className="text-xs font-medium text-slate-500">Enter payment details below</div>
+                    </div>
                     <div
                       id={SQUARE_CARD_CONTAINER_ID}
                       className="rounded-xl border border-slate-200 bg-white p-4"
@@ -910,7 +932,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                       type="button"
                       onClick={handleSquarePayment}
                       disabled={isPaying || holdExpired || !canSubmitSquarePayment}
-                      className="group w-full h-14 rounded-2xl bg-[#0F172A] text-white font-semibold text-base shadow-md transition-all duration-200 ease-out hover:bg-[#0B1220] hover:shadow-lg active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="group w-full h-14 rounded-2xl bg-[#0F172A] text-white font-semibold text-base shadow-md transition-all duration-200 ease-out hover:bg-[#0B1220] hover:shadow-lg active:scale-[0.99] disabled:bg-slate-400 disabled:text-white/75 disabled:shadow-none disabled:cursor-not-allowed"
                     >
                       <span className="flex items-center justify-center gap-2">
                         {isPaying
@@ -946,7 +968,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
                       type="button"
                       onClick={handleSimulatePayment}
                       disabled={isPaying || holdExpired || !canSubmitPayment || !cardOnFileConsentAccepted}
-                      className="group w-full h-14 rounded-2xl border border-slate-200 bg-white text-slate-900 font-semibold text-base shadow-sm transition-all duration-200 ease-out hover:bg-slate-50 hover:shadow-md active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="group w-full h-14 rounded-2xl border border-slate-200 bg-white text-slate-900 font-semibold text-base shadow-sm transition-all duration-200 ease-out hover:bg-slate-50 hover:shadow-md active:scale-[0.99] disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:cursor-not-allowed"
                     >
                       <span className="flex items-center justify-center gap-2">
                         {isPaying ? content.paymentProcessingLabel : quoteLoading ? content.paymentLoadingLabel : content.paymentIdleLabel}

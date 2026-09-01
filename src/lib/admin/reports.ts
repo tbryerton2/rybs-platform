@@ -1,5 +1,7 @@
 import "server-only";
 
+import { getDumpsterSizeCapacity } from "@/lib/booking-product";
+import { getPublicDumpsterProducts, type PublicDumpsterProduct } from "@/lib/dumpster-product-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getBusinessTimeZone } from "@/lib/time";
 
@@ -101,11 +103,6 @@ type ReportsRpcProductMixRow = {
   bookings?: number | string | null;
 };
 
-type ReportsRpcProductOption = {
-  value?: string | null;
-  label?: string | null;
-};
-
 type ReportsRpcPayload = {
   summary?: ReportsRpcSummary | null;
   previousSummary?: ReportsRpcSummary | null;
@@ -113,7 +110,6 @@ type ReportsRpcPayload = {
   previousPortalSummary?: ReportsRpcPortalSummary | null;
   trends?: ReportsRpcTrendRow[] | null;
   productMix?: ReportsRpcProductMixRow[] | null;
-  productOptions?: ReportsRpcProductOption[] | null;
 };
 
 type WebsiteFunnelRpcSummary = {
@@ -415,6 +411,38 @@ function dateRangeLabel(range: DateRangeKey) {
   return DATE_RANGE_OPTIONS.find((option) => option.value === range)?.label ?? "30D";
 }
 
+function buildProductOptions(products: PublicDumpsterProduct[]): FilterOption[] {
+  const options: FilterOption[] = [{ value: "all", label: "All dumpster types" }];
+  const seen = new Set(options.map((option) => option.value));
+
+  const sortedProducts = products.slice().sort((left, right) => {
+    const leftCapacity = getDumpsterSizeCapacity(left.dumpsterSize);
+    const rightCapacity = getDumpsterSizeCapacity(right.dumpsterSize);
+
+    if (leftCapacity !== null && rightCapacity !== null && leftCapacity !== rightCapacity) {
+      return leftCapacity - rightCapacity;
+    }
+
+    if (leftCapacity !== null && rightCapacity === null) return -1;
+    if (leftCapacity === null && rightCapacity !== null) return 1;
+
+    return left.displayName.localeCompare(right.displayName);
+  });
+
+  for (const product of sortedProducts) {
+    const productId = product.dumpsterProductId.trim();
+    const label = product.displayName.trim();
+    const value = productId ? `product:${productId}` : "";
+
+    if (!value || !label || seen.has(value)) continue;
+
+    options.push({ value, label });
+    seen.add(value);
+  }
+
+  return options;
+}
+
 export function parseReportsFilters(input: Record<string, string | string[] | undefined>): ReportsFilters {
   const rawRange = input.range;
   const range = Array.isArray(rawRange) ? rawRange[0] : rawRange;
@@ -456,7 +484,7 @@ export async function getAdminReportsData(input: {
   const window = resolveDateWindow(input.filters.range, timeZone);
   const granularity = trendGranularity(input.filters.range);
 
-  const [businessMetricsResult, websiteFunnelResult] = await Promise.all([
+  const [businessMetricsResult, websiteFunnelResult, products] = await Promise.all([
     supabaseAdmin.rpc("get_admin_reports_business_metrics", {
       p_business_id: input.businessId,
       p_current_start_at: window.currentStart?.toISOString() ?? null,
@@ -477,6 +505,7 @@ export async function getAdminReportsData(input: {
       p_device_filter: input.filters.device,
       p_visitor_filter: input.filters.visitorType,
     }),
+    getPublicDumpsterProducts(undefined, input.businessId),
   ]);
 
   if (businessMetricsResult.error) {
@@ -607,12 +636,7 @@ export async function getAdminReportsData(input: {
     };
   });
 
-  const productOptions = [
-    { value: "all", label: "All dumpster types" },
-    ...(payload.productOptions ?? [])
-      .filter((option): option is { value: string; label: string } => Boolean(option.value && option.label))
-      .map((option) => ({ value: option.value, label: option.label })),
-  ];
+  const productOptions = buildProductOptions(products);
 
   return {
     filters: input.filters,
