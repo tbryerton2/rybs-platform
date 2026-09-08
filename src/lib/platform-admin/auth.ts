@@ -51,6 +51,13 @@ export class PlatformAdminAccessDeniedError extends Error {
   }
 }
 
+export class PlatformAdminOwnerRequiredError extends Error {
+  constructor(message = "Platform owner access is required.") {
+    super(message);
+    this.name = "PlatformAdminOwnerRequiredError";
+  }
+}
+
 export function createPlatformAdminAuthClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -226,6 +233,20 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminSessionContex
   }
 
   return result.session;
+}
+
+export function isPlatformAdminOwner(session: PlatformAdminSessionContext) {
+  return session.membership.role === "owner";
+}
+
+export async function requirePlatformOwner(): Promise<PlatformAdminSessionContext> {
+  const session = await requirePlatformAdmin();
+
+  if (!isPlatformAdminOwner(session)) {
+    throw new PlatformAdminOwnerRequiredError();
+  }
+
+  return session;
 }
 
 export async function requirePlatformAdminForApi(): Promise<

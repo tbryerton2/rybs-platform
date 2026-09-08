@@ -2,6 +2,7 @@ import {
   ArrowRightOnRectangleIcon,
   BuildingOffice2Icon,
   Squares2X2Icon,
+  UsersIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import type { PlatformAdminSessionContext } from "@/lib/platform-admin/auth";
@@ -21,7 +22,8 @@ export function PlatformAdminShell({
 }) {
   const userLabel = session.user.email ?? session.user.id;
   const businessesActive = currentPath.startsWith("/platform-admin/businesses");
-  const dashboardActive = !businessesActive;
+  const usersActive = currentPath.startsWith("/platform-admin/users");
+  const dashboardActive = !businessesActive && !usersActive;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -36,7 +38,7 @@ export function PlatformAdminShell({
             Logout
           </a>
         </div>
-        <nav className="mt-3 grid grid-cols-2 gap-2" aria-label="Platform admin navigation">
+        <nav className="mt-3 grid grid-cols-3 gap-2" aria-label="Platform admin navigation">
           <Link
             href="/platform-admin"
             aria-current={dashboardActive ? "page" : undefined}
@@ -62,6 +64,19 @@ export function PlatformAdminShell({
           >
             <BuildingOffice2Icon className="h-4 w-4 text-slate-500" />
             Businesses
+          </Link>
+          <Link
+            href="/platform-admin/users"
+            aria-current={usersActive ? "page" : undefined}
+            className={[
+              "flex items-center justify-center gap-2 rounded-[8px] px-3 py-2 text-sm font-semibold",
+              usersActive
+                ? "bg-slate-100 text-slate-900"
+                : "text-slate-600 ring-1 ring-slate-200",
+            ].join(" ")}
+          >
+            <UsersIcon className="h-4 w-4 text-slate-500" />
+            Users
           </Link>
         </nav>
       </header>
@@ -101,6 +116,19 @@ export function PlatformAdminShell({
             >
               <BuildingOffice2Icon className="h-5 w-5 text-slate-500" />
               Businesses
+            </Link>
+            <Link
+              href="/platform-admin/users"
+              aria-current={usersActive ? "page" : undefined}
+              className={[
+                "flex items-center gap-3 rounded-[8px] px-3 py-2 text-sm font-semibold",
+                usersActive
+                  ? "bg-slate-100 text-slate-900"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+              ].join(" ")}
+            >
+              <UsersIcon className="h-5 w-5 text-slate-500" />
+              Users
             </Link>
           </nav>
 
