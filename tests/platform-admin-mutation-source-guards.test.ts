@@ -55,7 +55,7 @@ test("lifecycle actions target exact UUIDs and keep Tan Can Man high-friction", 
   assert.match(tenantsSource, /\.from\("tenants"\)/);
   assert.match(tenantsSource, /\.eq\("id", tenant\.id\)/);
   assert.match(tenantsSource, /\.eq\("status", currentStatus\)/);
-  assert.match(tenantsSource, /getConfiguredCurrentTenantSlug\(\)/);
+  assert.match(tenantsSource, /getConfiguredLocalTenantSlug\(\)/);
   assert.match(tenantsSource, /CURRENT_SITE_DEACTIVATION_CONFIRMATION/);
   assert.match(detailPage, /confirmationSlug/);
   assert.match(detailPage, /currentSiteConfirmation/);

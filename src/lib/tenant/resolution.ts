@@ -1,4 +1,4 @@
-export const DEFAULT_CURRENT_SITE_TENANT_SLUG = "tan-can-man";
+export const DEFAULT_LOCAL_TENANT_SLUG = "tan-can-man";
 export const DEFAULT_DEMO_LOCAL_TENANT_SLUG = "demo-dumpster-co";
 export const DEMO_LOCAL_HOSTNAME = "demo-dumpster-co.localhost";
 
@@ -42,9 +42,9 @@ export function isTenantResolutionError(error: unknown): error is TenantResoluti
   return error instanceof TenantResolutionError;
 }
 
-export function getConfiguredCurrentTenantSlug(env?: { DEFAULT_TENANT_SLUG?: string }) {
+export function getConfiguredLocalTenantSlug(env?: { DEFAULT_TENANT_SLUG?: string }) {
   const source = env ?? process.env;
-  return source.DEFAULT_TENANT_SLUG?.trim() || DEFAULT_CURRENT_SITE_TENANT_SLUG;
+  return source.DEFAULT_TENANT_SLUG?.trim() || DEFAULT_LOCAL_TENANT_SLUG;
 }
 
 export function getConfiguredDemoLocalTenantSlug(env?: { DEMO_LOCAL_TENANT_SLUG?: string }) {
@@ -114,7 +114,7 @@ export function resolveDevelopmentTenantSlugForHostname(
   },
 ) {
   if (isPlainLocalhostHostname(hostname)) {
-    return getConfiguredCurrentTenantSlug(env);
+    return getConfiguredLocalTenantSlug(env);
   }
 
   if (hostname === DEMO_LOCAL_HOSTNAME) {
@@ -124,19 +124,19 @@ export function resolveDevelopmentTenantSlugForHostname(
   return null;
 }
 
-export function createCurrentTenantNotFoundError(slug: string) {
+export function createLocalTenantNotFoundError(slug: string) {
   return new TenantResolutionError({
     code: "CURRENT_TENANT_NOT_FOUND",
     tenantIdentifier: slug,
-    message: `Configured current-site tenant slug "${slug}" was not found.`,
+    message: `Configured local tenant slug "${slug}" was not found.`,
   });
 }
 
-export function createCurrentTenantInactiveError(slug: string) {
+export function createLocalTenantInactiveError(slug: string) {
   return new TenantResolutionError({
     code: "CURRENT_TENANT_INACTIVE",
     tenantIdentifier: slug,
-    message: `Configured current-site tenant slug "${slug}" is inactive.`,
+    message: `Configured local tenant slug "${slug}" is inactive.`,
   });
 }
 
@@ -188,16 +188,16 @@ export function createDomainTenantInactiveError(hostname: string) {
   });
 }
 
-export function assertResolvedCurrentSiteTenant<Tenant extends { slug: string; status: string }>(
+export function assertResolvedLocalTenant<Tenant extends { slug: string; status: string }>(
   tenant: Tenant | null,
   slug: string,
 ): Tenant {
   if (!tenant) {
-    throw createCurrentTenantNotFoundError(slug);
+    throw createLocalTenantNotFoundError(slug);
   }
 
   if (tenant.status !== "active") {
-    throw createCurrentTenantInactiveError(slug);
+    throw createLocalTenantInactiveError(slug);
   }
 
   return tenant;

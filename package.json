@@ -1,5 +1,5 @@
 {
-  "name": "tin-can-man",
+  "name": "rybs-platform",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test:availability": "node --test --experimental-strip-types tests/rental-window-availability.test.ts",
     "test:booking-origin": "node --test --experimental-strip-types tests/booking-origin.test.ts",
-    "seed:qa-local": "docker exec -i supabase_db_tin-can-man psql -U postgres -d postgres < supabase/seed.sql",
+    "seed:qa-local": "docker exec -i supabase_db_rybs-platform psql -U postgres -d postgres < supabase/seed.sql",
     "trim:zcta": "node scripts/trim-zcta-geojson.mjs",
     "backfill:booking-customers": "node scripts/backfill-booking-customers.mjs"
   },

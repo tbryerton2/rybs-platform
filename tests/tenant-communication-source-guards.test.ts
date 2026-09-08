@@ -24,7 +24,7 @@ test("tenant communication settings do not use global admin email outside the cu
 
   assert.match(source, /settings\.get\("notifications\.bookingEmails"\)/);
   assert.match(source, /settings\.get\("support\.email"\)/);
-  assert.match(source, /tenant\.slug === DEFAULT_CURRENT_SITE_TENANT_SLUG/);
+  assert.match(source, /tenant\.slug === DEFAULT_LOCAL_TENANT_SLUG/);
   assert.match(source, /normalizeEmailList\(process\.env\.ADMIN_BOOKING_EMAIL\)/);
 });
 

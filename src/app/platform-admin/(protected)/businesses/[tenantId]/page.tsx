@@ -44,7 +44,7 @@ import type {
   SetupAreaStatus,
   TenantImplementationType,
 } from "@/lib/platform-admin/setup-completeness";
-import { getConfiguredCurrentTenantSlug } from "@/lib/tenant/resolution";
+import { getConfiguredLocalTenantSlug } from "@/lib/tenant/resolution";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -1384,7 +1384,7 @@ function LifecycleSection({
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Lifecycle</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Activation controls whether this tenant can be resolved as an active current-site business.
+            Activation controls whether this tenant can be resolved as an active business.
           </p>
         </div>
         <TenantStatusBadge tenant={tenant} />
@@ -1426,7 +1426,7 @@ function LifecycleSection({
                 required
               />
               <p className="mt-2 text-xs text-slate-500">
-                This extra confirmation is required because this slug is the configured current-site tenant.
+                This extra confirmation is required because this slug is the configured local tenant.
               </p>
             </div>
           ) : null}
@@ -1480,8 +1480,8 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
   const { tenant, domains, emailIdentity } = detail;
   const message = pageStatusMessage(search.status, search.error);
-  const configuredCurrentSiteSlug = getConfiguredCurrentTenantSlug();
-  const isCurrentSiteTenant = tenant.slug === configuredCurrentSiteSlug;
+  const configuredLocalTenantSlug = getConfiguredLocalTenantSlug();
+  const isCurrentSiteTenant = tenant.slug === configuredLocalTenantSlug;
 
   return (
     <AdminPage width="wide" className="space-y-6 pt-2">
@@ -1517,7 +1517,7 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
       {tenant.status !== "active" ? (
         <Alert tone="warning">
-          This business is inactive and cannot be resolved as an active current-site tenant.
+          This business is inactive and cannot be resolved as an active tenant.
         </Alert>
       ) : tenant.setup.status === "needs_attention" ? (
         <Alert tone="warning">

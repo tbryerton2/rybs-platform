@@ -29,7 +29,7 @@ import {
   type TenantImplementationType,
 } from "@/lib/platform-admin/setup-completeness";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getConfiguredCurrentTenantSlug } from "@/lib/tenant/resolution";
+import { getConfiguredLocalTenantSlug } from "@/lib/tenant/resolution";
 import { findTenantByIdStrict } from "@/lib/tenant/server";
 
 type TenantRow = {
@@ -493,9 +493,9 @@ function requireDeactivationConfirmation(input: {
     );
   }
 
-  const configuredCurrentSiteSlug = getConfiguredCurrentTenantSlug();
+  const configuredLocalTenantSlug = getConfiguredLocalTenantSlug();
 
-  if (input.tenantSlug === configuredCurrentSiteSlug) {
+  if (input.tenantSlug === configuredLocalTenantSlug) {
     const confirmationPhrase =
       typeof input.currentSiteConfirmation === "string"
         ? input.currentSiteConfirmation.trim()
@@ -504,7 +504,7 @@ function requireDeactivationConfirmation(input: {
     if (confirmationPhrase !== CURRENT_SITE_DEACTIVATION_CONFIRMATION) {
       throw new PlatformTenantMutationError(
         "confirmation_required",
-        `Type ${CURRENT_SITE_DEACTIVATION_CONFIRMATION} to deactivate the configured current-site tenant.`,
+        `Type ${CURRENT_SITE_DEACTIVATION_CONFIRMATION} to deactivate the configured local tenant.`,
         "confirmation",
       );
     }

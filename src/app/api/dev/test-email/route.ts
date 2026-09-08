@@ -21,12 +21,12 @@ export async function POST() {
 
   await sendEmail({
     to: adminEmail,
-    subject: "Tan Can Man app email test",
-    text: "This is a test email sent from the Tan Can Man app using Amazon SES.",
+    subject: "RYBS Platform email test",
+    text: "This is a test email sent from the RYBS Platform app using Amazon SES.",
     html: `
       <div>
-        <h1>Tan Can Man app email test</h1>
-        <p>This is a test email sent from the Tan Can Man app using Amazon SES.</p>
+        <h1>RYBS Platform email test</h1>
+        <p>This is a test email sent from the RYBS Platform app using Amazon SES.</p>
       </div>
     `,
   });

@@ -25,7 +25,7 @@ test("getCurrentTenant has no first-active fallback query", () => {
   assert.match(getCurrentTenantBody, /process\.env\.NODE_ENV === "development"/);
   assert.doesNotMatch(getCurrentTenantBody, /order\("created_at"/);
   assert.doesNotMatch(getCurrentTenantBody, /limit\(1\)/);
-  assert.doesNotMatch(getCurrentTenantBody, /getConfiguredCurrentTenantSlug\(\)/);
+  assert.doesNotMatch(getCurrentTenantBody, /getConfiguredLocalTenantSlug\(\)/);
 });
 
 test("strict tenant helpers query exact id or slug and never order by first active tenant", () => {

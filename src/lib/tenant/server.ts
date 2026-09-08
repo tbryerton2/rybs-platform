@@ -4,7 +4,7 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
-  assertResolvedCurrentSiteTenant,
+  assertResolvedLocalTenant,
   createDomainDisabledError,
   createDomainTenantInactiveError,
   createHostnameInvalidError,
@@ -142,7 +142,7 @@ const resolveTenantBySlugForDevelopment = cache(async (slug: string): Promise<Te
     throw new Error(lookup.error.message);
   }
 
-  return assertResolvedCurrentSiteTenant(lookup.data as TenantRecord | null, slug);
+  return assertResolvedLocalTenant(lookup.data as TenantRecord | null, slug);
 });
 
 const resolvePublicTenantFromNormalizedHostname = cache(

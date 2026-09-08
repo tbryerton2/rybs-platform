@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  assertResolvedCurrentSiteTenant,
+  assertResolvedLocalTenant,
   createStrictTenantNotFoundError,
-  DEFAULT_CURRENT_SITE_TENANT_SLUG,
+  DEFAULT_LOCAL_TENANT_SLUG,
   DEFAULT_DEMO_LOCAL_TENANT_SLUG,
   DEMO_LOCAL_HOSTNAME,
-  getConfiguredCurrentTenantSlug,
+  getConfiguredLocalTenantSlug,
   getConfiguredDemoLocalTenantSlug,
   isTenantResolutionError,
   normalizePublicHostname,
@@ -17,16 +17,16 @@ import {
 test("exact default slug resolves the matching active tenant", () => {
   const tenant = {
     id: "11111111-1111-4111-8111-111111111111",
-    slug: DEFAULT_CURRENT_SITE_TENANT_SLUG,
+    slug: DEFAULT_LOCAL_TENANT_SLUG,
     status: "active",
   };
 
-  assert.equal(assertResolvedCurrentSiteTenant(tenant, DEFAULT_CURRENT_SITE_TENANT_SLUG), tenant);
+  assert.equal(assertResolvedLocalTenant(tenant, DEFAULT_LOCAL_TENANT_SLUG), tenant);
 });
 
 test("missing default slug does not resolve the first active tenant", () => {
   assert.throws(
-    () => assertResolvedCurrentSiteTenant(null, "missing-business"),
+    () => assertResolvedLocalTenant(null, "missing-business"),
     (error) =>
       isTenantResolutionError(error) &&
       error.code === "CURRENT_TENANT_NOT_FOUND" &&
@@ -37,13 +37,13 @@ test("missing default slug does not resolve the first active tenant", () => {
 test("inactive default tenant does not resolve another tenant", () => {
   assert.throws(
     () =>
-      assertResolvedCurrentSiteTenant(
+      assertResolvedLocalTenant(
         {
           id: "11111111-1111-4111-8111-111111111111",
-          slug: DEFAULT_CURRENT_SITE_TENANT_SLUG,
+          slug: DEFAULT_LOCAL_TENANT_SLUG,
           status: "inactive",
         },
-        DEFAULT_CURRENT_SITE_TENANT_SLUG,
+        DEFAULT_LOCAL_TENANT_SLUG,
       ),
     (error) =>
       isTenantResolutionError(error) &&
@@ -52,16 +52,16 @@ test("inactive default tenant does not resolve another tenant", () => {
   );
 });
 
-test("configured current-site slug uses DEFAULT_TENANT_SLUG exactly when provided", () => {
+test("configured local slug uses DEFAULT_TENANT_SLUG exactly when provided", () => {
   assert.equal(
-    getConfiguredCurrentTenantSlug({ DEFAULT_TENANT_SLUG: "  custom-shop  " }),
+    getConfiguredLocalTenantSlug({ DEFAULT_TENANT_SLUG: "  custom-shop  " }),
     "custom-shop",
   );
 });
 
-test("configured current-site slug falls back only to the Tan Can Man slug constant", () => {
-  assert.equal(getConfiguredCurrentTenantSlug({ DEFAULT_TENANT_SLUG: "" }), "tan-can-man");
-  assert.equal(getConfiguredCurrentTenantSlug({}), "tan-can-man");
+test("configured local slug falls back only to the Tan Can Man slug constant", () => {
+  assert.equal(getConfiguredLocalTenantSlug({ DEFAULT_TENANT_SLUG: "" }), "tan-can-man");
+  assert.equal(getConfiguredLocalTenantSlug({}), "tan-can-man");
 });
 
 test("hostname normalization lowercases and strips protocol, path, query, trailing dot, and port", () => {
@@ -82,11 +82,11 @@ test("invalid hostnames fail normalization instead of becoming a default tenant"
 test("localhost resolves Tan Can Man only through explicit development behavior", () => {
   assert.equal(
     resolveDevelopmentTenantSlugForHostname("localhost", { DEFAULT_TENANT_SLUG: "" }),
-    DEFAULT_CURRENT_SITE_TENANT_SLUG,
+    DEFAULT_LOCAL_TENANT_SLUG,
   );
   assert.equal(
     resolveDevelopmentTenantSlugForHostname("127.0.0.1", { DEFAULT_TENANT_SLUG: "tan-can-man" }),
-    DEFAULT_CURRENT_SITE_TENANT_SLUG,
+    DEFAULT_LOCAL_TENANT_SLUG,
   );
 });
 

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { DEFAULT_CURRENT_SITE_TENANT_SLUG, normalizePublicHostname } from "@/lib/tenant/resolution";
+import { DEFAULT_LOCAL_TENANT_SLUG, normalizePublicHostname } from "@/lib/tenant/resolution";
 import {
   getBrandSettingsForTenant,
   getSupportSettingsForTenant,
@@ -87,7 +87,7 @@ export async function getTenantPublicBaseUrl(
   if (domain) return `https://${domain.hostname}`;
 
   const globalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (tenant.slug === DEFAULT_CURRENT_SITE_TENANT_SLUG && globalSiteUrl) {
+  if (tenant.slug === DEFAULT_LOCAL_TENANT_SLUG && globalSiteUrl) {
     return globalSiteUrl.replace(/\/$/, "");
   }
 
@@ -114,7 +114,7 @@ export async function getTenantCommunicationSettings(
   const supportEmail = asString(settings.get("support.email"));
   const fallbackRecipients = supportEmail ? [supportEmail] : [];
   const legacyTanRecipients =
-    tenant.slug === DEFAULT_CURRENT_SITE_TENANT_SLUG
+    tenant.slug === DEFAULT_LOCAL_TENANT_SLUG
       ? normalizeEmailList(process.env.ADMIN_BOOKING_EMAIL)
       : [];
 
