@@ -1657,6 +1657,7 @@ export default async function AdminBookingDetailPage({
   const futureDependencyDatesResult = await supabaseAdmin
     .from("bookings")
     .select("id, delivery_date")
+    .eq("business_id", businessId)
     .in("status", ["confirmed", "scheduled"])
     .gte("delivery_date", todayYmd)
     .neq("id", booking.id)

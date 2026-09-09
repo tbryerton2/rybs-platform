@@ -118,6 +118,15 @@ test("booking and customer admin object lookups are scoped by context business i
   }
 });
 
+test("admin booking detail future dependency lookup is business-scoped", () => {
+  const source = readRepoFile("src/app/admin/(protected)/bookings/[id]/page.tsx");
+  const futureLookup = source.slice(source.indexOf("const futureDependencyDatesResult"));
+
+  assert.match(futureLookup, /\.from\("bookings"\)/);
+  assert.match(futureLookup, /\.eq\("business_id", businessId\)/);
+  assert.match(futureLookup, /\.neq\("id", booking\.id\)/);
+});
+
 test("public tenant resolution remains separate from admin and platform admin", () => {
   const tenantServer = readRepoFile("src/lib/tenant/server.ts");
   const adminAuth = readRepoFile("src/lib/admin/auth.ts");
