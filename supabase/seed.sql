@@ -14,28 +14,14 @@ restart identity cascade;
 
 delete from public.pricing_settings;
 
-create temporary table seed_tan_can_man_business (
-  id uuid primary key
-) on commit drop;
-
-create temporary table seed_demo_dumpster_business (
-  id uuid primary key
-) on commit drop;
-
-insert into seed_tan_can_man_business (id)
-select id
-from public.tenants
-where slug = 'tan-can-man';
-
 do $$
 begin
-  if not exists (select 1 from seed_tan_can_man_business) then
+  if not exists (select 1 from public.tenants where slug = 'tan-can-man') then
     raise exception 'Local seed requires tenant slug tan-can-man to exist.';
   end if;
 end $$;
 
-with seeded_demo as (
-  insert into public.tenants (id, slug, status)
+insert into public.tenants (id, slug, status)
   values (
     '22222222-2222-4222-8222-222222222222',
     'demo-dumpster-co',
@@ -43,20 +29,22 @@ with seeded_demo as (
   )
   on conflict (slug) do update
     set status = excluded.status,
-        updated_at = now()
-  returning id
-), resolved_demo as (
-  select id from seeded_demo
-  union all
-  select id from public.tenants where slug = 'demo-dumpster-co'
-  limit 1
-)
-insert into seed_demo_dumpster_business (id)
-select id from resolved_demo;
+        updated_at = now();
+
+do $$
+begin
+  if not exists (select 1 from public.tenants where slug = 'tan-can-man') then
+    raise exception 'Local seed requires tenant slug tan-can-man to exist.';
+  end if;
+
+  if not exists (select 1 from public.tenants where slug = 'demo-dumpster-co') then
+    raise exception 'Local seed requires tenant slug demo-dumpster-co to exist.';
+  end if;
+end $$;
 
 insert into public.tenant_settings (tenant_id, category, key, value_json)
 select demo.id, seeded.category, seeded.key, seeded.value_json
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 cross join (
   values
     ('brand', 'name', to_jsonb('Demo Dumpster Company'::text)),
@@ -108,7 +96,7 @@ select
   true,
   'not_provisioned',
   'unknown'
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 on conflict (hostname) do update
 set tenant_id = excluded.tenant_id,
     domain_type = excluded.domain_type,
@@ -120,7 +108,7 @@ set tenant_id = excluded.tenant_id,
 
 insert into public.tenant_content_entries (tenant_id, key, status, value_json)
 select demo.id, seeded.key, 'published', seeded.value_json
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 cross join (
   values
     (
@@ -161,7 +149,7 @@ set value_json = excluded.value_json,
 
 insert into public.service_area_zips (business_id, zip, active, county, town)
 select demo.id, seeded.zip, true, seeded.county, seeded.town
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 cross join (
   values
     ('78704', 'Travis', 'Austin'),
@@ -200,7 +188,7 @@ select
   14,
   true,
   'Includes delivery, pickup, a 7-day rental window, and the listed weight allowance.'
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 on conflict on constraint pricing_settings_business_id_key
 do update
 set standard_rental_price = excluded.standard_rental_price,
@@ -245,7 +233,7 @@ select
   true,
   seeded.sort_order,
   seeded.customer_bullet_points
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 cross join (
   values
     (
@@ -362,7 +350,7 @@ select
   'Not installed',
   now(),
   now()
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 cross join (
   values
     (
@@ -508,7 +496,7 @@ select
   '23000000-0000-4000-8000-000000000001',
   'owner',
   'active'
-from seed_demo_dumpster_business demo
+from (select id from public.tenants where slug = 'demo-dumpster-co') demo
 on conflict on constraint business_admin_memberships_business_auth_user_unique
 do update
 set role = excluded.role,
@@ -530,7 +518,7 @@ insert into public.pricing_settings (
 )
 values (
   '90000000-0000-4000-8000-000000000001',
-  (select id from seed_tan_can_man_business),
+  (select id from public.tenants where slug = 'tan-can-man'),
   425.00,
   425.00,
   10,
@@ -559,7 +547,7 @@ insert into public.customers (
 values
   (
     '10000000-0000-4000-8000-000000000001',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'Alice Benton',
     'alice.benton@example.com',
     '3155550101',
@@ -574,7 +562,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000002',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'Marcus Hale',
     'marcus.hale@example.com',
     '3155550102',
@@ -589,7 +577,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000003',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'Priya Desai',
     'priya.desai@example.com',
     '3155550103',
@@ -604,7 +592,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000004',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'Jonah Mercer',
     'jonah.mercer@example.com',
     '3155550104',
@@ -619,7 +607,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000005',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'Sofia Alvarez',
     'sofia.alvarez@example.com',
     '3155550105',
@@ -651,7 +639,7 @@ insert into public.customer_locations (
 values
   (
     '11000000-0000-4000-8000-000000000001',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000001',
     'Home driveway',
     '12 Lakeview Dr',
@@ -666,7 +654,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000002',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000002',
     'Main job yard',
     '84 Quarry Rd',
@@ -681,7 +669,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000003',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000003',
     'Primary residence',
     '455 Ridge St',
@@ -696,7 +684,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000004',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000004',
     'Farm lane',
     '901 County Route 5',
@@ -711,7 +699,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000005',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000005',
     'Canal-side project',
     '233 Canal St',
@@ -726,7 +714,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000006',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000002',
     'Overflow yard',
     '18 Sullivan Rd',
@@ -758,7 +746,7 @@ insert into public.customers (
 values
   (
     '21000000-0000-4000-8000-000000000001',
-    (select id from seed_demo_dumpster_business),
+    (select id from public.tenants where slug = 'demo-dumpster-co'),
     'Riley Parker',
     'riley.parker@example.test',
     '5125550181',
@@ -773,7 +761,7 @@ values
   ),
   (
     '21000000-0000-4000-8000-000000000002',
-    (select id from seed_demo_dumpster_business),
+    (select id from public.tenants where slug = 'demo-dumpster-co'),
     'Morgan Lee',
     'morgan.lee@example.test',
     '5125550182',
@@ -805,7 +793,7 @@ insert into public.customer_locations (
 values
   (
     '21100000-0000-4000-8000-000000000001',
-    (select id from seed_demo_dumpster_business),
+    (select id from public.tenants where slug = 'demo-dumpster-co'),
     '21000000-0000-4000-8000-000000000001',
     'Demo driveway',
     '810 Barton Springs Rd',
@@ -820,7 +808,7 @@ values
   ),
   (
     '21100000-0000-4000-8000-000000000002',
-    (select id from seed_demo_dumpster_business),
+    (select id from public.tenants where slug = 'demo-dumpster-co'),
     '21000000-0000-4000-8000-000000000002',
     'Retail renovation site',
     '4401 S Congress Ave',
@@ -835,7 +823,7 @@ values
   );
 
 with selected_business as (
-  select id from seed_tan_can_man_business
+  select id from public.tenants where slug = 'tan-can-man'
 )
 insert into public.business_employees (
   id,
@@ -1039,7 +1027,7 @@ cross join (
 );
 
 with selected_business as (
-  select id from seed_tan_can_man_business
+  select id from public.tenants where slug = 'tan-can-man'
 )
 insert into public.business_expenses (
   id,
@@ -1205,7 +1193,7 @@ values
     '12000000-0000-4000-8000-000000000001',
     now() - interval '14 days',
     now() - interval '2 hours',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000001',
     'Alice',
     'Benton',
@@ -1247,7 +1235,7 @@ values
     '12000000-0000-4000-8000-000000000002',
     now() - interval '10 days',
     now() - interval '1 day',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000002',
     'Marcus',
     'Hale',
@@ -1289,7 +1277,7 @@ values
     '12000000-0000-4000-8000-000000000003',
     now() - interval '8 days',
     now() - interval '4 hours',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000003',
     'Priya',
     'Desai',
@@ -1331,7 +1319,7 @@ values
     '12000000-0000-4000-8000-000000000004',
     now() - interval '20 days',
     now() - interval '6 hours',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000004',
     'Jonah',
     'Mercer',
@@ -1373,7 +1361,7 @@ values
     '12000000-0000-4000-8000-000000000005',
     now() - interval '45 days',
     now() - interval '18 days',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000001',
     'Alice',
     'Benton',
@@ -1415,7 +1403,7 @@ values
     '12000000-0000-4000-8000-000000000006',
     now() - interval '3 days',
     now() - interval '12 hours',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     '10000000-0000-4000-8000-000000000005',
     'Sofia',
     'Alvarez',
@@ -1503,7 +1491,7 @@ values
     '21200000-0000-4000-8000-000000000001',
     now() - interval '4 days',
     now() - interval '1 hour',
-    (select id from seed_demo_dumpster_business),
+    (select id from public.tenants where slug = 'demo-dumpster-co'),
     '21000000-0000-4000-8000-000000000002',
     'Morgan',
     'Lee',
@@ -1568,7 +1556,7 @@ values
     '14000000-0000-4000-8000-000000000001',
     '12000000-0000-4000-8000-000000000003',
     '10000000-0000-4000-8000-000000000003',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'pickup_request',
     'submitted',
     'received',
@@ -1591,7 +1579,7 @@ values
     '14000000-0000-4000-8000-000000000002',
     '12000000-0000-4000-8000-000000000004',
     '10000000-0000-4000-8000-000000000004',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'extension_request',
     'approved',
     'under_review',
@@ -1614,7 +1602,7 @@ values
     '14000000-0000-4000-8000-000000000003',
     '12000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000002',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     'issue_report',
     'completed',
     'completed',
@@ -1646,7 +1634,7 @@ insert into public.booking_holds (
 values
   (
     '15000000-0000-4000-8000-000000000001',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     current_date + 1,
     now() + interval '15 minutes',
     'active',
@@ -1656,7 +1644,7 @@ values
   ),
   (
     '15000000-0000-4000-8000-000000000002',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     current_date + 6,
     now() + interval '5 minutes',
     'converting',
@@ -1666,7 +1654,7 @@ values
   ),
   (
     '15000000-0000-4000-8000-000000000003',
-    (select id from seed_tan_can_man_business),
+    (select id from public.tenants where slug = 'tan-can-man'),
     current_date - 1,
     now() - interval '30 minutes',
     'expired',
@@ -1690,7 +1678,7 @@ insert into public.booking_holds (
 values
   (
     '21500000-0000-4000-8000-000000000001',
-    (select id from seed_demo_dumpster_business),
+    (select id from public.tenants where slug = 'demo-dumpster-co'),
     current_date + 2,
     now() + interval '20 minutes',
     'active',
