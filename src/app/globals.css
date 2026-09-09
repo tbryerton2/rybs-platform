@@ -32,7 +32,7 @@ body {
   font-family: var(--display);
 }
 
-.tcm-admin {
+.rybs-admin {
   --admin-radius-panel: 20px;
   --admin-radius-card: 14px;
   --admin-radius-control: 8px;
@@ -48,17 +48,17 @@ body {
   --border-strong: #cbd5e1;
 }
 
-.tcm-admin :is(button, input, select, textarea, label).rounded-xl,
-.tcm-admin :is(button, input, select, textarea, label).rounded-\[14px\],
-.tcm-admin a.inline-flex.rounded-\[14px\] {
+.rybs-admin :is(button, input, select, textarea, label).rounded-xl,
+.rybs-admin :is(button, input, select, textarea, label).rounded-\[14px\],
+.rybs-admin a.inline-flex.rounded-\[14px\] {
   border-radius: var(--admin-radius-control);
 }
 
-.tcm-admin .rounded-xl {
+.rybs-admin .rounded-xl {
   border-radius: var(--admin-radius-nested);
 }
 
-.tcm-admin .admin-btn {
+.rybs-admin .admin-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -81,180 +81,180 @@ body {
     box-shadow 150ms ease;
 }
 
-.tcm-admin .admin-btn-sm {
+.rybs-admin .admin-btn-sm {
   min-height: 2rem;
   padding-inline: 0.75rem;
   font-size: 0.75rem;
   line-height: 1rem;
 }
 
-.tcm-admin .admin-btn-lg {
+.rybs-admin .admin-btn-lg {
   min-height: 3rem;
   padding-inline: 1.25rem;
 }
 
-.tcm-admin .admin-btn-icon {
+.rybs-admin .admin-btn-icon {
   width: 2.5rem;
   min-width: 2.5rem;
   padding-inline: 0;
 }
 
-.tcm-admin .admin-btn-icon.admin-btn-sm {
+.rybs-admin .admin-btn-icon.admin-btn-sm {
   width: 2rem;
   min-width: 2rem;
 }
 
-.tcm-admin .admin-btn:active {
+.rybs-admin .admin-btn:active {
   transform: scale(0.99);
 }
 
-.tcm-admin .admin-btn:focus-visible {
+.rybs-admin .admin-btn:focus-visible {
   outline: none;
   box-shadow:
     0 0 0 2px #fff,
     0 0 0 4px rgb(249 115 22 / 0.35);
 }
 
-.tcm-admin .admin-btn:disabled,
-.tcm-admin .admin-btn[aria-disabled="true"] {
+.rybs-admin .admin-btn:disabled,
+.rybs-admin .admin-btn[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.55;
   transform: none;
 }
 
-.tcm-admin .admin-btn[aria-busy="true"] {
+.rybs-admin .admin-btn[aria-busy="true"] {
   cursor: progress;
 }
 
-.tcm-admin .admin-btn-primary,
-.tcm-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\],
-.tcm-admin :is(button, a):not(.rounded-full).bg-orange-500,
-.tcm-admin :is(button, a):not(.rounded-full).bg-orange-600,
-.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-600,
-.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-700,
-.tcm-admin :is(button, a):not(.rounded-full).bg-green-600,
-.tcm-admin :is(button, a):not(.rounded-full).bg-green-700 {
+.rybs-admin .admin-btn-primary,
+.rybs-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\],
+.rybs-admin :is(button, a):not(.rounded-full).bg-orange-500,
+.rybs-admin :is(button, a):not(.rounded-full).bg-orange-600,
+.rybs-admin :is(button, a):not(.rounded-full).bg-emerald-600,
+.rybs-admin :is(button, a):not(.rounded-full).bg-emerald-700,
+.rybs-admin :is(button, a):not(.rounded-full).bg-green-600,
+.rybs-admin :is(button, a):not(.rounded-full).bg-green-700 {
   border-color: transparent;
   background-color: var(--admin-action-orange);
   color: #fff;
 }
 
-.tcm-admin .admin-btn-primary:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\]:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-orange-500:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-orange-600:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-600:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-700:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-green-600:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-green-700:hover {
+.rybs-admin .admin-btn-primary:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\]:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-orange-500:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-orange-600:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-emerald-600:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-emerald-700:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-green-600:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-green-700:hover {
   background-color: var(--admin-action-orange-hover);
   color: #fff;
 }
 
-.tcm-admin .admin-btn-primary:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\]:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-orange-500:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-orange-600:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-600:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-emerald-700:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-green-600:active,
-.tcm-admin :is(button, a):not(.rounded-full).bg-green-700:active {
+.rybs-admin .admin-btn-primary:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-\[\#F97316\]:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-orange-500:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-orange-600:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-emerald-600:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-emerald-700:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-green-600:active,
+.rybs-admin :is(button, a):not(.rounded-full).bg-green-700:active {
   background-color: var(--admin-action-orange-active);
   color: #fff;
 }
 
-.tcm-admin .admin-btn-secondary,
-.tcm-admin input[type="file"]::file-selector-button {
+.rybs-admin .admin-btn-secondary,
+.rybs-admin input[type="file"]::file-selector-button {
   border-color: var(--border-strong);
   background-color: transparent;
   color: var(--text-secondary);
 }
 
-.tcm-admin .admin-btn-secondary:hover,
-.tcm-admin input[type="file"]::file-selector-button:hover {
+.rybs-admin .admin-btn-secondary:hover,
+.rybs-admin input[type="file"]::file-selector-button:hover {
   border-color: var(--border-strong);
   background-color: rgb(248 250 252 / 0.9);
   color: #334155;
 }
 
-.tcm-admin .admin-btn-secondary:active {
+.rybs-admin .admin-btn-secondary:active {
   background-color: rgb(241 245 249 / 0.95);
   color: #1e293b;
 }
 
-.tcm-admin .admin-btn-destructive,
-.tcm-admin :is(button, a):not(.rounded-full).bg-red-600,
-.tcm-admin :is(button, a):not(.rounded-full).bg-red-700,
-.tcm-admin :is(button, a):not(.rounded-full).bg-rose-600,
-.tcm-admin :is(button, a):not(.rounded-full).bg-rose-700,
-.tcm-admin :is(button, a):not(.rounded-full).border-red-200,
-.tcm-admin :is(button, a):not(.rounded-full).border-rose-200 {
+.rybs-admin .admin-btn-destructive,
+.rybs-admin :is(button, a):not(.rounded-full).bg-red-600,
+.rybs-admin :is(button, a):not(.rounded-full).bg-red-700,
+.rybs-admin :is(button, a):not(.rounded-full).bg-rose-600,
+.rybs-admin :is(button, a):not(.rounded-full).bg-rose-700,
+.rybs-admin :is(button, a):not(.rounded-full).border-red-200,
+.rybs-admin :is(button, a):not(.rounded-full).border-rose-200 {
   border-color: var(--border);
   background-color: transparent;
   color: var(--admin-danger-text);
 }
 
-.tcm-admin .admin-btn-destructive:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-red-600:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-red-700:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-rose-600:hover,
-.tcm-admin :is(button, a):not(.rounded-full).bg-rose-700:hover,
-.tcm-admin :is(button, a):not(.rounded-full).border-red-200:hover,
-.tcm-admin :is(button, a):not(.rounded-full).border-rose-200:hover {
+.rybs-admin .admin-btn-destructive:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-red-600:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-red-700:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-rose-600:hover,
+.rybs-admin :is(button, a):not(.rounded-full).bg-rose-700:hover,
+.rybs-admin :is(button, a):not(.rounded-full).border-red-200:hover,
+.rybs-admin :is(button, a):not(.rounded-full).border-rose-200:hover {
   border-color: var(--border);
   background-color: rgb(248 250 252 / 0.9);
   color: var(--admin-danger-text-hover);
 }
 
-.tcm-admin .admin-btn-destructive:active {
+.rybs-admin .admin-btn-destructive:active {
   background-color: rgb(241 245 249 / 0.95);
   color: #991b1b;
 }
 
-.tcm-admin .reports-card-success {
+.rybs-admin .reports-card-success {
   border-color: rgb(167 243 208 / 0.8);
   background-color: rgb(236 253 245 / 0.7);
 }
 
-.tcm-admin .reports-card-warning {
+.rybs-admin .reports-card-warning {
   border-color: rgb(254 215 170 / 0.8);
   background-color: rgb(255 247 237 / 0.8);
 }
 
-.tcm-admin .reports-card-neutral {
+.rybs-admin .reports-card-neutral {
   border-color: rgb(226 232 240 / 0.8);
   background-color: #fff;
 }
 
-.tcm-admin .reports-trend-success {
+.rybs-admin .reports-trend-success {
   background-color: rgb(236 253 245);
   color: rgb(4 120 87);
   --tw-ring-color: rgb(167 243 208);
 }
 
-.tcm-admin .reports-trend-warning {
+.rybs-admin .reports-trend-warning {
   background-color: rgb(255 247 237);
   color: #f97316;
   --tw-ring-color: rgb(254 215 170);
 }
 
-.tcm-admin .reports-trend-neutral {
+.rybs-admin .reports-trend-neutral {
   background-color: rgb(241 245 249);
   color: rgb(51 65 85);
   --tw-ring-color: rgb(226 232 240);
 }
 
-.tcm-admin .reports-info-badge {
+.rybs-admin .reports-info-badge {
   background-color: rgb(240 249 255);
   color: rgb(3 105 161);
   --tw-ring-color: rgb(186 230 253);
 }
 
-.tcm-admin .reports-info-fill {
+.rybs-admin .reports-info-fill {
   background-color: rgb(14 165 233);
 }
 
-.tcm-zip-tooltip {
+.admin-zip-tooltip {
   border: 1px solid rgba(226, 232, 240, 0.98);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.98);
@@ -263,37 +263,37 @@ body {
   padding: 0;
 }
 
-.tcm-zip-tooltip::before {
+.admin-zip-tooltip::before {
   display: none;
 }
 
-.tcm-zip-tooltip-card {
+.admin-zip-tooltip-card {
   min-width: 190px;
   padding: 14px 16px 15px;
 }
 
-.tcm-zip-tooltip-zip {
+.admin-zip-tooltip-zip {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.1;
   color: #0f172a;
 }
 
-.tcm-zip-tooltip-town {
+.admin-zip-tooltip-town {
   margin-top: 7px;
   font-size: 13px;
   color: #64748b;
 }
 
-.tcm-zip-tooltip-card--quiet .tcm-zip-tooltip-zip {
+.admin-zip-tooltip-card--quiet .admin-zip-tooltip-zip {
   color: #1e293b;
 }
 
-.tcm-zip-tooltip-card--quiet .tcm-zip-tooltip-town {
+.admin-zip-tooltip-card--quiet .admin-zip-tooltip-town {
   color: #94a3b8;
 }
 
-.tcm-zip-tooltip-metrics {
+.admin-zip-tooltip-metrics {
   margin-top: 14px;
   display: grid;
   gap: 7px;
@@ -303,39 +303,39 @@ body {
   padding-top: 12px;
 }
 
-.tcm-zip-tooltip-metrics span {
+.admin-zip-tooltip-metrics span {
   color: #64748b;
 }
 
-.tcm-zip-tooltip-metrics strong {
+.admin-zip-tooltip-metrics strong {
   color: #0f172a;
   font-weight: 600;
 }
 
-.tcm-zip-tooltip-card--quiet .tcm-zip-tooltip-metrics {
+.admin-zip-tooltip-card--quiet .admin-zip-tooltip-metrics {
   color: #64748b;
 }
 
-.tcm-zip-tooltip-card--quiet .tcm-zip-tooltip-metrics span {
+.admin-zip-tooltip-card--quiet .admin-zip-tooltip-metrics span {
   color: #94a3b8;
 }
 
-.tcm-zip-tooltip-card--quiet .tcm-zip-tooltip-metrics strong {
+.admin-zip-tooltip-card--quiet .admin-zip-tooltip-metrics strong {
   color: #334155;
 }
 
-.tcm-zip-map .leaflet-interactive {
+.admin-zip-map .leaflet-interactive {
   transition:
     fill-opacity 120ms ease,
     stroke-width 120ms ease,
     opacity 120ms ease;
 }
 
-.tcm-zip-map .leaflet-tile {
+.admin-zip-map .leaflet-tile {
   filter: brightness(0.97) contrast(0.92) saturate(0.92);
 }
 
-.tcm-zip-legend {
+.admin-zip-legend {
   min-width: 112px;
   border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: 12px;
@@ -345,14 +345,14 @@ body {
   padding: 8px 10px;
 }
 
-.tcm-zip-legend-title {
+.admin-zip-legend-title {
   margin-bottom: 6px;
   font-size: 11px;
   font-weight: 700;
   color: #0f172a;
 }
 
-.tcm-zip-legend-row {
+.admin-zip-legend-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -360,11 +360,11 @@ body {
   color: #475569;
 }
 
-.tcm-zip-legend-row + .tcm-zip-legend-row {
+.admin-zip-legend-row + .admin-zip-legend-row {
   margin-top: 5px;
 }
 
-.tcm-zip-legend-swatch {
+.admin-zip-legend-swatch {
   height: 9px;
   width: 9px;
   flex-shrink: 0;

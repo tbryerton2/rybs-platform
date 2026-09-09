@@ -44,8 +44,11 @@ test("platform dashboard uses tenant summaries instead of navigation cards", () 
 });
 
 test("platform admin shell exposes dashboard businesses and users navigation", () => {
+  const layout = readRepoFile("src/app/platform-admin/layout.tsx");
   const shell = readRepoFile("src/app/platform-admin/_components/platform-admin-shell.tsx");
 
+  assert.match(layout, /className="rybs-admin"/);
+  assert.doesNotMatch(layout, /tcm-admin/);
   assert.match(shell, /href="\/platform-admin"/);
   assert.match(shell, /href="\/platform-admin\/businesses"/);
   assert.match(shell, /href="\/platform-admin\/users"/);

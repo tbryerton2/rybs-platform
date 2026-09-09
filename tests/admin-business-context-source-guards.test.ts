@@ -64,10 +64,13 @@ test("platform membership alone does not grant business-admin access", () => {
 });
 
 test("protected admin shell uses the selected tenant name", () => {
+  const rootLayout = readRepoFile("src/app/admin/layout.tsx");
   const layout = readRepoFile("src/app/admin/(protected)/layout.tsx");
   const shell = readRepoFile("src/app/admin/_components/admin/admin-shell.tsx");
   const sidebar = readRepoFile("src/app/admin/_components/admin/admin-sidebar.tsx");
 
+  assert.match(rootLayout, /className="rybs-admin"/);
+  assert.doesNotMatch(rootLayout, /tcm-admin/);
   assert.match(layout, /businessName=\{adminSession\.tenant\.name\}/);
   assert.match(layout, /canSwitchBusiness=\{adminSession\.availableBusinesses\.length > 1\}/);
   assert.match(shell, /businessName: string/);
@@ -77,6 +80,16 @@ test("protected admin shell uses the selected tenant name", () => {
   assert.match(sidebar, /href="\/admin\/select-business"/);
   assert.doesNotMatch(shell, /Tan Can Man Admin/);
   assert.doesNotMatch(sidebar, /Tan Can Man Admin/);
+});
+
+test("active admin styling uses neutral platform namespaces", () => {
+  const globals = readRepoFile("src/app/globals.css");
+  const zipMap = readRepoFile("src/app/admin/(protected)/analytics/zip-map/map-client.tsx");
+
+  assert.match(globals, /\.rybs-admin/);
+  assert.match(zipMap, /admin-zip-map/);
+  assert.doesNotMatch(globals, /tcm-admin|tcm-zip/);
+  assert.doesNotMatch(zipMap, /tcm-zip/);
 });
 
 test("admin business selector revalidates cookie and submitted business ids against active memberships", () => {
