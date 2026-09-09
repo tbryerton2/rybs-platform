@@ -2,6 +2,7 @@ import "server-only";
 
 import { findOrCreateCustomerProviderAccount } from "./customer-provider-accounts";
 import { persistCustomerPaymentMethod } from "./customer-payment-methods";
+import { resolveTenantPaymentProviderConnection } from "./tenant-payment-provider-connections";
 import {
   createOrReuseSquareCustomer,
   findReusableSquareCard,
@@ -11,6 +12,7 @@ import {
 } from "./providers/square";
 import type {
   PaymentProvider,
+  PaymentProviderConnectionContext,
   PaymentProviderEnvironment,
   PaymentProviderCustomerInput,
   PaymentProviderCustomerResult,
@@ -68,6 +70,7 @@ type SaveCustomerPaymentMethodOptions = {
     input: PaymentProviderSavePaymentMethodInput,
   ) => Promise<PaymentProviderSavePaymentMethodResult>;
   verifyProviderPaymentMethod?: (input: {
+    connection?: PaymentProviderConnectionContext;
     providerPaymentMethodId: string;
     providerCustomerId: string;
   }) => Promise<{
@@ -260,10 +263,49 @@ export async function saveCustomerPaymentMethod(
         const persistPaymentMethod = options.persistPaymentMethod ?? persistCustomerPaymentMethod;
         const names = getCustomerNames(input);
         const cardCorrelationId = clean(input.paymentMethodIdempotencyKey) ?? null;
+        let connection: PaymentProviderConnectionContext | undefined;
+        let connectionResolved = false;
         let customerResult: PaymentProviderCustomerResult;
 
+        async function getConnectionForDefaultSquareOperation() {
+          if (connectionResolved) return connection;
+
+          connection = await resolveTenantPaymentProviderConnection({
+            businessId,
+            provider,
+            providerEnvironment,
+          });
+          connectionResolved = true;
+
+          if (
+            input.paymentProviderConnectionId &&
+            connection.id &&
+            input.paymentProviderConnectionId !== connection.id
+          ) {
+            throw new SaveCustomerPaymentMethodError(
+              "paymentProviderConnectionId does not match the active Square connection.",
+              "PAYMENT_PROVIDER_CONNECTION_MISMATCH",
+              undefined,
+              {
+                failureStage: "linking_saved_method_to_customer",
+                safeErrorCode: "PAYMENT_PROVIDER_CONNECTION_MISMATCH",
+                retryable: false,
+                correlationId: cardCorrelationId,
+              },
+            );
+          }
+
+          return connection;
+        }
+
         try {
+          const operationConnection =
+            createOrReuseProviderCustomer === createOrReuseSquareCustomer
+              ? await getConnectionForDefaultSquareOperation()
+              : undefined;
+
           customerResult = await createOrReuseProviderCustomer({
+            connection: operationConnection,
             localCustomerId: customerId,
             idempotencyKey: clean(input.customerIdempotencyKey) ?? undefined,
             referenceId: customerId,
@@ -306,6 +348,12 @@ export async function saveCustomerPaymentMethod(
             customerId,
             provider,
             providerEnvironment,
+            paymentProviderConnectionId:
+              connection?.id ?? customerResult.paymentProviderConnectionId ?? input.paymentProviderConnectionId,
+            providerMerchantId:
+              connection?.providerMerchantId ??
+              customerResult.providerMerchantId ??
+              input.providerMerchantId,
             providerCustomerId: customerResult.providerCustomerId,
           });
         } catch (error) {
@@ -321,12 +369,23 @@ export async function saveCustomerPaymentMethod(
 
         let savedProviderPaymentMethod: PaymentProviderSavePaymentMethodResult;
         try {
+          const findConnection =
+            findReusableProviderPaymentMethod === findReusableSquareCard
+              ? await getConnectionForDefaultSquareOperation()
+              : undefined;
+          const saveConnection =
+            saveProviderPaymentMethod === saveSquareCard
+              ? await getConnectionForDefaultSquareOperation()
+              : undefined;
+
           savedProviderPaymentMethod =
             (await findReusableProviderPaymentMethod({
+              connection: findConnection,
               providerCustomerId: customerProviderAccount.providerCustomerId,
               referenceId: customerId,
             })) ??
             (await saveProviderPaymentMethod({
+              connection: saveConnection,
               providerCustomerId: customerProviderAccount.providerCustomerId,
               cardSaveSourceId,
               idempotencyKey: clean(input.paymentMethodIdempotencyKey) ?? undefined,
@@ -361,7 +420,13 @@ export async function saveCustomerPaymentMethod(
         }
 
         try {
+          const verificationConnection =
+            verifyProviderPaymentMethod === verifySquareSavedCard
+              ? await getConnectionForDefaultSquareOperation()
+              : undefined;
+
           const verification = await verifyProviderPaymentMethod({
+            connection: verificationConnection,
             providerPaymentMethodId: savedProviderPaymentMethod.providerPaymentMethodId,
             providerCustomerId: customerProviderAccount.providerCustomerId,
           });
@@ -398,6 +463,16 @@ export async function saveCustomerPaymentMethod(
             customerProviderAccountId: customerProviderAccount.id,
             provider,
             providerEnvironment,
+            paymentProviderConnectionId:
+              connection?.id ??
+              savedProviderPaymentMethod.paymentProviderConnectionId ??
+              customerProviderAccount.paymentProviderConnectionId ??
+              input.paymentProviderConnectionId,
+            providerMerchantId:
+              connection?.providerMerchantId ??
+              savedProviderPaymentMethod.providerMerchantId ??
+              customerProviderAccount.providerMerchantId ??
+              input.providerMerchantId,
             providerCustomerId: customerProviderAccount.providerCustomerId,
             providerPaymentMethodId: savedProviderPaymentMethod.providerPaymentMethodId,
             cardBrand: savedProviderPaymentMethod.cardBrand,

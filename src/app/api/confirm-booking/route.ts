@@ -839,6 +839,8 @@ export async function POST(req: Request) {
               customerId: createdBooking.customerId,
               provider: "square",
               providerEnvironment: checkoutPayment.providerEnvironment,
+              paymentProviderConnectionId: checkoutPayment.paymentProviderConnectionId,
+              providerMerchantId: checkoutPayment.providerMerchantId,
               cardSaveSourceId: checkoutPayment.providerPaymentId,
               name: customerName,
               givenName: customerFirstName || null,

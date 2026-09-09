@@ -84,6 +84,8 @@ type BookingChargeRow = {
   provider: string | null;
   provider_environment: string | null;
   provider_payment_id: string | null;
+  payment_provider_connection_id?: string | null;
+  provider_merchant_id?: string | null;
   paid_at: string | null;
   failed_at: string | null;
   customer_receipt_email_status: string | null;
@@ -110,6 +112,8 @@ type BookingPaymentRow = {
   provider_payment_id: string | null;
   provider_order_id: string | null;
   provider_location_id: string | null;
+  payment_provider_connection_id?: string | null;
+  provider_merchant_id?: string | null;
   idempotency_key: string;
   failure_code: string | null;
   failure_message: string | null;
@@ -136,6 +140,8 @@ type CustomerPaymentMethodRow = {
   customer_provider_account_id: string | null;
   provider: string;
   provider_environment: string;
+  payment_provider_connection_id?: string | null;
+  provider_merchant_id?: string | null;
   provider_customer_id: string;
   provider_payment_method_id: string;
   card_brand: string | null;
@@ -251,9 +257,9 @@ async function getSupabaseClient() {
   return supabaseAdmin as unknown as PostBookingChargePaymentSupabaseClient;
 }
 
-async function getAdapter(provider: PaymentProvider) {
-  const { getPaymentProviderAdapter } = await import("./providers");
-  return getPaymentProviderAdapter(provider);
+async function getAdapterForBusiness(provider: PaymentProvider, businessId: string) {
+  const { getPaymentProviderAdapterForBusiness } = await import("./providers");
+  return getPaymentProviderAdapterForBusiness({ provider, businessId });
 }
 
 async function processQueuedBookingMessagesDefault(options: ProcessMessagesOptions) {
@@ -329,6 +335,8 @@ function toStoredCustomerPaymentMethod(row: CustomerPaymentMethodRow): StoredCus
     customerProviderAccountId: row.customer_provider_account_id,
     provider: row.provider as PaymentProvider,
     providerEnvironment: row.provider_environment as PaymentProviderEnvironment,
+    paymentProviderConnectionId: row.payment_provider_connection_id ?? null,
+    providerMerchantId: row.provider_merchant_id ?? null,
     providerCustomerId: row.provider_customer_id,
     providerPaymentMethodId: row.provider_payment_method_id,
     cardBrand: row.card_brand,
@@ -481,16 +489,23 @@ async function findSavedPaymentMethods(input: {
   customerId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
 }) {
   const query = input.supabase
     .from("customer_payment_methods")
     .select(CUSTOMER_PAYMENT_METHOD_SELECT) as QueryBuilder<CustomerPaymentMethodRow>;
 
-  const { data, error } = await query
+  let scopedQuery = query
     .eq("business_id", input.businessId)
     .eq("customer_id", input.customerId)
     .eq("provider", input.provider)
-    .eq("provider_environment", input.providerEnvironment)
+    .eq("provider_environment", input.providerEnvironment);
+
+  if (input.paymentProviderConnectionId) {
+    scopedQuery = scopedQuery.eq("payment_provider_connection_id", input.paymentProviderConnectionId);
+  }
+
+  const { data, error } = await scopedQuery
     .order("created_at", { ascending: false })
     .limit(25);
 
@@ -611,6 +626,7 @@ async function requireUsableSavedCardForBooking(input: {
     customerId,
     provider: input.paymentProvider,
     providerEnvironment: input.adapter.environment,
+    paymentProviderConnectionId: input.adapter.paymentProviderConnectionId,
   });
 
   let paymentMethod: StoredCustomerPaymentMethod | null = null;
@@ -712,24 +728,36 @@ async function insertPendingPayment(input: {
   bookingChargeId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   amountCents: number;
   currency: CurrencyCode;
   idempotencyKey: string;
 }) {
+  const insertValues: Record<string, unknown> = {
+    business_id: input.businessId,
+    booking_id: input.bookingId,
+    booking_charge_id: input.bookingChargeId,
+    provider: input.provider,
+    provider_environment: input.providerEnvironment,
+    status: "pending",
+    amount_cents: input.amountCents,
+    currency: input.currency,
+    idempotency_key: input.idempotencyKey,
+    payment_collection_type: "square_saved_card",
+  };
+
+  if (input.paymentProviderConnectionId) {
+    insertValues.payment_provider_connection_id = input.paymentProviderConnectionId;
+  }
+
+  if (input.providerMerchantId) {
+    insertValues.provider_merchant_id = input.providerMerchantId;
+  }
+
   const { data, error } = await input.supabase
     .from("booking_payments")
-    .insert({
-      business_id: input.businessId,
-      booking_id: input.bookingId,
-      booking_charge_id: input.bookingChargeId,
-      provider: input.provider,
-      provider_environment: input.providerEnvironment,
-      status: "pending",
-      amount_cents: input.amountCents,
-      currency: input.currency,
-      idempotency_key: input.idempotencyKey,
-      payment_collection_type: "square_saved_card",
-    })
+    .insert(insertValues)
     .select(BOOKING_PAYMENT_SELECT)
     .single<BookingPaymentRow>();
 
@@ -760,22 +788,32 @@ async function updatePaymentFromProviderResult(input: {
   providerResult: PaymentProviderChargeResult;
 }) {
   const status = input.providerResult.status;
+  const update: Record<string, unknown> = {
+    status,
+    provider_payment_id: input.providerResult.providerPaymentId ?? null,
+    provider_order_id: input.providerResult.providerOrderId ?? null,
+    provider_location_id: input.providerResult.providerLocationId ?? null,
+    failure_code: input.providerResult.failureCode ?? null,
+    failure_message: input.providerResult.failureMessage ?? null,
+    raw_provider_response: sanitizeJsonValue(input.providerResult.rawProviderResponse),
+    paid_at: status === "paid" ? input.providerResult.paidAt ?? new Date().toISOString() : null,
+    failed_at:
+      status === "failed" || status === "canceled"
+        ? input.providerResult.failedAt ?? new Date().toISOString()
+        : null,
+  };
+
+  if (input.providerResult.paymentProviderConnectionId) {
+    update.payment_provider_connection_id = input.providerResult.paymentProviderConnectionId;
+  }
+
+  if (input.providerResult.providerMerchantId) {
+    update.provider_merchant_id = input.providerResult.providerMerchantId;
+  }
+
   const { data, error } = await input.supabase
     .from("booking_payments")
-    .update({
-      status,
-      provider_payment_id: input.providerResult.providerPaymentId ?? null,
-      provider_order_id: input.providerResult.providerOrderId ?? null,
-      provider_location_id: input.providerResult.providerLocationId ?? null,
-      failure_code: input.providerResult.failureCode ?? null,
-      failure_message: input.providerResult.failureMessage ?? null,
-      raw_provider_response: sanitizeJsonValue(input.providerResult.rawProviderResponse),
-      paid_at: status === "paid" ? input.providerResult.paidAt ?? new Date().toISOString() : null,
-      failed_at:
-        status === "failed" || status === "canceled"
-          ? input.providerResult.failedAt ?? new Date().toISOString()
-          : null,
-    })
+    .update(update)
     .eq("id", input.paymentId)
     .select(BOOKING_PAYMENT_SELECT)
     .single<BookingPaymentRow>();
@@ -789,7 +827,11 @@ async function updatePaymentFromProviderResult(input: {
     );
   }
 
-  return data;
+  return {
+    ...data,
+    payment_provider_connection_id: input.providerResult.paymentProviderConnectionId ?? null,
+    provider_merchant_id: input.providerResult.providerMerchantId ?? null,
+  };
 }
 
 async function updateBookingChargePaid(input: {
@@ -798,17 +840,31 @@ async function updateBookingChargePaid(input: {
   paymentMethod: StoredCustomerPaymentMethod;
   payment: BookingPaymentRow;
 }) {
+  const update: Record<string, unknown> = {
+    status: "paid",
+    customer_payment_method_id: input.paymentMethod.id,
+    provider: input.payment.provider,
+    provider_environment: input.payment.provider_environment,
+    provider_payment_id: input.payment.provider_payment_id,
+    paid_at: input.payment.paid_at ?? new Date().toISOString(),
+    failed_at: null,
+  };
+
+  if (input.payment.payment_provider_connection_id) {
+    update.payment_provider_connection_id = input.payment.payment_provider_connection_id;
+  }
+
+  if (input.payment.provider_merchant_id) {
+    update.provider_merchant_id = input.payment.provider_merchant_id;
+  }
+
+  if (input.payment.provider_location_id) {
+    update.provider_location_id = input.payment.provider_location_id;
+  }
+
   const { data, error } = await input.supabase
     .from("booking_charges")
-    .update({
-      status: "paid",
-      customer_payment_method_id: input.paymentMethod.id,
-      provider: input.payment.provider,
-      provider_environment: input.payment.provider_environment,
-      provider_payment_id: input.payment.provider_payment_id,
-      paid_at: input.payment.paid_at ?? new Date().toISOString(),
-      failed_at: null,
-    })
+    .update(update)
     .eq("id", input.charge.id)
     .eq("booking_id", input.charge.booking_id)
     .eq("business_id", input.charge.business_id)
@@ -1151,7 +1207,7 @@ export async function validateSavedCardForBookingCharge(
 
   const supabase = options.supabase ?? (await getSupabaseClient());
   const paymentProvider = DEFAULT_PAYMENT_PROVIDER;
-  const adapter = options.adapter ?? (await getAdapter(paymentProvider));
+  const adapter = options.adapter ?? (await getAdapterForBusiness(paymentProvider, businessId));
   const logger = options.logger ?? console;
 
   if (adapter.provider !== paymentProvider) {
@@ -1234,7 +1290,7 @@ export async function chargePendingBookingChargeWithSavedCard(
 
   const supabase = options.supabase ?? (await getSupabaseClient());
   const paymentProvider = DEFAULT_PAYMENT_PROVIDER;
-  const adapter = options.adapter ?? (await getAdapter(paymentProvider));
+  const adapter = options.adapter ?? (await getAdapterForBusiness(paymentProvider, businessId));
   const enqueueBookingEmail = options.queueBookingEmail ?? queueBookingEmail;
   const processQueuedBookingMessages = options.processQueuedBookingMessages ?? processQueuedBookingMessagesDefault;
   const logger = options.logger ?? console;
@@ -1324,6 +1380,8 @@ export async function chargePendingBookingChargeWithSavedCard(
     bookingChargeId,
     provider: paymentProvider,
     providerEnvironment: adapter.environment,
+    paymentProviderConnectionId: adapter.paymentProviderConnectionId,
+    providerMerchantId: adapter.providerMerchantId,
     amountCents: charge.amount_cents,
     currency,
     idempotencyKey,
@@ -1350,6 +1408,8 @@ export async function chargePendingBookingChargeWithSavedCard(
       paymentId: pendingPayment.id,
       providerResult: {
         status: "failed",
+        paymentProviderConnectionId: adapter.paymentProviderConnectionId,
+        providerMerchantId: adapter.providerMerchantId,
         rawProviderResponse: error instanceof Error ? { message: error.message } : { error },
         failedAt,
         failureCode: "PROVIDER_EXCEPTION",

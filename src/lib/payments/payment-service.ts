@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getPaymentProviderAdapter } from "./providers";
+import { getPaymentProviderAdapterForBusiness } from "./providers";
 import type {
   CheckoutPaymentResult,
   CreateCheckoutPaymentInput,
@@ -147,22 +147,34 @@ async function insertPendingPayment(input: {
   bookingHoldId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   amountCents: number;
   currency: string;
   idempotencyKey: string;
 }) {
+  const insertValues: Record<string, unknown> = {
+    business_id: input.businessId,
+    booking_hold_id: input.bookingHoldId,
+    provider: input.provider,
+    provider_environment: input.providerEnvironment,
+    status: "pending",
+    amount_cents: input.amountCents,
+    currency: input.currency,
+    idempotency_key: input.idempotencyKey,
+  };
+
+  if (input.paymentProviderConnectionId) {
+    insertValues.payment_provider_connection_id = input.paymentProviderConnectionId;
+  }
+
+  if (input.providerMerchantId) {
+    insertValues.provider_merchant_id = input.providerMerchantId;
+  }
+
   const { data, error } = await supabaseAdmin
     .from("booking_payments")
-    .insert({
-      business_id: input.businessId,
-      booking_hold_id: input.bookingHoldId,
-      provider: input.provider,
-      provider_environment: input.providerEnvironment,
-      status: "pending",
-      amount_cents: input.amountCents,
-      currency: input.currency,
-      idempotency_key: input.idempotencyKey,
-    })
+    .insert(insertValues)
     .select(BOOKING_PAYMENT_SELECT)
     .single<BookingPaymentRow>();
 
@@ -213,7 +225,7 @@ async function updatePaymentFromProviderResult(
   providerResult: PaymentProviderChargeResult,
 ) {
   const status = providerResult.status;
-  const update = {
+  const update: Record<string, unknown> = {
     status,
     provider_payment_id: providerResult.providerPaymentId ?? null,
     provider_order_id: providerResult.providerOrderId ?? null,
@@ -227,6 +239,14 @@ async function updatePaymentFromProviderResult(
         ? providerResult.failedAt ?? new Date().toISOString()
         : null,
   };
+
+  if (providerResult.paymentProviderConnectionId) {
+    update.payment_provider_connection_id = providerResult.paymentProviderConnectionId;
+  }
+
+  if (providerResult.providerMerchantId) {
+    update.provider_merchant_id = providerResult.providerMerchantId;
+  }
 
   const { data, error } = await supabaseAdmin
     .from("booking_payments")
@@ -286,7 +306,12 @@ export async function createCheckoutPayment(
     throw new PaymentServiceError("paymentMethodToken is required.");
   }
 
-  const adapter = options?.adapter ?? getPaymentProviderAdapter(paymentProvider);
+  const adapter =
+    options?.adapter ??
+    (await getPaymentProviderAdapterForBusiness({
+      provider: paymentProvider,
+      businessId: input.businessId,
+    }));
 
   if (adapter.provider !== paymentProvider) {
     throw new PaymentServiceError(
@@ -299,13 +324,19 @@ export async function createCheckoutPayment(
     bookingHoldId: input.bookingHoldId,
     provider: paymentProvider,
     providerEnvironment: adapter.environment,
+    paymentProviderConnectionId: adapter.paymentProviderConnectionId,
+    providerMerchantId: adapter.providerMerchantId,
     amountCents,
     currency,
     idempotencyKey,
   });
 
   if (pendingPayment.status !== "pending") {
-    return toCheckoutPaymentResult(pendingPayment);
+    return {
+      ...toCheckoutPaymentResult(pendingPayment),
+      paymentProviderConnectionId: adapter.paymentProviderConnectionId,
+      providerMerchantId: adapter.providerMerchantId,
+    };
   }
 
   let providerResult: PaymentProviderChargeResult;
@@ -328,11 +359,19 @@ export async function createCheckoutPayment(
       rawProviderResponse: error instanceof Error ? { message: error.message } : { error },
     });
 
-    return toCheckoutPaymentResult(failedPayment);
+    return {
+      ...toCheckoutPaymentResult(failedPayment),
+      paymentProviderConnectionId: adapter.paymentProviderConnectionId,
+      providerMerchantId: adapter.providerMerchantId,
+    };
   }
 
   const updatedPayment = await updatePaymentFromProviderResult(pendingPayment.id, providerResult);
-  return toCheckoutPaymentResult(updatedPayment);
+  return {
+    ...toCheckoutPaymentResult(updatedPayment),
+    paymentProviderConnectionId: adapter.paymentProviderConnectionId,
+    providerMerchantId: adapter.providerMerchantId,
+  };
 }
 
 export async function linkCheckoutPaymentToBooking(
