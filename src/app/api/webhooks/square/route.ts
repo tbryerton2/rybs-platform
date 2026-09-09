@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { WebhooksHelper } from "square";
+import {
+  findTenantPaymentProviderConnectionByMerchant,
+  type TenantPaymentProviderConnectionReference,
+} from "@/lib/payments/tenant-payment-provider-connections";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { PaymentStatus } from "@/lib/payments/types";
 
@@ -9,6 +13,7 @@ export const dynamic = "force-dynamic";
 type SquareWebhookEvent = {
   event_id?: string;
   id?: string;
+  merchant_id?: string;
   type?: string;
   data?: {
     type?: string;
@@ -125,6 +130,9 @@ function toBookingPaymentStatus(status: PaymentStatus) {
 async function markWebhookEvent(
   eventId: string,
   values: {
+    paymentProviderConnectionId?: string | null;
+    providerMerchantId?: string | null;
+    providerLocationId?: string | null;
     businessId?: string | null;
     bookingPaymentId?: string | null;
     bookingId?: string | null;
@@ -132,16 +140,30 @@ async function markWebhookEvent(
     processingError?: string | null;
   },
 ) {
+  const update: Record<string, unknown> = {
+    business_id: values.businessId ?? null,
+    booking_payment_id: values.bookingPaymentId ?? null,
+    booking_id: values.bookingId ?? null,
+    processing_status: values.processingStatus,
+    processing_error: values.processingError ?? null,
+    processed_at: new Date().toISOString(),
+  };
+
+  if (values.paymentProviderConnectionId) {
+    update.payment_provider_connection_id = values.paymentProviderConnectionId;
+  }
+
+  if (values.providerMerchantId) {
+    update.provider_merchant_id = values.providerMerchantId;
+  }
+
+  if (values.providerLocationId) {
+    update.provider_location_id = values.providerLocationId;
+  }
+
   const { error } = await supabaseAdmin
     .from("square_webhook_events")
-    .update({
-      business_id: values.businessId ?? null,
-      booking_payment_id: values.bookingPaymentId ?? null,
-      booking_id: values.bookingId ?? null,
-      processing_status: values.processingStatus,
-      processing_error: values.processingError ?? null,
-      processed_at: new Date().toISOString(),
-    })
+    .update(update)
     .eq("event_id", eventId);
 
   if (error) {
@@ -153,15 +175,33 @@ async function insertWebhookEvent(input: {
   eventId: string;
   eventType: string;
   providerPaymentId: string | null;
+  providerMerchantId: string | null;
+  providerLocationId: string | null;
+  connection: TenantPaymentProviderConnectionReference | null;
   rawEvent: SquareWebhookEvent;
 }) {
-  const { error } = await supabaseAdmin.from("square_webhook_events").insert({
+  const insertValues: Record<string, unknown> = {
     event_id: input.eventId,
     event_type: input.eventType,
     provider_payment_id: input.providerPaymentId,
     provider_environment: getConfiguredSquareEnvironment(),
     raw_event: sanitizeJsonValue(input.rawEvent),
-  });
+  };
+
+  if (input.connection) {
+    insertValues.payment_provider_connection_id = input.connection.id;
+    insertValues.business_id = input.connection.businessId;
+  }
+
+  if (input.connection && input.providerMerchantId) {
+    insertValues.provider_merchant_id = input.providerMerchantId;
+  }
+
+  if (input.connection && input.providerLocationId) {
+    insertValues.provider_location_id = input.providerLocationId;
+  }
+
+  const { error } = await supabaseAdmin.from("square_webhook_events").insert(insertValues);
 
   if (!error) return { inserted: true };
 
@@ -176,23 +216,36 @@ async function reconcilePaymentEvent(input: {
   eventId: string;
   eventType: string;
   payment: SquareWebhookPayment;
+  providerMerchantId: string | null;
+  providerLocationId: string | null;
+  connection: TenantPaymentProviderConnectionReference | null;
   rawEvent: SquareWebhookEvent;
 }) {
   const providerPaymentId = input.payment.id?.trim();
   if (!providerPaymentId) {
     await markWebhookEvent(input.eventId, {
+      paymentProviderConnectionId: input.connection?.id ?? null,
+      providerMerchantId: input.providerMerchantId,
+      providerLocationId: input.providerLocationId,
+      businessId: input.connection?.businessId ?? null,
       processingStatus: "unmatched",
       processingError: "Square payment event did not include a payment ID.",
     });
     return;
   }
 
-  const existing = await supabaseAdmin
+  let query = supabaseAdmin
     .from("booking_payments")
     .select("id, business_id, booking_id, status")
     .eq("provider", "square")
     .eq("provider_environment", getConfiguredSquareEnvironment())
-    .eq("provider_payment_id", providerPaymentId)
+    .eq("provider_payment_id", providerPaymentId);
+
+  if (input.connection) {
+    query = query.eq("payment_provider_connection_id", input.connection.id);
+  }
+
+  const existing = await query
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<BookingPaymentWebhookRow>();
@@ -203,6 +256,10 @@ async function reconcilePaymentEvent(input: {
 
   if (!existing.data) {
     await markWebhookEvent(input.eventId, {
+      paymentProviderConnectionId: input.connection?.id ?? null,
+      providerMerchantId: input.providerMerchantId,
+      providerLocationId: input.providerLocationId,
+      businessId: input.connection?.businessId ?? null,
       processingStatus: "unmatched",
       processingError: `No booking payment matched Square payment ${providerPaymentId}.`,
     });
@@ -210,6 +267,8 @@ async function reconcilePaymentEvent(input: {
       eventId: input.eventId,
       eventType: input.eventType,
       providerPaymentId,
+      providerMerchantId: input.providerMerchantId,
+      paymentProviderConnectionId: input.connection?.id ?? null,
     });
     return;
   }
@@ -220,18 +279,25 @@ async function reconcilePaymentEvent(input: {
   const paidAt = status === "paid" ? input.payment.updated_at ?? new Date().toISOString() : null;
   const failedAt = terminalFailure ? input.payment.updated_at ?? new Date().toISOString() : null;
 
+  const paymentUpdateValues: Record<string, unknown> = {
+    status,
+    provider_order_id: input.payment.order_id ?? null,
+    provider_location_id: input.payment.location_id ?? null,
+    failure_code: terminalFailure ? squareError.code ?? status : null,
+    failure_message: terminalFailure ? squareError.message ?? `Square payment ${status}.` : null,
+    raw_provider_response: sanitizeJsonValue(input.rawEvent),
+    paid_at: paidAt,
+    failed_at: failedAt,
+  };
+
+  if (input.connection) {
+    paymentUpdateValues.payment_provider_connection_id = input.connection.id;
+    paymentUpdateValues.provider_merchant_id = input.providerMerchantId;
+  }
+
   const paymentUpdate = await supabaseAdmin
     .from("booking_payments")
-    .update({
-      status,
-      provider_order_id: input.payment.order_id ?? null,
-      provider_location_id: input.payment.location_id ?? null,
-      failure_code: terminalFailure ? squareError.code ?? status : null,
-      failure_message: terminalFailure ? squareError.message ?? `Square payment ${status}.` : null,
-      raw_provider_response: sanitizeJsonValue(input.rawEvent),
-      paid_at: paidAt,
-      failed_at: failedAt,
-    })
+    .update(paymentUpdateValues)
     .eq("id", existing.data.id);
 
   if (paymentUpdate.error) {
@@ -261,6 +327,9 @@ async function reconcilePaymentEvent(input: {
   }
 
   await markWebhookEvent(input.eventId, {
+    paymentProviderConnectionId: input.connection?.id ?? null,
+    providerMerchantId: input.providerMerchantId,
+    providerLocationId: input.providerLocationId,
     businessId: existing.data.business_id,
     bookingPaymentId: existing.data.id,
     bookingId: existing.data.booking_id,
@@ -301,16 +370,27 @@ export async function POST(req: Request) {
   const eventType = getEventType(event);
   const payment = getPaymentFromEvent(event);
   const providerPaymentId = payment?.id?.trim() ?? null;
+  const providerMerchantId = event.merchant_id?.trim() || null;
+  const providerLocationId = payment?.location_id?.trim() || null;
 
   if (!eventId || !eventType) {
     return NextResponse.json({ ok: false, error: "Square webhook event is missing id or type." }, { status: 400 });
   }
 
   try {
+    const connection = await findTenantPaymentProviderConnectionByMerchant({
+      provider: "square",
+      providerEnvironment: getConfiguredSquareEnvironment(),
+      providerMerchantId,
+    });
+
     const insertResult = await insertWebhookEvent({
       eventId,
       eventType,
       providerPaymentId,
+      providerMerchantId,
+      providerLocationId,
+      connection,
       rawEvent: event,
     });
 
@@ -320,6 +400,10 @@ export async function POST(req: Request) {
 
     if (!isSupportedPaymentEvent(eventType)) {
       await markWebhookEvent(eventId, {
+        paymentProviderConnectionId: connection?.id ?? null,
+        providerMerchantId,
+        providerLocationId,
+        businessId: connection?.businessId ?? null,
         processingStatus: "ignored",
         processingError: `Unsupported Square event type: ${eventType}.`,
       });
@@ -328,6 +412,10 @@ export async function POST(req: Request) {
 
     if (!payment) {
       await markWebhookEvent(eventId, {
+        paymentProviderConnectionId: connection?.id ?? null,
+        providerMerchantId,
+        providerLocationId,
+        businessId: connection?.businessId ?? null,
         processingStatus: "unmatched",
         processingError: "Square payment event did not include a payment object.",
       });
@@ -338,6 +426,9 @@ export async function POST(req: Request) {
       eventId,
       eventType,
       payment,
+      providerMerchantId,
+      providerLocationId,
+      connection,
       rawEvent: event,
     });
 

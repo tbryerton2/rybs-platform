@@ -20,6 +20,9 @@ const TOKEN_KEY_ENV_NAMES = [
 const TENANT_PAYMENT_PROVIDER_CONNECTION_SELECT =
   "id, business_id, provider, provider_environment, status, provider_merchant_id, provider_location_id, encrypted_access_token, token_cipher_version, token_cipher_key_id";
 
+const TENANT_PAYMENT_PROVIDER_CONNECTION_REFERENCE_SELECT =
+  "id, business_id, provider, provider_environment, status, provider_merchant_id, provider_location_id";
+
 type TenantPaymentProviderConnectionRow = {
   id: string;
   business_id: string;
@@ -31,6 +34,25 @@ type TenantPaymentProviderConnectionRow = {
   encrypted_access_token: string | null;
   token_cipher_version: number | null;
   token_cipher_key_id: string | null;
+};
+
+type TenantPaymentProviderConnectionReferenceRow = {
+  id: string;
+  business_id: string;
+  provider: string;
+  provider_environment: string;
+  status: string;
+  provider_merchant_id: string | null;
+  provider_location_id: string | null;
+};
+
+export type TenantPaymentProviderConnectionReference = {
+  id: string;
+  businessId: string;
+  provider: PaymentProvider;
+  providerEnvironment: PaymentProviderEnvironment;
+  providerMerchantId: string | null;
+  providerLocationId: string | null;
 };
 
 type TenantConnectionSupabaseClient = Pick<typeof supabaseAdmin, "from">;
@@ -267,6 +289,19 @@ function toConnectionContext(
   };
 }
 
+function toConnectionReference(
+  row: TenantPaymentProviderConnectionReferenceRow,
+): TenantPaymentProviderConnectionReference {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    provider: row.provider as PaymentProvider,
+    providerEnvironment: row.provider_environment as PaymentProviderEnvironment,
+    providerMerchantId: clean(row.provider_merchant_id),
+    providerLocationId: clean(row.provider_location_id),
+  };
+}
+
 async function findActiveTenantConnection(input: {
   businessId: string;
   provider: PaymentProvider;
@@ -409,4 +444,43 @@ export async function getSquareCheckoutConfigurationForBusiness(
 
     throw error;
   }
+}
+
+export async function findTenantPaymentProviderConnectionByMerchant(
+  input: {
+    provider?: PaymentProvider;
+    providerEnvironment?: PaymentProviderEnvironment;
+    providerMerchantId: string | null | undefined;
+  },
+  options: Pick<ResolveTenantPaymentProviderConnectionOptions, "supabase"> = {},
+) {
+  const providerMerchantId = clean(input.providerMerchantId);
+  if (!providerMerchantId) return null;
+
+  const provider = normalizeProvider(input.provider);
+  const providerEnvironment = input.providerEnvironment ?? getConfiguredSquareEnvironment();
+  const supabase = options.supabase ?? supabaseAdmin;
+
+  const { data, error } = await supabase
+    .from("tenant_payment_provider_connections")
+    .select(TENANT_PAYMENT_PROVIDER_CONNECTION_REFERENCE_SELECT)
+    .eq("provider", provider)
+    .eq("provider_environment", providerEnvironment)
+    .eq("provider_merchant_id", providerMerchantId)
+    .eq("status", "active")
+    .order("connected_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<TenantPaymentProviderConnectionReferenceRow>();
+
+  if (error) {
+    if (isMissingConnectionTableError(error)) return null;
+
+    throw new TenantPaymentProviderConnectionError(
+      error.message ?? "Unable to load tenant payment provider connection by merchant.",
+      "TENANT_PAYMENT_PROVIDER_CONNECTION_LOOKUP_FAILED",
+      error,
+    );
+  }
+
+  return data ? toConnectionReference(data) : null;
 }
