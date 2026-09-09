@@ -14,8 +14,25 @@ restart identity cascade;
 
 delete from public.pricing_settings;
 
+create temporary table seed_tan_can_man_business (
+  id uuid primary key
+) on commit drop;
+
+insert into seed_tan_can_man_business (id)
+select id
+from public.tenants
+where slug = 'tan-can-man';
+
+do $$
+begin
+  if not exists (select 1 from seed_tan_can_man_business) then
+    raise exception 'Local seed requires tenant slug tan-can-man to exist.';
+  end if;
+end $$;
+
 insert into public.pricing_settings (
   id,
+  business_id,
   standard_rental_price,
   scheduled_pickup_price,
   included_rental_days,
@@ -27,6 +44,7 @@ insert into public.pricing_settings (
 )
 values (
   '90000000-0000-4000-8000-000000000001',
+  (select id from seed_tan_can_man_business),
   425.00,
   425.00,
   10,
@@ -39,6 +57,7 @@ values (
 
 insert into public.customers (
   id,
+  business_id,
   name,
   email,
   phone,
@@ -54,6 +73,7 @@ insert into public.customers (
 values
   (
     '10000000-0000-4000-8000-000000000001',
+    (select id from seed_tan_can_man_business),
     'Alice Benton',
     'alice.benton@example.com',
     '3155550101',
@@ -68,6 +88,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000002',
+    (select id from seed_tan_can_man_business),
     'Marcus Hale',
     'marcus.hale@example.com',
     '3155550102',
@@ -82,6 +103,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000003',
+    (select id from seed_tan_can_man_business),
     'Priya Desai',
     'priya.desai@example.com',
     '3155550103',
@@ -96,6 +118,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000004',
+    (select id from seed_tan_can_man_business),
     'Jonah Mercer',
     'jonah.mercer@example.com',
     '3155550104',
@@ -110,6 +133,7 @@ values
   ),
   (
     '10000000-0000-4000-8000-000000000005',
+    (select id from seed_tan_can_man_business),
     'Sofia Alvarez',
     'sofia.alvarez@example.com',
     '3155550105',
@@ -125,6 +149,7 @@ values
 
 insert into public.customer_locations (
   id,
+  business_id,
   customer_id,
   label,
   street,
@@ -140,6 +165,7 @@ insert into public.customer_locations (
 values
   (
     '11000000-0000-4000-8000-000000000001',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000001',
     'Home driveway',
     '12 Lakeview Dr',
@@ -154,6 +180,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000002',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000002',
     'Main job yard',
     '84 Quarry Rd',
@@ -168,6 +195,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000003',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000003',
     'Primary residence',
     '455 Ridge St',
@@ -182,6 +210,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000004',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000004',
     'Farm lane',
     '901 County Route 5',
@@ -196,6 +225,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000005',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000005',
     'Canal-side project',
     '233 Canal St',
@@ -210,6 +240,7 @@ values
   ),
   (
     '11000000-0000-4000-8000-000000000006',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000002',
     'Overflow yard',
     '18 Sullivan Rd',
@@ -223,21 +254,8 @@ values
     '3155550102'
   );
 
-with resolved_business as (
-  select id
-  from public.tenants
-  where slug = 'tan-can-man'
-  limit 1
-), fallback_business as (
-  select id
-  from public.tenants
-  order by created_at asc
-  limit 1
-), selected_business as (
-  select id from resolved_business
-  union all
-  select id from fallback_business
-  where not exists (select 1 from resolved_business)
+with selected_business as (
+  select id from seed_tan_can_man_business
 )
 insert into public.business_employees (
   id,
@@ -440,21 +458,8 @@ cross join (
   license_expiration
 );
 
-with resolved_business as (
-  select id
-  from public.tenants
-  where slug = 'tan-can-man'
-  limit 1
-), fallback_business as (
-  select id
-  from public.tenants
-  order by created_at asc
-  limit 1
-), selected_business as (
-  select id from resolved_business
-  union all
-  select id from fallback_business
-  where not exists (select 1 from resolved_business)
+with selected_business as (
+  select id from seed_tan_can_man_business
 )
 insert into public.business_expenses (
   id,
@@ -577,6 +582,7 @@ insert into public.bookings (
   id,
   created_at,
   updated_at,
+  business_id,
   customer_id,
   customer_first_name,
   customer_last_name,
@@ -619,6 +625,7 @@ values
     '12000000-0000-4000-8000-000000000001',
     now() - interval '14 days',
     now() - interval '2 hours',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000001',
     'Alice',
     'Benton',
@@ -660,6 +667,7 @@ values
     '12000000-0000-4000-8000-000000000002',
     now() - interval '10 days',
     now() - interval '1 day',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000002',
     'Marcus',
     'Hale',
@@ -701,6 +709,7 @@ values
     '12000000-0000-4000-8000-000000000003',
     now() - interval '8 days',
     now() - interval '4 hours',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000003',
     'Priya',
     'Desai',
@@ -742,6 +751,7 @@ values
     '12000000-0000-4000-8000-000000000004',
     now() - interval '20 days',
     now() - interval '6 hours',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000004',
     'Jonah',
     'Mercer',
@@ -783,6 +793,7 @@ values
     '12000000-0000-4000-8000-000000000005',
     now() - interval '45 days',
     now() - interval '18 days',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000001',
     'Alice',
     'Benton',
@@ -824,6 +835,7 @@ values
     '12000000-0000-4000-8000-000000000006',
     now() - interval '3 days',
     now() - interval '12 hours',
+    (select id from seed_tan_can_man_business),
     '10000000-0000-4000-8000-000000000005',
     'Sofia',
     'Alvarez',
@@ -916,6 +928,7 @@ insert into public.rental_action_requests (
   id,
   booking_id,
   customer_id,
+  business_id,
   action_type,
   status,
   customer_visible_status,
@@ -935,6 +948,7 @@ values
     '14000000-0000-4000-8000-000000000001',
     '12000000-0000-4000-8000-000000000003',
     '10000000-0000-4000-8000-000000000003',
+    (select id from seed_tan_can_man_business),
     'pickup_request',
     'submitted',
     'received',
@@ -957,6 +971,7 @@ values
     '14000000-0000-4000-8000-000000000002',
     '12000000-0000-4000-8000-000000000004',
     '10000000-0000-4000-8000-000000000004',
+    (select id from seed_tan_can_man_business),
     'extension_request',
     'approved',
     'under_review',
@@ -979,6 +994,7 @@ values
     '14000000-0000-4000-8000-000000000003',
     '12000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000002',
+    (select id from seed_tan_can_man_business),
     'issue_report',
     'completed',
     'completed',
@@ -999,6 +1015,7 @@ values
 
 insert into public.booking_holds (
   id,
+  business_id,
   delivery_date,
   expires_at,
   status,
@@ -1009,6 +1026,7 @@ insert into public.booking_holds (
 values
   (
     '15000000-0000-4000-8000-000000000001',
+    (select id from seed_tan_can_man_business),
     current_date + 1,
     now() + interval '15 minutes',
     'active',
@@ -1018,6 +1036,7 @@ values
   ),
   (
     '15000000-0000-4000-8000-000000000002',
+    (select id from seed_tan_can_man_business),
     current_date + 6,
     now() + interval '5 minutes',
     'converting',
@@ -1027,6 +1046,7 @@ values
   ),
   (
     '15000000-0000-4000-8000-000000000003',
+    (select id from seed_tan_can_man_business),
     current_date - 1,
     now() - interval '30 minutes',
     'expired',
