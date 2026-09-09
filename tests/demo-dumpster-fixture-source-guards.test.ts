@@ -7,7 +7,6 @@ const repoRoot = resolve(import.meta.dirname, "..");
 const seedSql = readFileSync(resolve(repoRoot, "supabase/seed.sql"), "utf8");
 
 test("local seed creates Demo Dumpster Company as a normal active tenant", () => {
-  assert.match(seedSql, /create temporary table seed_demo_dumpster_business/);
   assert.match(seedSql, /'demo-dumpster-co'/);
   assert.match(seedSql, /'Demo Dumpster Company'/);
   assert.match(seedSql, /'runtime', 'storageNamespace', to_jsonb\('demo_dumpster_company'::text\)/);
@@ -40,9 +39,9 @@ test("local Demo fixture does not reuse Tan Can Man ownership or Square fallback
   assert.doesNotMatch(seedSql, /SQUARE_ACCESS_TOKEN|SQUARE_LOCATION_ID|SQUARE_APPLICATION_ID/);
 
   const demoBlock = seedSql.slice(
-    seedSql.indexOf("with seeded_demo as"),
+    seedSql.indexOf("insert into public.tenants (id, slug, status)"),
     seedSql.indexOf("-- Tan Can Man QA fixture data."),
   );
-  assert.match(demoBlock, /from seed_demo_dumpster_business demo/);
-  assert.doesNotMatch(demoBlock, /\(select id from seed_tan_can_man_business\)/);
+  assert.match(demoBlock, /from \(select id from public\.tenants where slug = 'demo-dumpster-co'\) demo/);
+  assert.doesNotMatch(demoBlock, /\(select id from public\.tenants where slug = 'tan-can-man'\)/);
 });

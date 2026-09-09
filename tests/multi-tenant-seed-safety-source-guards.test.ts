@@ -18,7 +18,6 @@ function insertColumns(tableName: string) {
 }
 
 test("local seed resolves Tan Can Man explicitly instead of falling back to the first tenant", () => {
-  assert.match(seedSql, /create temporary table seed_tan_can_man_business/);
   assert.match(seedSql, /where slug = 'tan-can-man'/);
   assert.match(seedSql, /Local seed requires tenant slug tan-can-man to exist/);
   assert.doesNotMatch(seedSql, /fallback_business/);
@@ -40,5 +39,6 @@ test("local seed writes business ownership for hardened business-scoped records"
     );
   }
 
-  assert.match(seedSql, /\(select id from seed_tan_can_man_business\)/);
+  assert.match(seedSql, /\(select id from public\.tenants where slug = 'tan-can-man'\)/);
+  assert.match(seedSql, /\(select id from public\.tenants where slug = 'demo-dumpster-co'\)/);
 });
