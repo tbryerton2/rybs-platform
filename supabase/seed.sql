@@ -1544,56 +1544,6 @@ values
     true
   );
 
-insert into public.booking_requests (
-  id,
-  booking_id,
-  customer_id,
-  request_type,
-  status,
-  message,
-  requested_pickup_date,
-  requested_extension_days,
-  created_at,
-  updated_at
-)
-values
-  (
-    '13000000-0000-4000-8000-000000000001',
-    '12000000-0000-4000-8000-000000000003',
-    '10000000-0000-4000-8000-000000000003',
-    'pickup',
-    'submitted',
-    'Can you pick this up on Friday morning if the driveway is clear?',
-    current_date + 3,
-    null,
-    now() - interval '6 hours',
-    now() - interval '6 hours'
-  ),
-  (
-    '13000000-0000-4000-8000-000000000002',
-    '12000000-0000-4000-8000-000000000004',
-    '10000000-0000-4000-8000-000000000004',
-    'extension',
-    'approved',
-    'Need three more days to finish the roof decking.',
-    null,
-    3,
-    now() - interval '2 days',
-    now() - interval '18 hours'
-  ),
-  (
-    '13000000-0000-4000-8000-000000000003',
-    '12000000-0000-4000-8000-000000000002',
-    '10000000-0000-4000-8000-000000000002',
-    'issue',
-    'reviewed',
-    'Please confirm the gate swing will clear the delivery truck.',
-    null,
-    null,
-    now() - interval '1 day',
-    now() - interval '20 hours'
-  );
-
 insert into public.rental_action_requests (
   id,
   booking_id,
