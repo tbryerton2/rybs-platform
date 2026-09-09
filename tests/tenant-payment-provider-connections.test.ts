@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   decryptPaymentProviderToken,
   encryptPaymentProviderToken,
+  getSquareCheckoutConfigurationForBusiness,
   resolveTenantPaymentProviderConnection,
   TenantPaymentProviderConnectionError,
 } from "../src/lib/payments/tenant-payment-provider-connections.ts";
@@ -18,6 +19,7 @@ type Filter = { column: string; value: unknown };
 const originalEnv = {
   squareEnvironment: process.env.SQUARE_ENVIRONMENT,
   squareAccessToken: process.env.SQUARE_ACCESS_TOKEN,
+  squareApplicationId: process.env.SQUARE_APPLICATION_ID,
   squareLocationId: process.env.SQUARE_LOCATION_ID,
   tokenEncryptionKey: process.env.PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY,
 };
@@ -34,6 +36,7 @@ function restoreEnv(name: string, value: string | undefined) {
 beforeEach(() => {
   process.env.SQUARE_ENVIRONMENT = "sandbox";
   process.env.SQUARE_ACCESS_TOKEN = "legacy-square-token";
+  process.env.SQUARE_APPLICATION_ID = "sandbox-square-application-id";
   process.env.SQUARE_LOCATION_ID = "legacy-location";
   process.env.PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY = `base64:${TEST_KEY}`;
 });
@@ -41,6 +44,7 @@ beforeEach(() => {
 afterEach(() => {
   restoreEnv("SQUARE_ENVIRONMENT", originalEnv.squareEnvironment);
   restoreEnv("SQUARE_ACCESS_TOKEN", originalEnv.squareAccessToken);
+  restoreEnv("SQUARE_APPLICATION_ID", originalEnv.squareApplicationId);
   restoreEnv("SQUARE_LOCATION_ID", originalEnv.squareLocationId);
   restoreEnv("PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY", originalEnv.tokenEncryptionKey);
 });
@@ -178,4 +182,36 @@ test("resolveTenantPaymentProviderConnection keeps the legacy Square fallback Ta
       error instanceof TenantPaymentProviderConnectionError &&
       error.code === "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
   );
+});
+
+test("getSquareCheckoutConfigurationForBusiness returns only browser-safe Square config", async () => {
+  const encrypted = encryptPaymentProviderToken("tenant-square-token");
+  const mock = createMockSupabase([
+    {
+      id: CONNECTION_ID,
+      business_id: BUSINESS_ID,
+      provider: "square",
+      provider_environment: "sandbox",
+      status: "active",
+      provider_merchant_id: "merchant-1",
+      provider_location_id: "location-1",
+      encrypted_access_token: encrypted.encryptedToken,
+      token_cipher_version: encrypted.cipherVersion,
+      token_cipher_key_id: encrypted.keyId,
+    },
+  ]);
+
+  const config = await getSquareCheckoutConfigurationForBusiness(
+    { businessId: BUSINESS_ID },
+    { supabase: mock.client, getTenantById: async () => null },
+  );
+
+  assert.deepEqual(config, {
+    configured: true,
+    provider: "square",
+    environment: "sandbox",
+    applicationId: "sandbox-square-application-id",
+    locationId: "location-1",
+  });
+  assert.equal("accessToken" in config, false);
 });

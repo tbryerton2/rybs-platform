@@ -52,6 +52,20 @@ export class TenantPaymentProviderConnectionError extends Error {
   }
 }
 
+export type SquareCheckoutConfiguration =
+  | {
+      configured: true;
+      provider: "square";
+      environment: PaymentProviderEnvironment;
+      applicationId: string;
+      locationId: string;
+    }
+  | {
+      configured: false;
+      provider: "square";
+      reason: string;
+    };
+
 function clean(value: string | null | undefined) {
   const cleaned = value?.trim();
   return cleaned ? cleaned : null;
@@ -93,6 +107,14 @@ function getLegacySquareLocationId() {
     );
   }
   return locationId;
+}
+
+function getSquareApplicationId() {
+  return (
+    clean(process.env.SQUARE_APPLICATION_ID) ??
+    clean(process.env.SQUARE_OAUTH_APPLICATION_ID) ??
+    clean(process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID)
+  );
 }
 
 function getTokenEncryptionKeyMaterial() {
@@ -335,4 +357,56 @@ export async function resolveTenantPaymentProviderConnection(input: {
     "This business does not have an active Square payment connection.",
     "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
   );
+}
+
+
+export async function getSquareCheckoutConfigurationForBusiness(
+  input: {
+    businessId: string;
+  },
+  options: ResolveTenantPaymentProviderConnectionOptions = {},
+): Promise<SquareCheckoutConfiguration> {
+  const applicationId = getSquareApplicationId();
+  if (!applicationId) {
+    return {
+      configured: false,
+      provider: "square",
+      reason: "Online card payment is unavailable right now.",
+    };
+  }
+
+  try {
+    const connection = await resolveTenantPaymentProviderConnection(
+      {
+        businessId: input.businessId,
+        provider: "square",
+      },
+      options,
+    );
+
+    return {
+      configured: true,
+      provider: "square",
+      environment: connection.providerEnvironment,
+      applicationId,
+      locationId: connection.providerLocationId,
+    };
+  } catch (error) {
+    if (
+      error instanceof TenantPaymentProviderConnectionError &&
+      [
+        "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
+        "LEGACY_SQUARE_ACCESS_TOKEN_MISSING",
+        "LEGACY_SQUARE_LOCATION_ID_MISSING",
+      ].includes(error.code)
+    ) {
+      return {
+        configured: false,
+        provider: "square",
+        reason: "Online card payment is unavailable right now.",
+      };
+    }
+
+    throw error;
+  }
 }
