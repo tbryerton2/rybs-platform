@@ -18,6 +18,10 @@ create temporary table seed_tan_can_man_business (
   id uuid primary key
 ) on commit drop;
 
+create temporary table seed_demo_dumpster_business (
+  id uuid primary key
+) on commit drop;
+
 insert into seed_tan_can_man_business (id)
 select id
 from public.tenants
@@ -30,6 +34,488 @@ begin
   end if;
 end $$;
 
+with seeded_demo as (
+  insert into public.tenants (id, slug, status)
+  values (
+    '22222222-2222-4222-8222-222222222222',
+    'demo-dumpster-co',
+    'active'
+  )
+  on conflict (slug) do update
+    set status = excluded.status,
+        updated_at = now()
+  returning id
+), resolved_demo as (
+  select id from seeded_demo
+  union all
+  select id from public.tenants where slug = 'demo-dumpster-co'
+  limit 1
+)
+insert into seed_demo_dumpster_business (id)
+select id from resolved_demo;
+
+insert into public.tenant_settings (tenant_id, category, key, value_json)
+select demo.id, seeded.category, seeded.key, seeded.value_json
+from seed_demo_dumpster_business demo
+cross join (
+  values
+    ('brand', 'name', to_jsonb('Demo Dumpster Company'::text)),
+    ('brand', 'tagline', to_jsonb('Simple roll-off rentals for clean demo walkthroughs'::text)),
+    ('brand', 'legalDisplayName', to_jsonb('Demo Dumpster Company'::text)),
+    ('brand', 'headerPrimaryCtaLabel', to_jsonb('Call/Text'::text)),
+    ('brand', 'headerPrimaryCtaType', to_jsonb('tel'::text)),
+    ('brand', 'headerPrimaryCtaValue', to_jsonb('+1-512-555-0144'::text)),
+    ('support', 'phone', to_jsonb('+1-512-555-0144'::text)),
+    ('support', 'email', to_jsonb('hello@demo-dumpster-company.local'::text)),
+    ('support', 'timezone', to_jsonb('America/Chicago'::text)),
+    ('runtime', 'storageNamespace', to_jsonb('demo_dumpster_company'::text)),
+    ('implementation', 'type', to_jsonb('full_site_platform_subdomain'::text)),
+    ('settings.header', 'showCallTextButton', to_jsonb(true)),
+    ('settings.header', 'phoneNumber', to_jsonb('+1-512-555-0144'::text)),
+    ('settings.header', 'showEmailInHeader', to_jsonb(true)),
+    ('settings.header', 'emailAddress', to_jsonb('hello@demo-dumpster-company.local'::text)),
+    ('settings.header', 'businessNameSize', to_jsonb('medium'::text)),
+    ('settings.home.visibility', 'showServiceAreaPopup', to_jsonb(true)),
+    ('settings.home.visibility', 'showFaq', to_jsonb(true)),
+    ('settings.calendarClosures', 'blockedDates', '[]'::jsonb),
+    ('settings.calendarClosures', 'blockedRanges', jsonb_build_array(
+      jsonb_build_object(
+        'startDate', to_char(current_date + 45, 'YYYY-MM-DD'),
+        'endDate', to_char(current_date + 46, 'YYYY-MM-DD'),
+        'label', 'Demo maintenance window'
+      )
+    )),
+    ('notifications', 'bookingEmail', to_jsonb('bookings@demo-dumpster-company.local'::text))
+) as seeded(category, key, value_json)
+on conflict (tenant_id, category, key) do update
+set value_json = excluded.value_json,
+    updated_at = now();
+
+insert into public.tenant_domains (
+  tenant_id,
+  hostname,
+  domain_type,
+  status,
+  is_primary,
+  provider_status,
+  verification_status
+)
+select
+  demo.id,
+  'demo-dumpster-co.localhost',
+  'platform_subdomain',
+  'active',
+  true,
+  'not_provisioned',
+  'unknown'
+from seed_demo_dumpster_business demo
+on conflict (hostname) do update
+set tenant_id = excluded.tenant_id,
+    domain_type = excluded.domain_type,
+    status = excluded.status,
+    is_primary = excluded.is_primary,
+    provider_status = excluded.provider_status,
+    verification_status = excluded.verification_status,
+    updated_at = now();
+
+insert into public.tenant_content_entries (tenant_id, key, status, value_json)
+select demo.id, seeded.key, 'published', seeded.value_json
+from seed_demo_dumpster_business demo
+cross join (
+  values
+    (
+      'content.home.hero',
+      jsonb_build_object(
+        'eyebrow', 'Demo Dumpster Company',
+        'headlineLine1', 'Rent a dumpster without the runaround',
+        'headlineLine2', null,
+        'subheadline', 'A clean demo tenant with realistic pricing, service areas, and booking flow data.',
+        'imageUrl', '/images/dumpster-hero.svg',
+        'imageAlt', 'Roll-off dumpster staged at a residential project',
+        'availabilityHelper', 'Check ZIP availability and reserve a delivery window.',
+        'trustItems', jsonb_build_array('Local demo service area', 'Transparent pricing', 'Online booking ready')
+      )
+    ),
+    (
+      'content.pricing.intro',
+      jsonb_build_object(
+        'headline', 'Demo dumpster pricing',
+        'defaultBody', 'Use this tenant to show customers how tenant-specific products, prices, and rental rules appear.'
+      )
+    ),
+    (
+      'content.booking.entry',
+      jsonb_build_object(
+        'title', 'Book a Demo Dumpster Company rental',
+        'subtitle', 'Choose a size, service ZIP, delivery date, and placement details.',
+        'sectionTitle', 'Start with the project',
+        'sectionDescription', 'The demo flow uses Demo Dumpster Company products and service ZIPs only.',
+        'blockedCtaText', 'Select a dumpster size to continue'
+      )
+    )
+) as seeded(key, value_json)
+on conflict on constraint tenant_content_entries_tenant_key_status_unique
+do update
+set value_json = excluded.value_json,
+    updated_at = now();
+
+insert into public.service_area_zips (business_id, zip, active, county, town)
+select demo.id, seeded.zip, true, seeded.county, seeded.town
+from seed_demo_dumpster_business demo
+cross join (
+  values
+    ('78704', 'Travis', 'Austin'),
+    ('78745', 'Travis', 'Austin'),
+    ('78748', 'Travis', 'Austin')
+) as seeded(zip, county, town)
+on conflict on constraint service_area_zips_business_id_zip_key
+do update
+set active = excluded.active,
+    county = excluded.county,
+    town = excluded.town,
+    updated_at = now();
+
+insert into public.pricing_settings (
+  id,
+  business_id,
+  standard_rental_price,
+  scheduled_pickup_price,
+  included_rental_days,
+  included_tons,
+  daily_overage_price,
+  ton_overage_price,
+  max_rental_days,
+  allow_extended_rental_at_booking,
+  included_services_blurb
+)
+select
+  '22000000-0000-4000-8000-000000000001',
+  demo.id,
+  395.00,
+  395.00,
+  7,
+  1.50,
+  25.00,
+  110.00,
+  14,
+  true,
+  'Includes delivery, pickup, a 7-day rental window, and the listed weight allowance.'
+from seed_demo_dumpster_business demo
+on conflict on constraint pricing_settings_business_id_key
+do update
+set standard_rental_price = excluded.standard_rental_price,
+    scheduled_pickup_price = excluded.scheduled_pickup_price,
+    included_rental_days = excluded.included_rental_days,
+    included_tons = excluded.included_tons,
+    daily_overage_price = excluded.daily_overage_price,
+    ton_overage_price = excluded.ton_overage_price,
+    max_rental_days = excluded.max_rental_days,
+    allow_extended_rental_at_booking = excluded.allow_extended_rental_at_booking,
+    included_services_blurb = excluded.included_services_blurb,
+    updated_at = now();
+
+insert into public.dumpster_product_settings (
+  id,
+  business_id,
+  dumpster_size,
+  dumpster_product_id,
+  display_name,
+  short_description,
+  dimensions,
+  included_weight_tons,
+  included_rental_days,
+  extra_day_price,
+  base_price,
+  is_public,
+  sort_order,
+  customer_bullet_points
+)
+select
+  seeded.id,
+  demo.id,
+  seeded.dumpster_size,
+  seeded.dumpster_product_id,
+  seeded.display_name,
+  seeded.short_description,
+  seeded.dimensions,
+  seeded.included_weight_tons,
+  seeded.included_rental_days,
+  seeded.extra_day_price,
+  seeded.base_price,
+  true,
+  seeded.sort_order,
+  seeded.customer_bullet_points
+from seed_demo_dumpster_business demo
+cross join (
+  values
+    (
+      '22000000-0000-4000-8000-000000000101'::uuid,
+      '12 yard'::text,
+      'demo-12-yard'::text,
+      '12-yard demo dumpster'::text,
+      'Great for garage cleanouts, small remodels, and tight driveways.'::text,
+      '12'' x 8'' x 4'''::text,
+      1.50::numeric,
+      7,
+      25.00::numeric,
+      395.00::numeric,
+      10,
+      'Driveway friendly; 1.5 tons included; 7 rental days included'::text
+    ),
+    (
+      '22000000-0000-4000-8000-000000000102'::uuid,
+      '20 yard'::text,
+      'demo-20-yard'::text,
+      '20-yard demo dumpster'::text,
+      'Sized for larger remodels, roofing debris, and contractor jobs.'::text,
+      '22'' x 8'' x 4.5'''::text,
+      2.00::numeric,
+      10,
+      30.00::numeric,
+      525.00::numeric,
+      20,
+      'Contractor friendly; 2 tons included; 10 rental days included'::text
+    )
+) as seeded(
+  id,
+  dumpster_size,
+  dumpster_product_id,
+  display_name,
+  short_description,
+  dimensions,
+  included_weight_tons,
+  included_rental_days,
+  extra_day_price,
+  base_price,
+  sort_order,
+  customer_bullet_points
+)
+on conflict on constraint dumpster_product_settings_business_id_dumpster_size_key
+do update
+set dumpster_product_id = excluded.dumpster_product_id,
+    display_name = excluded.display_name,
+    short_description = excluded.short_description,
+    dimensions = excluded.dimensions,
+    included_weight_tons = excluded.included_weight_tons,
+    included_rental_days = excluded.included_rental_days,
+    extra_day_price = excluded.extra_day_price,
+    base_price = excluded.base_price,
+    is_public = excluded.is_public,
+    sort_order = excluded.sort_order,
+    customer_bullet_points = excluded.customer_bullet_points,
+    updated_at = now();
+
+insert into public.dumpsters (
+  id,
+  business_id,
+  equipment_id,
+  display_name,
+  size,
+  dimensions,
+  capacity_notes,
+  active,
+  operational_status,
+  maintenance_status,
+  condition_notes,
+  in_service_date,
+  notes,
+  serial_number,
+  manufacturer,
+  model,
+  yard_location,
+  service_status,
+  last_service_date,
+  next_service_date,
+  last_inspection_date,
+  next_inspection_due,
+  asset_tag,
+  tracker_enabled,
+  tracker_status,
+  created_at,
+  updated_at
+)
+select
+  seeded.id,
+  demo.id,
+  seeded.equipment_id,
+  seeded.display_name,
+  seeded.size,
+  seeded.dimensions,
+  seeded.capacity_notes,
+  true,
+  'Available',
+  'Current',
+  seeded.condition_notes,
+  seeded.in_service_date,
+  seeded.notes,
+  seeded.serial_number,
+  'DemoCo',
+  seeded.model,
+  'Demo Yard',
+  'Ready',
+  current_date - 30,
+  current_date + 60,
+  current_date - 30,
+  current_date + 60,
+  seeded.asset_tag,
+  false,
+  'Not installed',
+  now(),
+  now()
+from seed_demo_dumpster_business demo
+cross join (
+  values
+    (
+      '22000000-0000-4000-8000-000000000201'::uuid,
+      'DEMO-12-01'::text,
+      'Demo 12 Yard #1'::text,
+      '12 yard'::text,
+      '12'' x 8'' x 4'''::text,
+      'Residential cleanouts and compact renovation debris'::text,
+      'Clean, camera-ready demo unit.'::text,
+      current_date - 180,
+      'Use for standard demo bookings.'::text,
+      'DEMO-SER-1201'::text,
+      'DEMO-TAG-1201'::text,
+      'D12'::text
+    ),
+    (
+      '22000000-0000-4000-8000-000000000202'::uuid,
+      'DEMO-20-01'::text,
+      'Demo 20 Yard #1'::text,
+      '20 yard'::text,
+      '22'' x 8'' x 4.5'''::text,
+      'Large cleanouts, roofing, and contractor debris'::text,
+      'Primary contractor-size demo unit.'::text,
+      current_date - 240,
+      'Use for larger project demos.'::text,
+      'DEMO-SER-2001'::text,
+      'DEMO-TAG-2001'::text,
+      'D20'::text
+    )
+) as seeded(
+  id,
+  equipment_id,
+  display_name,
+  size,
+  dimensions,
+  capacity_notes,
+  condition_notes,
+  in_service_date,
+  notes,
+  serial_number,
+  asset_tag,
+  model
+)
+on conflict on constraint dumpsters_business_id_equipment_id_key
+do update
+set display_name = excluded.display_name,
+    size = excluded.size,
+    dimensions = excluded.dimensions,
+    capacity_notes = excluded.capacity_notes,
+    active = excluded.active,
+    operational_status = excluded.operational_status,
+    maintenance_status = excluded.maintenance_status,
+    condition_notes = excluded.condition_notes,
+    in_service_date = excluded.in_service_date,
+    notes = excluded.notes,
+    serial_number = excluded.serial_number,
+    manufacturer = excluded.manufacturer,
+    model = excluded.model,
+    yard_location = excluded.yard_location,
+    service_status = excluded.service_status,
+    last_service_date = excluded.last_service_date,
+    next_service_date = excluded.next_service_date,
+    last_inspection_date = excluded.last_inspection_date,
+    next_inspection_due = excluded.next_inspection_due,
+    asset_tag = excluded.asset_tag,
+    tracker_enabled = excluded.tracker_enabled,
+    tracker_status = excluded.tracker_status,
+    updated_at = now();
+
+insert into auth.users (
+  id,
+  instance_id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  created_at,
+  updated_at,
+  is_anonymous
+)
+values (
+  '23000000-0000-4000-8000-000000000001',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated',
+  'authenticated',
+  'demo.admin@demo-dumpster-company.local',
+  crypt('demo-admin-password', gen_salt('bf')),
+  now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,
+  '{"name":"Demo Admin"}'::jsonb,
+  now(),
+  now(),
+  false
+)
+on conflict (id) do update
+set email = excluded.email,
+    encrypted_password = excluded.encrypted_password,
+    email_confirmed_at = excluded.email_confirmed_at,
+    raw_app_meta_data = excluded.raw_app_meta_data,
+    raw_user_meta_data = excluded.raw_user_meta_data,
+    updated_at = now();
+
+insert into auth.identities (
+  user_id,
+  identity_data,
+  provider,
+  provider_id,
+  created_at,
+  updated_at
+)
+values (
+  '23000000-0000-4000-8000-000000000001',
+  jsonb_build_object(
+    'sub', '23000000-0000-4000-8000-000000000001',
+    'email', 'demo.admin@demo-dumpster-company.local',
+    'email_verified', true,
+    'phone_verified', false
+  ),
+  'email',
+  '23000000-0000-4000-8000-000000000001',
+  now(),
+  now()
+)
+on conflict (provider, provider_id) do update
+set user_id = excluded.user_id,
+    identity_data = excluded.identity_data,
+    updated_at = now();
+
+insert into public.business_admin_memberships (
+  id,
+  business_id,
+  auth_user_id,
+  role,
+  status
+)
+select
+  '23000000-0000-4000-8000-000000000101',
+  demo.id,
+  '23000000-0000-4000-8000-000000000001',
+  'owner',
+  'active'
+from seed_demo_dumpster_business demo
+on conflict on constraint business_admin_memberships_business_auth_user_unique
+do update
+set role = excluded.role,
+    status = excluded.status,
+    updated_at = now();
+
+-- Tan Can Man QA fixture data.
 insert into public.pricing_settings (
   id,
   business_id,
@@ -252,6 +738,100 @@ values
     'Open lot with easy truck access.',
     'Marcus Hale',
     '3155550102'
+  );
+
+insert into public.customers (
+  id,
+  business_id,
+  name,
+  email,
+  phone,
+  primary_street,
+  primary_city,
+  primary_state,
+  primary_zip,
+  notes,
+  portal_status,
+  company,
+  preferred_contact_method
+)
+values
+  (
+    '21000000-0000-4000-8000-000000000001',
+    (select id from seed_demo_dumpster_business),
+    'Riley Parker',
+    'riley.parker@example.test',
+    '5125550181',
+    '810 Barton Springs Rd',
+    'Austin',
+    'TX',
+    '78704',
+    'Demo residential cleanout customer.',
+    'active',
+    null,
+    'email'
+  ),
+  (
+    '21000000-0000-4000-8000-000000000002',
+    (select id from seed_demo_dumpster_business),
+    'Morgan Lee',
+    'morgan.lee@example.test',
+    '5125550182',
+    '4401 S Congress Ave',
+    'Austin',
+    'TX',
+    '78745',
+    'Demo contractor customer for the 20-yard product.',
+    'invited',
+    'Lee Demo Services',
+    'phone'
+  );
+
+insert into public.customer_locations (
+  id,
+  business_id,
+  customer_id,
+  label,
+  street,
+  city,
+  state,
+  zip,
+  delivery_notes,
+  is_default,
+  access_notes,
+  onsite_contact_name,
+  onsite_contact_phone
+)
+values
+  (
+    '21100000-0000-4000-8000-000000000001',
+    (select id from seed_demo_dumpster_business),
+    '21000000-0000-4000-8000-000000000001',
+    'Demo driveway',
+    '810 Barton Springs Rd',
+    'Austin',
+    'TX',
+    '78704',
+    'Place near the detached garage for the sales demo.',
+    true,
+    'Wide driveway with clear access.',
+    'Riley Parker',
+    '5125550181'
+  ),
+  (
+    '21100000-0000-4000-8000-000000000002',
+    (select id from seed_demo_dumpster_business),
+    '21000000-0000-4000-8000-000000000002',
+    'Retail renovation site',
+    '4401 S Congress Ave',
+    'Austin',
+    'TX',
+    '78745',
+    'Set behind the building near the marked contractor entrance.',
+    true,
+    'Call before arrival so the demo gate can be opened.',
+    'Morgan Lee',
+    '5125550182'
   );
 
 with selected_business as (
@@ -874,6 +1454,96 @@ values
     true
   );
 
+insert into public.bookings (
+  id,
+  created_at,
+  updated_at,
+  business_id,
+  customer_id,
+  customer_first_name,
+  customer_last_name,
+  customer_email,
+  customer_phone,
+  customer_street,
+  customer_city,
+  customer_state,
+  customer_zip,
+  delivery_date,
+  pickup_date,
+  pickup_mode,
+  status,
+  total_price_cents,
+  service_town,
+  service_county,
+  notes,
+  placement_preference,
+  placement_details,
+  access_issues,
+  gate_instructions,
+  delivery_presence,
+  alternate_contact_name,
+  alternate_contact_phone,
+  special_delivery_instructions,
+  dumpster_size,
+  dumpster_product_id,
+  base_rental_price_cents,
+  included_rental_days,
+  rental_duration_days,
+  extra_days,
+  daily_overage_price_cents,
+  extra_days_charge_cents,
+  subtotal_cents,
+  taxable_subtotal_cents,
+  tax_cents,
+  max_rental_days_snapshot,
+  allow_extended_rental_at_booking_snapshot
+)
+values
+  (
+    '21200000-0000-4000-8000-000000000001',
+    now() - interval '4 days',
+    now() - interval '1 hour',
+    (select id from seed_demo_dumpster_business),
+    '21000000-0000-4000-8000-000000000002',
+    'Morgan',
+    'Lee',
+    'morgan.lee@example.test',
+    '5125550182',
+    '4401 S Congress Ave',
+    'Austin',
+    'TX',
+    '78745',
+    current_date + 4,
+    current_date + 14,
+    'date',
+    'scheduled',
+    56700,
+    'Austin',
+    'Travis',
+    'Demo tenant booking for a retail renovation sales walkthrough.',
+    'jobsite_custom_area',
+    'Place behind the building near the contractor entrance.',
+    '["gate_access"]'::jsonb,
+    'Call Morgan to open the rear gate.',
+    'call_if_issue',
+    null,
+    null,
+    'Keep the container clear of the loading bay.',
+    '20 yard',
+    'demo-20-yard',
+    52500,
+    10,
+    10,
+    0,
+    3000,
+    0,
+    52500,
+    52500,
+    4200,
+    14,
+    true
+  );
+
 insert into public.booking_requests (
   id,
   booking_id,
@@ -1053,6 +1723,32 @@ values
     'qa-expired-client-1',
     '13066',
     now() - interval '2 hours'
+  );
+
+insert into public.booking_holds (
+  id,
+  business_id,
+  delivery_date,
+  expires_at,
+  status,
+  client_id,
+  zip,
+  dumpster_size,
+  dumpster_product_id,
+  created_at
+)
+values
+  (
+    '21500000-0000-4000-8000-000000000001',
+    (select id from seed_demo_dumpster_business),
+    current_date + 2,
+    now() + interval '20 minutes',
+    'active',
+    'demo-active-client-1',
+    '78704',
+    '12 yard',
+    'demo-12-yard',
+    now() - interval '5 minutes'
   );
 
 commit;
