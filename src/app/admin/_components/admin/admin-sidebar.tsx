@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import Link from "next/link";
+import { ArrowsRightLeftIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { adminNavGroups, isAdminNavItemActive } from "./admin-nav";
 import { AdminNavItem } from "./admin-nav-item";
 
@@ -35,11 +36,13 @@ export function subscribeToSidebarState(onChange: () => void) {
 export function AdminSidebar({
   pathname,
   businessName,
+  canSwitchBusiness,
   collapsed,
   onToggle,
 }: {
   pathname: string;
   businessName: string;
+  canSwitchBusiness: boolean;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -62,6 +65,15 @@ export function AdminSidebar({
               {businessName}
             </a>
             <h1 className="mt-2.5 text-[1.6rem] font-semibold tracking-tight text-slate-900">Admin</h1>
+            {canSwitchBusiness ? (
+              <Link
+                href="/admin/select-business"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
+              >
+                <ArrowsRightLeftIcon className="h-3.5 w-3.5" />
+                Switch business
+              </Link>
+            ) : null}
           </div>
 
           <button

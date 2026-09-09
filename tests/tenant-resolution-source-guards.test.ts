@@ -136,9 +136,10 @@ test("business-admin auth no longer resolves admin access through the current pu
 
   assert.doesNotMatch(source, /getCurrentTenant/);
   assert.match(source, /\.from\("business_admin_memberships"\)/);
-  assert.match(source, /\.eq\("auth_user_id", data\.user\.id\)/);
+  assert.match(source, /\.eq\("auth_user_id", userId\)/);
   assert.match(source, /memberships\.length === 0/);
-  assert.match(source, /memberships\.length > 1/);
+  assert.match(source, /options\.length > 1/);
+  assert.match(source, /business_selection_required/);
   assert.match(source, /\.from\("tenants"\)/);
   assert.match(source, /\.eq\("id", membership\.businessId\)/);
   assert.match(source, /status !== "active"/);

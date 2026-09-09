@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import {
+  clearAdminSelectedBusinessCookieFromServerAction,
   createAdminAuthClient,
+  loadActiveAdminBusinessOptionsForUser,
+  setAdminSelectedBusinessCookieFromServerAction,
   setAdminSessionCookiesFromServerAction,
 } from "@/lib/admin/auth";
 import { normalizeEmail } from "@/lib/customers";
@@ -42,5 +45,12 @@ export async function signInAdminWithPasswordAction(formData: FormData) {
     refreshToken: data.session.refresh_token,
   });
 
-  redirect("/admin");
+  const businessOptions = await loadActiveAdminBusinessOptionsForUser(data.user.id);
+  if (businessOptions.length === 1) {
+    await setAdminSelectedBusinessCookieFromServerAction(businessOptions[0].id);
+    redirect("/admin");
+  }
+
+  await clearAdminSelectedBusinessCookieFromServerAction();
+  redirect(businessOptions.length > 1 ? "/admin/select-business" : "/admin");
 }

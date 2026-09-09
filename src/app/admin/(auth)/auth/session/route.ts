@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  clearAdminSelectedBusinessCookie,
   createAdminAuthClient,
+  loadActiveAdminBusinessOptionsForUser,
+  setAdminSelectedBusinessCookie,
   setAdminSessionCookies,
 } from "@/lib/admin/auth";
 
@@ -45,6 +48,7 @@ export async function POST(req: Request) {
     const authClient = createAdminAuthClient();
     let accessToken = body.accessToken?.trim() || "";
     let refreshToken = body.refreshToken?.trim() || "";
+    let userId = "";
 
     if (body.tokenHash && body.type) {
       const { data, error } = await authClient.auth.verifyOtp({
@@ -64,6 +68,7 @@ export async function POST(req: Request) {
 
       accessToken = data.session.access_token;
       refreshToken = data.session.refresh_token;
+      userId = data.user.id;
     } else if (body.code) {
       const { data, error } = await authClient.auth.exchangeCodeForSession(body.code);
 
@@ -79,6 +84,7 @@ export async function POST(req: Request) {
 
       accessToken = data.session.access_token;
       refreshToken = data.session.refresh_token;
+      userId = data.user.id;
     } else if (accessToken) {
       const { data, error } = await authClient.auth.getUser(accessToken);
 
@@ -91,13 +97,22 @@ export async function POST(req: Request) {
         });
         return badRequest("We could not validate your admin session token.", 401);
       }
+
+      userId = data.user.id;
     } else {
       logAdminAuthSessionError("unusable_payload", payloadShape);
       return badRequest("Admin callback did not include usable session data.");
     }
 
-    const response = NextResponse.json({ ok: true, redirectTo: "/admin" });
+    const businessOptions = userId ? await loadActiveAdminBusinessOptionsForUser(userId) : [];
+    const redirectTo = businessOptions.length > 1 ? "/admin/select-business" : "/admin";
+    const response = NextResponse.json({ ok: true, redirectTo });
     setAdminSessionCookies(response, { accessToken, refreshToken });
+    if (businessOptions.length === 1) {
+      setAdminSelectedBusinessCookie(response, businessOptions[0].id);
+    } else {
+      clearAdminSelectedBusinessCookie(response, req.headers.get("host"));
+    }
 
     return response;
   } catch (error) {
