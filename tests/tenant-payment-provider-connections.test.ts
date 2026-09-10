@@ -2,10 +2,16 @@ import test, { afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildSquareOAuthAuthorizationUrl,
   decryptPaymentProviderToken,
+  exchangeSquareOAuthCode,
   encryptPaymentProviderToken,
   getSquareCheckoutConfigurationForBusiness,
+  getSquareOAuthConfigurationStatus,
+  listSquareLocationsForAccessToken,
   resolveTenantPaymentProviderConnection,
+  SQUARE_OAUTH_CALLBACK_PATH,
+  SQUARE_OAUTH_SCOPES,
   TenantPaymentProviderConnectionError,
 } from "../src/lib/payments/tenant-payment-provider-connections.ts";
 
@@ -20,6 +26,10 @@ const originalEnv = {
   squareEnvironment: process.env.SQUARE_ENVIRONMENT,
   squareAccessToken: process.env.SQUARE_ACCESS_TOKEN,
   squareApplicationId: process.env.SQUARE_APPLICATION_ID,
+  squareOauthApplicationId: process.env.SQUARE_OAUTH_APPLICATION_ID,
+  squareOauthApplicationSecret: process.env.SQUARE_OAUTH_APPLICATION_SECRET,
+  squareOauthRedirectUrl: process.env.SQUARE_OAUTH_REDIRECT_URL,
+  nextPublicSiteUrl: process.env.NEXT_PUBLIC_SITE_URL,
   squareLocationId: process.env.SQUARE_LOCATION_ID,
   tokenEncryptionKey: process.env.PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY,
 };
@@ -37,6 +47,10 @@ beforeEach(() => {
   process.env.SQUARE_ENVIRONMENT = "sandbox";
   process.env.SQUARE_ACCESS_TOKEN = "legacy-square-token";
   process.env.SQUARE_APPLICATION_ID = "sandbox-square-application-id";
+  process.env.SQUARE_OAUTH_APPLICATION_ID = "sandbox-square-oauth-application-id";
+  process.env.SQUARE_OAUTH_APPLICATION_SECRET = "square-oauth-application-secret";
+  process.env.NEXT_PUBLIC_SITE_URL = "https://app.rybs.example";
+  delete process.env.SQUARE_OAUTH_REDIRECT_URL;
   process.env.SQUARE_LOCATION_ID = "legacy-location";
   process.env.PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY = `base64:${TEST_KEY}`;
 });
@@ -45,6 +59,10 @@ afterEach(() => {
   restoreEnv("SQUARE_ENVIRONMENT", originalEnv.squareEnvironment);
   restoreEnv("SQUARE_ACCESS_TOKEN", originalEnv.squareAccessToken);
   restoreEnv("SQUARE_APPLICATION_ID", originalEnv.squareApplicationId);
+  restoreEnv("SQUARE_OAUTH_APPLICATION_ID", originalEnv.squareOauthApplicationId);
+  restoreEnv("SQUARE_OAUTH_APPLICATION_SECRET", originalEnv.squareOauthApplicationSecret);
+  restoreEnv("SQUARE_OAUTH_REDIRECT_URL", originalEnv.squareOauthRedirectUrl);
+  restoreEnv("NEXT_PUBLIC_SITE_URL", originalEnv.nextPublicSiteUrl);
   restoreEnv("SQUARE_LOCATION_ID", originalEnv.squareLocationId);
   restoreEnv("PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY", originalEnv.tokenEncryptionKey);
 });
@@ -101,6 +119,95 @@ test("payment provider token encryption round trips without exposing the plainte
   assert.equal(encrypted.keyId, "PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY");
   assert.notEqual(encrypted.encryptedToken, "tenant-square-token");
   assert.equal(decryptPaymentProviderToken(encrypted.encryptedToken), "tenant-square-token");
+});
+
+test("Square OAuth configuration reports required server-side setup without exposing secrets", () => {
+  const status = getSquareOAuthConfigurationStatus();
+
+  assert.equal(status.configured, true);
+  assert.equal(status.applicationIdConfigured, true);
+  assert.equal(status.applicationSecretConfigured, true);
+  assert.equal(status.redirectUrl, `https://app.rybs.example${SQUARE_OAUTH_CALLBACK_PATH}`);
+  assert.equal("applicationSecret" in status, false);
+});
+
+test("Square OAuth authorization URL uses configured app id, scopes, redirect URL, and state", () => {
+  const url = new URL(buildSquareOAuthAuthorizationUrl({ state: "state-123" }));
+
+  assert.equal(url.origin, "https://connect.squareupsandbox.com");
+  assert.equal(url.pathname, "/oauth2/authorize");
+  assert.equal(url.searchParams.get("client_id"), "sandbox-square-oauth-application-id");
+  assert.equal(url.searchParams.get("state"), "state-123");
+  assert.equal(url.searchParams.get("redirect_uri"), `https://app.rybs.example${SQUARE_OAUTH_CALLBACK_PATH}`);
+
+  const scopes = new Set((url.searchParams.get("scope") ?? "").split(" "));
+  for (const scope of SQUARE_OAUTH_SCOPES) {
+    assert.equal(scopes.has(scope), true, `${scope} should be requested`);
+  }
+});
+
+test("Square OAuth token exchange keeps token material in the server result only", async () => {
+  const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const fakeFetch = async (url: string | URL | Request, init?: RequestInit) => {
+    requests.push({
+      url: String(url),
+      body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+    });
+    return Response.json({
+      access_token: "oauth-access-token",
+      refresh_token: "oauth-refresh-token",
+      expires_at: "2026-10-01T00:00:00Z",
+      merchant_id: "merchant-123",
+      scope: "MERCHANT_PROFILE_READ PAYMENTS_WRITE",
+    });
+  };
+
+  const result = await exchangeSquareOAuthCode({ code: "auth-code" }, { fetch: fakeFetch });
+
+  assert.equal(result.accessToken, "oauth-access-token");
+  assert.equal(result.refreshToken, "oauth-refresh-token");
+  assert.equal(result.merchantId, "merchant-123");
+  assert.deepEqual(result.grantedScopes, ["MERCHANT_PROFILE_READ", "PAYMENTS_WRITE"]);
+  assert.equal(requests[0].url, "https://connect.squareupsandbox.com/oauth2/token");
+  assert.equal(requests[0].body.client_id, "sandbox-square-oauth-application-id");
+  assert.equal(requests[0].body.client_secret, "square-oauth-application-secret");
+  assert.equal(requests[0].body.grant_type, "authorization_code");
+});
+
+test("Square location listing returns safe location options", async () => {
+  const fakeFetch = async (_url: string | URL | Request, init?: RequestInit) => {
+    assert.equal((init?.headers as Record<string, string>).Authorization, "Bearer oauth-access-token");
+    return Response.json({
+      locations: [
+        {
+          id: "loc-1",
+          name: "Main yard",
+          status: "ACTIVE",
+          address: {
+            address_line_1: "1 Main St",
+            locality: "Cincinnati",
+            administrative_district_level_1: "OH",
+            postal_code: "45202",
+          },
+        },
+      ],
+    });
+  };
+
+  const locations = await listSquareLocationsForAccessToken(
+    { accessToken: "oauth-access-token", environment: "sandbox" },
+    { fetch: fakeFetch },
+  );
+
+  assert.deepEqual(locations, [
+    {
+      id: "loc-1",
+      name: "Main yard",
+      status: "ACTIVE",
+      addressSummary: "1 Main St, Cincinnati, OH, 45202",
+      isActive: true,
+    },
+  ]);
 });
 
 test("resolveTenantPaymentProviderConnection returns the active tenant Square connection", async () => {
@@ -210,7 +317,7 @@ test("getSquareCheckoutConfigurationForBusiness returns only browser-safe Square
     configured: true,
     provider: "square",
     environment: "sandbox",
-    applicationId: "sandbox-square-application-id",
+    applicationId: "sandbox-square-oauth-application-id",
     locationId: "location-1",
   });
   assert.equal("accessToken" in config, false);

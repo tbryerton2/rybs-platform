@@ -99,6 +99,7 @@ export function AdminShell({
     !pathname.startsWith("/admin/equipment") &&
     !pathname.startsWith("/admin/analytics") &&
     pathname !== "/admin/settings/pricing" &&
+    pathname !== "/admin/settings/payments" &&
     !pathname.startsWith("/admin/settings/zips") &&
     pathname !== "/admin/settings/retail-site" &&
     !pathname.startsWith("/admin/cms");

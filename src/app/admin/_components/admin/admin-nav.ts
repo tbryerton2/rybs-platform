@@ -8,6 +8,7 @@ export type AdminNavItem = {
     | "customers"
     | "employees"
     | "financials"
+    | "payments"
     | "expenses"
     | "taxes"
     | "dumpsters"
@@ -60,6 +61,7 @@ const allAdminNavGroups: AdminNavGroup[] = [
     label: "Financials",
     items: [
       { label: "Pricing", href: "/admin/settings/pricing", icon: "pricing", matchers: ["/admin/settings/pricing"] },
+      { label: "Payments", href: "/admin/settings/payments", icon: "payments", matchers: ["/admin/settings/payments"] },
       { label: "Revenue", href: "/admin/financials", icon: "financials", matchers: ["/admin/financials"] },
       { label: "Expenses", href: "/admin/expenses", icon: "expenses", matchers: ["/admin/expenses"] },
       { label: "Taxes", href: "/admin/taxes", icon: "taxes", matchers: ["/admin/taxes"] },
