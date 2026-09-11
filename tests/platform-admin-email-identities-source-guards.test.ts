@@ -43,7 +43,7 @@ test("platform email identity provider removal is provider-aware and database de
   assert.match(source, /\.from\("tenant_email_identities"\)\s+\.delete\(\)/);
 });
 
-test("platform business detail exposes email identity management without changing email sending", () => {
+test("platform business detail exposes email identity management and effective sender status", () => {
   const detailPage = readRepoFile("src/app/platform-admin/(protected)/businesses/[tenantId]/page.tsx");
   const actions = readRepoFile("src/app/platform-admin/(protected)/businesses/actions.ts");
   const emailSender = readRepoFile("src/lib/email/ses.ts");
@@ -53,6 +53,10 @@ test("platform business detail exposes email identity management without changin
   assert.match(detailPage, /provisionEmailIdentityAction/);
   assert.match(detailPage, /checkEmailIdentityAction/);
   assert.match(detailPage, /Derived From address/);
+  assert.match(detailPage, /Using verified tenant sender/);
+  assert.match(detailPage, /Using RYBS managed sender/);
+  assert.match(detailPage, /Unable to send/);
+  assert.match(detailPage, /RYBS_MANAGED_SES_FROM_EMAIL/);
   assert.match(actions, /savePlatformTenantEmailIdentity/);
   assert.match(actions, /provisionPlatformTenantEmailIdentity/);
   assert.match(actions, /checkPlatformTenantEmailIdentity/);

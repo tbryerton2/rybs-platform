@@ -14,6 +14,8 @@ const {
 
 const TAN_BUSINESS_ID = "11111111-1111-4111-8111-111111111111";
 const DEMO_BUSINESS_ID = "22222222-2222-4222-8222-222222222222";
+const originalRybManagedFromEmail = process.env.RYBS_MANAGED_SES_FROM_EMAIL;
+const originalRybManagedRegion = process.env.RYBS_MANAGED_SES_REGION;
 
 type Row = Record<string, unknown>;
 type Filter = { column: string; value: unknown };
@@ -89,6 +91,16 @@ function createMockSupabase(rows: Row[], options: { ignoreFilters?: boolean } = 
 
 afterEach(() => {
   setTenantEmailIdentitySupabaseClientForTesting(null);
+  if (originalRybManagedFromEmail === undefined) {
+    delete process.env.RYBS_MANAGED_SES_FROM_EMAIL;
+  } else {
+    process.env.RYBS_MANAGED_SES_FROM_EMAIL = originalRybManagedFromEmail;
+  }
+  if (originalRybManagedRegion === undefined) {
+    delete process.env.RYBS_MANAGED_SES_REGION;
+  } else {
+    process.env.RYBS_MANAGED_SES_REGION = originalRybManagedRegion;
+  }
 });
 
 test("Tan Can Man verified identity resolves to branded From sender", async () => {
@@ -103,6 +115,7 @@ test("Tan Can Man verified identity resolves to branded From sender", async () =
 
   assert.equal(mock.filters[0]?.column, "business_id");
   assert.equal(mock.filters[0]?.value, TAN_BUSINESS_ID);
+  assert.equal(sender.source, "tenant_verified");
   assert.equal(sender.senderDisplayName, "Tan Can Man");
   assert.equal(sender.senderEmail, "bookings@tancanman.com");
   assert.equal(sender.formattedFrom, '"Tan Can Man" <bookings@tancanman.com>');
@@ -111,14 +124,45 @@ test("Tan Can Man verified identity resolves to branded From sender", async () =
   assert.equal(sender.verificationStatus, "verified");
 });
 
-test("Demo without verified identity does not fall back to Tan Can Man", async () => {
+test("Demo without verified identity uses explicit RYBS managed sender", async () => {
+  process.env.RYBS_MANAGED_SES_FROM_EMAIL = "bookings@mail.rybsoftware.com";
+  process.env.RYBS_MANAGED_SES_REGION = "us-west-2";
   const mock = createMockSupabase([
     identityRow({
       business_id: DEMO_BUSINESS_ID,
       sender_domain: "demodumpstercompany.com",
       sender_display_name: "Demo Dumpster Company",
+      reply_to_email: "support@demo.example",
       provider_status: "pending",
       verification_status: "pending",
+    }),
+  ]);
+  setTenantEmailIdentitySupabaseClientForTesting(mock.client);
+
+  const sender = await resolveTenantEmailSender({
+    tenant: tenant(DEMO_BUSINESS_ID, "demo-dumpster-company"),
+    businessName: "Demo Dumpster Company",
+    supportEmail: "fallback@demo.example",
+  });
+
+  assert.equal(sender.source, "rybs_managed");
+  assert.equal(sender.senderDisplayName, "Demo Dumpster Company");
+  assert.equal(sender.senderEmail, "bookings@mail.rybsoftware.com");
+  assert.equal(sender.formattedFrom, '"Demo Dumpster Company" <bookings@mail.rybsoftware.com>');
+  assert.equal(sender.replyToEmail, "support@demo.example");
+  assert.equal(sender.sesRegion, "us-west-2");
+  assert.equal(sender.providerStatus, "verified");
+  assert.equal(sender.verificationStatus, "verified");
+});
+
+test("Demo without verified identity fails closed when RYBS managed sender is missing", async () => {
+  const mock = createMockSupabase([
+    identityRow({
+      business_id: DEMO_BUSINESS_ID,
+      sender_domain: "demodumpstercompany.com",
+      sender_display_name: "Demo Dumpster Company",
+      provider_status: "dns_required",
+      verification_status: "dns_required",
     }),
   ]);
   setTenantEmailIdentitySupabaseClientForTesting(mock.client);

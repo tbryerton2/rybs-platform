@@ -14,6 +14,7 @@ import {
 
 export type TenantEmailSender = {
   businessId: string;
+  source: "tenant_verified" | "rybs_managed";
   senderDisplayName: string;
   senderEmail: string;
   formattedFrom: string;
@@ -83,21 +84,17 @@ export function formatTenantEmailSenderSource(input: {
   return displayName ? `${quoteDisplayName(displayName)} <${input.senderEmail}>` : input.senderEmail;
 }
 
-function assertVerifiedIdentity(
+function isVerifiedIdentity(
   identity: TenantEmailIdentity | null,
   businessId: string,
-): TenantEmailIdentity {
-  if (
-    !identity ||
-    identity.businessId !== businessId ||
-    identity.provider !== "ses" ||
-    identity.providerStatus !== "verified" ||
-    identity.verificationStatus !== "verified"
-  ) {
-    throw new TenantEmailSenderError("not_verified");
-  }
-
-  return identity;
+) {
+  return Boolean(
+    identity &&
+      identity.businessId === businessId &&
+      identity.provider === "ses" &&
+      identity.providerStatus === "verified" &&
+      identity.verificationStatus === "verified",
+  );
 }
 
 async function loadTenantContext(input: ResolveTenantEmailSenderInput, businessId: string) {
@@ -113,6 +110,17 @@ async function loadTenantContext(input: ResolveTenantEmailSenderInput, businessI
   return tenant;
 }
 
+export function getRybManagedEmailSenderConfig(env = process.env) {
+  const senderEmail = cleanEmail(env.RYBS_MANAGED_SES_FROM_EMAIL);
+  const sesRegion = clean(env.RYBS_MANAGED_SES_REGION) ?? null;
+
+  return {
+    configured: Boolean(senderEmail),
+    senderEmail,
+    sesRegion,
+  };
+}
+
 export async function resolveTenantEmailSender(
   input: ResolveTenantEmailSenderInput,
 ): Promise<TenantEmailSender> {
@@ -121,34 +129,46 @@ export async function resolveTenantEmailSender(
     getTenantEmailIdentityByBusinessId(businessId),
     loadTenantContext(input, businessId),
   ]);
-  const verifiedIdentity = assertVerifiedIdentity(identity, businessId);
   const allowSupportFallback = input.allowSupportReplyToFallback !== false;
   const [brand, support] = await Promise.all([
     input.businessName ? null : getBrandSettingsForTenant(tenant),
     input.supportEmail || !allowSupportFallback ? null : getSupportSettingsForTenant(businessId),
   ]);
+  const verifiedIdentity = isVerifiedIdentity(identity, businessId) ? identity : null;
+  const rybsManagedSender = getRybManagedEmailSenderConfig();
+  const senderEmail = verifiedIdentity?.fromEmail ?? rybsManagedSender.senderEmail;
+
+  if (!senderEmail) {
+    throw new TenantEmailSenderError("not_verified");
+  }
+
   const senderDisplayName =
-    clean(verifiedIdentity.senderDisplayName) ??
+    clean(verifiedIdentity?.senderDisplayName) ??
+    clean(identity?.senderDisplayName) ??
     clean(input.businessName) ??
     clean(brand?.name) ??
     tenant.slug;
   const replyToEmail =
-    cleanEmail(verifiedIdentity.replyToEmail) ??
+    cleanEmail(verifiedIdentity?.replyToEmail) ??
+    cleanEmail(identity?.replyToEmail) ??
     cleanEmail(input.supportEmail) ??
     (allowSupportFallback ? cleanEmail(support?.email) : null);
+  const source = verifiedIdentity ? "tenant_verified" : "rybs_managed";
+  const sesRegion = verifiedIdentity?.sesRegion ?? rybsManagedSender.sesRegion;
 
   return {
     businessId,
+    source,
     senderDisplayName,
-    senderEmail: verifiedIdentity.fromEmail,
+    senderEmail,
     formattedFrom: formatTenantEmailSenderSource({
       senderDisplayName,
-      senderEmail: verifiedIdentity.fromEmail,
+      senderEmail,
     }),
     replyToEmail,
-    sesRegion: verifiedIdentity.sesRegion,
-    providerStatus: verifiedIdentity.providerStatus,
-    verificationStatus: verifiedIdentity.verificationStatus,
+    sesRegion,
+    providerStatus: verifiedIdentity?.providerStatus ?? "verified",
+    verificationStatus: verifiedIdentity?.verificationStatus ?? "verified",
   };
 }
 

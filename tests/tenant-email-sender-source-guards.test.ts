@@ -46,6 +46,18 @@ test("queued email processing resolves sender by queued business_id", () => {
   assert.doesNotMatch(source, /EXPECTED_SES_REPLY_TO_EMAIL/);
 });
 
+test("tenant sender fallback uses explicit RYBS managed sender config", () => {
+  const source = readRepoFile("src/lib/email/tenant-sender.ts");
+
+  assert.match(source, /RYBS_MANAGED_SES_FROM_EMAIL/);
+  assert.match(source, /RYBS_MANAGED_SES_REGION/);
+  assert.match(source, /source: "tenant_verified" \| "rybs_managed"/);
+  assert.match(source, /source = verifiedIdentity \? "tenant_verified" : "rybs_managed"/);
+  assert.doesNotMatch(source, /process\.env\.SES_FROM_EMAIL/);
+  assert.doesNotMatch(source, /process\.env\.SES_REPLY_TO_EMAIL/);
+  assert.doesNotMatch(source, /bookings@tancanman\.com/);
+});
+
 test("production email code no longer hardcodes Tan sender assumptions", () => {
   const productionSources = [
     "src/lib/email/booking-emails.ts",
