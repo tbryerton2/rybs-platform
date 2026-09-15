@@ -16,6 +16,8 @@ const BUSINESS_ID = "11111111-1111-4111-8111-111111111111";
 const CUSTOMER_ID = "22222222-2222-4222-8222-222222222222";
 const PROVIDER_ACCOUNT_ID = "33333333-3333-4333-8333-333333333333";
 const PAYMENT_METHOD_ID = "44444444-4444-4444-8444-444444444444";
+const PAYMENT_PROVIDER_CONNECTION_ID = "55555555-5555-4555-8555-555555555555";
+const PROVIDER_MERCHANT_ID = "merchant-demo-1";
 const ACCEPTED_AT = "2026-07-30T12:00:00.000Z";
 
 function baseInput() {
@@ -35,13 +37,17 @@ function baseInput() {
   };
 }
 
-function providerAccount(): StoredCustomerProviderAccount {
+function providerAccount(
+  overrides: Partial<Pick<StoredCustomerProviderAccount, "paymentProviderConnectionId" | "providerMerchantId">> = {},
+): StoredCustomerProviderAccount {
   return {
     id: PROVIDER_ACCOUNT_ID,
     businessId: BUSINESS_ID,
     customerId: CUSTOMER_ID,
     provider: "square",
     providerEnvironment: "sandbox",
+    paymentProviderConnectionId: overrides.paymentProviderConnectionId ?? null,
+    providerMerchantId: overrides.providerMerchantId ?? null,
     providerCustomerId: "square-customer-1",
     status: "active",
     createdAt: ACCEPTED_AT,
@@ -49,10 +55,15 @@ function providerAccount(): StoredCustomerProviderAccount {
   };
 }
 
-function providerCard(id = "ccof:saved-card-1"): PaymentProviderSavePaymentMethodResult {
+function providerCard(
+  id = "ccof:saved-card-1",
+  overrides: Partial<Pick<PaymentProviderSavePaymentMethodResult, "paymentProviderConnectionId" | "providerMerchantId">> = {},
+): PaymentProviderSavePaymentMethodResult {
   return {
     provider: "square",
     providerEnvironment: "sandbox",
+    paymentProviderConnectionId: overrides.paymentProviderConnectionId ?? null,
+    providerMerchantId: overrides.providerMerchantId ?? null,
     providerCustomerId: "square-customer-1",
     providerPaymentMethodId: id,
     cardBrand: "VISA",
@@ -73,6 +84,8 @@ function storedPaymentMethod(
     customerProviderAccountId: input.customerProviderAccountId ?? null,
     provider: "square",
     providerEnvironment: input.providerEnvironment,
+    paymentProviderConnectionId: input.paymentProviderConnectionId ?? null,
+    providerMerchantId: input.providerMerchantId ?? null,
     providerCustomerId: input.providerCustomerId,
     providerPaymentMethodId: input.providerPaymentMethodId,
     cardBrand: input.cardBrand ?? null,
@@ -114,6 +127,63 @@ test("saveCustomerPaymentMethod succeeds when Square customer, card, validation,
   assert.equal(savedCardCalls, 1);
   assert.equal(result.paymentMethod.providerPaymentMethodId, "ccof:saved-card-1");
   assert.equal(persistedInput?.providerCustomerId, "square-customer-1");
+});
+
+test("saveCustomerPaymentMethod carries tenant Square connection ownership into local saved-card rows", async () => {
+  let providerAccountInput: unknown = null;
+  let persistedInput: PersistCustomerPaymentMethodInput | null = null;
+
+  const result = await saveCustomerPaymentMethod(
+    {
+      ...baseInput(),
+      paymentProviderConnectionId: PAYMENT_PROVIDER_CONNECTION_ID,
+      providerMerchantId: PROVIDER_MERCHANT_ID,
+    },
+    {
+      createOrReuseProviderCustomer: async () => ({
+        provider: "square",
+        providerEnvironment: "sandbox",
+        paymentProviderConnectionId: PAYMENT_PROVIDER_CONNECTION_ID,
+        providerMerchantId: PROVIDER_MERCHANT_ID,
+        providerCustomerId: "square-customer-1",
+        reused: false,
+      }),
+      findOrCreateProviderAccount: async (input) => {
+        providerAccountInput = input;
+        return providerAccount({
+          paymentProviderConnectionId: input.paymentProviderConnectionId ?? null,
+          providerMerchantId: input.providerMerchantId ?? null,
+        });
+      },
+      findReusableProviderPaymentMethod: async () => null,
+      saveProviderPaymentMethod: async () =>
+        providerCard("ccof:saved-card-1", {
+          paymentProviderConnectionId: PAYMENT_PROVIDER_CONNECTION_ID,
+          providerMerchantId: PROVIDER_MERCHANT_ID,
+        }),
+      verifyProviderPaymentMethod: async () => ({ ok: true }),
+      persistPaymentMethod: async (input) => {
+        persistedInput = input;
+        return storedPaymentMethod(input);
+      },
+    },
+  );
+
+  assert.deepEqual(
+    {
+      paymentProviderConnectionId: (providerAccountInput as { paymentProviderConnectionId?: string | null })
+        .paymentProviderConnectionId,
+      providerMerchantId: (providerAccountInput as { providerMerchantId?: string | null }).providerMerchantId,
+    },
+    {
+      paymentProviderConnectionId: PAYMENT_PROVIDER_CONNECTION_ID,
+      providerMerchantId: PROVIDER_MERCHANT_ID,
+    },
+  );
+  assert.equal(persistedInput?.paymentProviderConnectionId, PAYMENT_PROVIDER_CONNECTION_ID);
+  assert.equal(persistedInput?.providerMerchantId, PROVIDER_MERCHANT_ID);
+  assert.equal(result.customerProviderAccount.paymentProviderConnectionId, PAYMENT_PROVIDER_CONNECTION_ID);
+  assert.equal(result.paymentMethod.paymentProviderConnectionId, PAYMENT_PROVIDER_CONNECTION_ID);
 });
 
 test("saveCustomerPaymentMethod reports Square customer creation failures with a durable stage", async () => {

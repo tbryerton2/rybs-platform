@@ -10,7 +10,7 @@ import type {
 
 const DEFAULT_PAYMENT_PROVIDER = "square" satisfies PaymentProvider;
 const CUSTOMER_PROVIDER_ACCOUNT_SELECT =
-  "id, business_id, customer_id, provider, provider_environment, provider_customer_id, status, created_at, updated_at";
+  "id, business_id, customer_id, provider, provider_environment, payment_provider_connection_id, provider_merchant_id, provider_customer_id, status, created_at, updated_at";
 
 type CustomerProviderAccountRow = {
   id: string;

@@ -847,13 +847,6 @@ export async function POST(req: Request) {
               familyName: customerLastName || null,
               email: customerEmail,
               phone: customerPhone,
-              address: {
-                addressLine1: customerStreet,
-                locality: customerCity,
-                administrativeDistrictLevel1: customerState,
-                postalCode: customerZip,
-                country: "US",
-              },
               consentText: cardOnFileConsent.consentText,
               consentAcceptedAt: cardOnFileConsent.acceptedAt,
               customerIdempotencyKey: `cof-customer-${createdBooking.customerId}`,

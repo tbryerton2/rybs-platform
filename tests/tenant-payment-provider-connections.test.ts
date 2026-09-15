@@ -141,6 +141,9 @@ test("Square OAuth authorization URL uses configured app id, scopes, redirect UR
   assert.equal(url.searchParams.get("redirect_uri"), `https://app.rybs.example${SQUARE_OAUTH_CALLBACK_PATH}`);
 
   const scopes = new Set((url.searchParams.get("scope") ?? "").split(" "));
+  assert.deepEqual(scopes, new Set(SQUARE_OAUTH_SCOPES));
+  assert.equal(scopes.has("CARDS_READ"), false);
+  assert.equal(scopes.has("CARDS_WRITE"), false);
   for (const scope of SQUARE_OAUTH_SCOPES) {
     assert.equal(scopes.has(scope), true, `${scope} should be requested`);
   }

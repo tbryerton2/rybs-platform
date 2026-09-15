@@ -65,6 +65,9 @@ test("Square payment records gain connection and merchant scoping", () => {
   const migration = readRepoFile(
     "supabase/migrations/20260909005031_tenant_payment_provider_connections.sql",
   );
+  const followupMigration = readRepoFile(
+    "supabase/migrations/20260910191511_drop_legacy_customer_provider_account_unique.sql",
+  );
 
   for (const table of [
     "booking_payments",
@@ -91,6 +94,10 @@ test("Square payment records gain connection and merchant scoping", () => {
   assert.match(
     migration,
     /drop index if exists customer_provider_accounts_provider_customer_unique/,
+  );
+  assert.match(
+    followupMigration,
+    /drop index if exists public\.customer_provider_accounts_business_customer_provider_unique/,
   );
   assert.match(
     migration,
