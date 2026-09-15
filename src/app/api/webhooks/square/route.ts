@@ -45,6 +45,7 @@ type BookingPaymentWebhookRow = {
   id: string;
   business_id: string;
   booking_id: string | null;
+  booking_charge_id: string | null;
   status: string;
 };
 
@@ -127,6 +128,10 @@ function toBookingPaymentStatus(status: PaymentStatus) {
   return status === "canceled" ? "failed" : status;
 }
 
+function toBookingChargeStatus(status: PaymentStatus) {
+  return status === "canceled" ? "failed" : status;
+}
+
 async function markWebhookEvent(
   eventId: string,
   values: {
@@ -193,11 +198,11 @@ async function insertWebhookEvent(input: {
     insertValues.business_id = input.connection.businessId;
   }
 
-  if (input.connection && input.providerMerchantId) {
+  if (input.providerMerchantId) {
     insertValues.provider_merchant_id = input.providerMerchantId;
   }
 
-  if (input.connection && input.providerLocationId) {
+  if (input.providerLocationId) {
     insertValues.provider_location_id = input.providerLocationId;
   }
 
@@ -236,7 +241,7 @@ async function reconcilePaymentEvent(input: {
 
   let query = supabaseAdmin
     .from("booking_payments")
-    .select("id, business_id, booking_id, status")
+    .select("id, business_id, booking_id, booking_charge_id, status")
     .eq("provider", "square")
     .eq("provider_environment", getConfiguredSquareEnvironment())
     .eq("provider_payment_id", providerPaymentId);
@@ -304,7 +309,40 @@ async function reconcilePaymentEvent(input: {
     throw new Error(paymentUpdate.error.message);
   }
 
-  if (existing.data.booking_id) {
+  if (existing.data.booking_charge_id) {
+    const chargeUpdate: Record<string, unknown> = {
+      status: toBookingChargeStatus(status),
+      provider: "square",
+      provider_environment: getConfiguredSquareEnvironment(),
+      provider_payment_id: providerPaymentId,
+      provider_location_id: input.payment.location_id ?? null,
+    };
+
+    if (input.connection) {
+      chargeUpdate.payment_provider_connection_id = input.connection.id;
+      chargeUpdate.provider_merchant_id = input.providerMerchantId;
+    }
+
+    if (status === "paid") {
+      chargeUpdate.paid_at = paidAt ?? new Date().toISOString();
+      chargeUpdate.failed_at = null;
+    }
+
+    if (terminalFailure) {
+      chargeUpdate.failed_at = failedAt ?? new Date().toISOString();
+    }
+
+    const chargeResult = await supabaseAdmin
+      .from("booking_charges")
+      .update(chargeUpdate)
+      .eq("id", existing.data.booking_charge_id)
+      .eq("booking_id", existing.data.booking_id)
+      .eq("business_id", existing.data.business_id);
+
+    if (chargeResult.error) {
+      throw new Error(chargeResult.error.message);
+    }
+  } else if (existing.data.booking_id) {
     const bookingUpdate: Record<string, unknown> = {
       payment_status: toBookingPaymentStatus(status),
       payment_provider: "square",
