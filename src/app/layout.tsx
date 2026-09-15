@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { ArrowRightOnRectangleIcon, EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
+import { PublicRetailHeaderMenu } from "@/components/PublicRetailHeaderMenu";
 import {
   getRetailSiteSettings,
   sanitizeRetailSiteSettings,
@@ -297,27 +298,41 @@ export default async function RootLayout({
                   <ArrowRightOnRectangleIcon className="h-4 w-4" aria-hidden="true" />
                   <span>Sign out</span>
                 </a>
-              ) : emailHref || (phoneHref && phoneDisplay) ? (
-                <div className="ml-4 flex min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm font-medium text-slate-700">
-                  {emailHref ? (
-                    <a
-                      className="inline-flex min-w-0 max-w-[180px] items-center gap-1.5 transition hover:text-slate-950 sm:max-w-[240px]"
-                      href={emailHref}
+              ) : !isAdminSurface ? (
+                <>
+                  <div className="ml-4 hidden min-w-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 text-sm font-medium text-slate-700 md:flex">
+                    <Link
+                      href="/portal"
+                      className="inline-flex shrink-0 items-center rounded-full px-2 py-1 font-semibold transition hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/40"
                     >
-                      <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{emailAddress}</span>
-                    </a>
-                  ) : null}
-                  {phoneHref && phoneDisplay ? (
-                    <a
-                      className="inline-flex shrink-0 items-center gap-1.5 transition hover:text-slate-950"
-                      href={phoneHref}
-                    >
-                      <PhoneIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      <span>{phoneDisplay}</span>
-                    </a>
-                  ) : null}
-                </div>
+                      Customer Portal
+                    </Link>
+                    {emailHref ? (
+                      <a
+                        className="inline-flex min-w-0 max-w-[180px] items-center gap-1.5 transition hover:text-slate-950 sm:max-w-[240px]"
+                        href={emailHref}
+                      >
+                        <EnvelopeIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span className="truncate">{emailAddress}</span>
+                      </a>
+                    ) : null}
+                    {phoneHref && phoneDisplay ? (
+                      <a
+                        className="inline-flex shrink-0 items-center gap-1.5 transition hover:text-slate-950"
+                        href={phoneHref}
+                      >
+                        <PhoneIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{phoneDisplay}</span>
+                      </a>
+                    ) : null}
+                  </div>
+                  <PublicRetailHeaderMenu
+                    emailHref={emailHref}
+                    emailLabel={emailHref ? emailAddress : null}
+                    phoneHref={phoneHref}
+                    phoneLabel={phoneDisplay}
+                  />
+                </>
               ) : null}
             </div>
           </header>
@@ -345,6 +360,12 @@ export default async function RootLayout({
                 </div>
 
                 <div className="text-sm text-slate-400">
+                  <Link href="/portal" className="font-medium text-slate-300 transition hover:text-white">
+                    Manage your booking
+                  </Link>
+                  <span className="mx-3 text-slate-600" aria-hidden="true">
+                    /
+                  </span>
                   © {new Date().getFullYear()} {brand.name}. All rights reserved.
                 </div>
               </div>
