@@ -61,6 +61,7 @@ declare global {
 
 const SQUARE_SCRIPT_ID = "square-web-payments-sdk";
 const SQUARE_CARD_CONTAINER_ID = "square-card-container";
+const MAX_SQUARE_INIT_ATTEMPTS = 3;
 const ENABLE_SIMULATED_CHECKOUT = process.env.NEXT_PUBLIC_ENABLE_SIMULATED_CHECKOUT === "true";
 const PAYMENT_UNAVAILABLE_MESSAGE =
   "Online card payment is unavailable right now. Please contact us to complete your booking or try again later.";
@@ -74,7 +75,15 @@ function loadSquareScript(environment: "sandbox" | "production") {
   if (window.Square) return Promise.resolve();
 
   const scriptSrc = getSquareScriptSrc(environment);
-  const existingScript = document.getElementById(SQUARE_SCRIPT_ID) as HTMLScriptElement | null;
+  let existingScript = document.getElementById(SQUARE_SCRIPT_ID) as HTMLScriptElement | null;
+
+  if (
+    existingScript &&
+    (existingScript.dataset.failed === "true" || existingScript.dataset.squareEnvironment !== environment)
+  ) {
+    existingScript.remove();
+    existingScript = null;
+  }
 
   if (existingScript?.dataset.loaded === "true") {
     return Promise.resolve();
@@ -85,9 +94,14 @@ function loadSquareScript(environment: "sandbox" | "production") {
 
     const handleLoad = () => {
       script.dataset.loaded = "true";
+      delete script.dataset.failed;
       resolve();
     };
-    const handleError = () => reject(new Error("Unable to load Square payment form."));
+    const handleError = () => {
+      script.dataset.failed = "true";
+      script.remove();
+      reject(new Error("Unable to load Square payment form."));
+    };
 
     script.addEventListener("load", handleLoad, { once: true });
     script.addEventListener("error", handleError, { once: true });
@@ -100,6 +114,14 @@ function loadSquareScript(environment: "sandbox" | "production") {
       document.head.appendChild(script);
     }
   });
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+function getSquareInitRetryDelayMs(attemptIndex: number) {
+  return 150 * 2 ** attemptIndex;
 }
 
 function getTokenizationError(result: SquareTokenizeResult) {
@@ -386,7 +408,6 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     if (!hydrated) return;
 
     let cancelled = false;
-    let activeCard: SquareCard | null = null;
 
     setSquareCard(null);
     setSquareConfig(null);
@@ -396,75 +417,152 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     setSquareFallbackReason(null);
 
     (async () => {
-      try {
-        const response = await fetch("/api/payments/square/checkout-config", {
-          cache: "no-store",
-        });
-        const json = await response.json().catch(() => ({}));
+      let lastError: unknown = null;
 
-        if (cancelled) return;
+      for (let attempt = 0; attempt < MAX_SQUARE_INIT_ATTEMPTS; attempt += 1) {
+        try {
+          const response = await fetch("/api/payments/square/checkout-config", {
+            cache: "no-store",
+          });
+          const json = await response.json().catch(() => ({}));
 
-        if (!response.ok || !json?.ok) {
-          throw new Error(json?.error || "Square payment form could not be initialized.");
-        }
+          if (cancelled) return;
 
-        const tenantSquareConfig = json as SquareCheckoutConfig & { ok?: boolean };
-        setSquareConfig(tenantSquareConfig);
+          if (!response.ok || !json?.ok) {
+            throw new Error(json?.error || "Square payment form could not be initialized.");
+          }
 
-        if (!tenantSquareConfig.configured) {
-          setSquareCard(null);
-          setSquareReady(false);
-          setSquareFallbackReason(tenantSquareConfig.reason || PAYMENT_UNAVAILABLE_MESSAGE);
+          const tenantSquareConfig = json as SquareCheckoutConfig & { ok?: boolean };
+          setSquareConfig(tenantSquareConfig);
+
+          if (!tenantSquareConfig.configured) {
+            setSquareCard(null);
+            setSquareReady(false);
+            setSquareFallbackReason(tenantSquareConfig.reason || PAYMENT_UNAVAILABLE_MESSAGE);
+            setSquareLoading(false);
+            return;
+          }
+
+          setSquareLoading(true);
           return;
+        } catch (setupError) {
+          lastError = setupError;
+
+          if (cancelled) return;
+
+          if (attempt < MAX_SQUARE_INIT_ATTEMPTS - 1) {
+            await wait(getSquareInitRetryDelayMs(attempt));
+            continue;
+          }
         }
-
-        if (ENABLE_SIMULATED_CHECKOUT && tenantSquareConfig.environment === "production") {
-          console.error(
-            "NEXT_PUBLIC_ENABLE_SIMULATED_CHECKOUT is ignored when Square checkout config is production.",
-          );
-        }
-
-        await loadSquareScript(tenantSquareConfig.environment);
-
-        if (cancelled) return;
-
-        if (!window.Square) {
-          throw new Error("Square payment form is unavailable.");
-        }
-
-        const payments = window.Square.payments(
-          tenantSquareConfig.applicationId,
-          tenantSquareConfig.locationId,
-        );
-        const card = await payments.card();
-        activeCard = card;
-
-        if (cancelled) {
-          await card.destroy?.();
-          return;
-        }
-
-        await card.attach(`#${SQUARE_CARD_CONTAINER_ID}`);
-
-        if (cancelled) {
-          await card.destroy?.();
-          return;
-        }
-
-        setSquareCard(card);
-        setSquareReady(true);
-      } catch (setupError) {
-        if (cancelled) return;
-
-        setSquareError(
-          setupError instanceof Error
-            ? setupError.message
-            : "Square payment form could not be initialized.",
-        );
-        setSquareFallbackReason(PAYMENT_UNAVAILABLE_MESSAGE);
-      } finally {
-        if (!cancelled) setSquareLoading(false);
       }
+
+      if (cancelled) return;
+
+      setSquareError(
+        lastError instanceof Error
+          ? lastError.message
+          : "Square payment form could not be initialized.",
+      );
+      setSquareFallbackReason(PAYMENT_UNAVAILABLE_MESSAGE);
+      setSquareLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || squareConfig?.configured !== true) return;
+
+    let cancelled = false;
+    let activeCard: SquareCard | null = null;
+
+    setSquareCard(null);
+    setSquareReady(false);
+    setSquareLoading(true);
+    setSquareError(null);
+    setSquareFallbackReason(null);
+
+    if (ENABLE_SIMULATED_CHECKOUT && squareConfig.environment === "production") {
+      console.error(
+        "NEXT_PUBLIC_ENABLE_SIMULATED_CHECKOUT is ignored when Square checkout config is production.",
+      );
+    }
+
+    (async () => {
+      let lastError: unknown = null;
+
+      for (let attempt = 0; attempt < MAX_SQUARE_INIT_ATTEMPTS; attempt += 1) {
+        try {
+          if (!document.getElementById(SQUARE_CARD_CONTAINER_ID)) {
+            throw new Error("Square payment form container is not ready.");
+          }
+
+          await loadSquareScript(squareConfig.environment);
+
+          if (cancelled) return;
+
+          if (!window.Square) {
+            throw new Error("Square payment form is unavailable.");
+          }
+
+          const payments = window.Square.payments(
+            squareConfig.applicationId,
+            squareConfig.locationId,
+          );
+          const card = await payments.card();
+          activeCard = card;
+
+          if (cancelled) {
+            await card.destroy?.();
+            return;
+          }
+
+          if (!document.getElementById(SQUARE_CARD_CONTAINER_ID)) {
+            await card.destroy?.();
+            activeCard = null;
+            throw new Error("Square payment form container is not ready.");
+          }
+
+          await card.attach(`#${SQUARE_CARD_CONTAINER_ID}`);
+
+          if (cancelled) {
+            await card.destroy?.();
+            return;
+          }
+
+          setSquareCard(card);
+          setSquareReady(true);
+          setSquareLoading(false);
+          return;
+        } catch (setupError) {
+          lastError = setupError;
+
+          if (activeCard) {
+            await activeCard.destroy?.();
+            activeCard = null;
+          }
+
+          if (cancelled) return;
+
+          if (attempt < MAX_SQUARE_INIT_ATTEMPTS - 1) {
+            await wait(getSquareInitRetryDelayMs(attempt));
+            continue;
+          }
+        }
+      }
+
+      if (cancelled) return;
+
+      setSquareError(
+        lastError instanceof Error
+          ? lastError.message
+          : "Square payment form could not be initialized.",
+      );
+      setSquareFallbackReason(PAYMENT_UNAVAILABLE_MESSAGE);
+      setSquareLoading(false);
     })();
 
     return () => {
@@ -473,7 +571,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
       setSquareCard(null);
       void activeCard?.destroy?.();
     };
-  }, [hydrated]);
+  }, [hydrated, squareConfig]);
 
 
   const deliveryDateLabel = useMemo(
