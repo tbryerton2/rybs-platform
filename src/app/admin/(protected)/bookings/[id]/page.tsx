@@ -48,6 +48,7 @@ import {
   quickMarkDeliveredAction,
   quickMarkPickedUpAction,
   recordExternalBookingChargePaymentAction,
+  resolveBookingChargeDisputeAction,
   sendPostBookingChargeReceiptAction,
   updateAssignedDumpsterAction,
   updateNotesAction,
@@ -203,6 +204,18 @@ type BookingConsentSummary = {
   consent_version: string;
   accepted_at: string;
   created_at: string;
+};
+
+type BookingChargeDisputeSummary = {
+  id: string;
+  booking_charge_id: string;
+  customer_id: string;
+  status: "open" | "resolved";
+  customer_explanation: string;
+  resolution_notes: string | null;
+  submitted_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
 };
 
 type CustomerPaymentMethodSummary = {
@@ -658,7 +671,7 @@ function chargeStatusClasses(status: string | null | undefined) {
 function getBookingChargeStatusLabel(status: string | null | undefined) {
   switch (status) {
     case "draft":
-      return "Needs approval";
+      return "Pending review";
     case "pending":
       return "Ready to charge";
     case "paid":
@@ -820,7 +833,9 @@ function getSavedMessage(saved: string | undefined) {
     case "assigned-dumpster":
       return "Planned dumpster saved.";
     case "charge":
-      return "Charge saved for approval.";
+      return "Charge saved for review.";
+    case "dispute-resolved":
+      return "Dispute resolved.";
     case "charge-ready":
       return "Charge marked ready to charge.";
     case "charge-paid":
@@ -832,8 +847,9 @@ function getSavedMessage(saved: string | undefined) {
 
 function getChargeSuccessMessage(saved: string | undefined) {
   if (saved === "charge-paid") return "Payment request submitted to Square.";
-  if (saved === "charge") return "Charge saved for approval.";
+  if (saved === "charge") return "Charge saved for review.";
   if (saved === "charge-ready") return "Charge marked ready to charge.";
+  if (saved === "dispute-resolved") return "Dispute resolved.";
   return null;
 }
 
@@ -1194,10 +1210,10 @@ export default async function AdminBookingDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ saved?: string; placementError?: string; assignmentError?: string; chargeError?: string }>;
+  searchParams: Promise<{ saved?: string; placementError?: string; assignmentError?: string; chargeError?: string; disputeError?: string }>;
 }) {
   const { id } = await params;
-  const { saved, placementError, assignmentError, chargeError } = await searchParams;
+  const { saved, placementError, assignmentError, chargeError, disputeError } = await searchParams;
 
     const bookingSelect = `
       id,
@@ -1334,6 +1350,7 @@ export default async function AdminBookingDetailPage({
     latestBookingPaymentsResultRaw,
     bookingChargesResult,
     bookingChargePaymentsResultRaw,
+    bookingChargeDisputesResult,
     bookingConsentsResult,
     customerPaymentMethodsResult,
   ] = await Promise.all([
@@ -1418,6 +1435,12 @@ export default async function AdminBookingDetailPage({
       .order("created_at", { ascending: false })
       .limit(50),
     supabaseAdmin
+      .from("booking_charge_disputes")
+      .select("id, booking_charge_id, customer_id, status, customer_explanation, resolution_notes, submitted_at, resolved_at, resolved_by")
+      .eq("business_id", businessId)
+      .eq("booking_id", booking.id)
+      .order("submitted_at", { ascending: false }),
+    supabaseAdmin
       .from("booking_consents")
       .select("id, consent_type, consent_version, accepted_at, created_at")
       .eq("business_id", businessId)
@@ -1493,6 +1516,9 @@ export default async function AdminBookingDetailPage({
   if (bookingChargePaymentsResult.error && !isBookingSchemaError(bookingChargePaymentsResult.error)) {
     throw new Error(bookingChargePaymentsResult.error.message ?? "Unable to load booking charge payments.");
   }
+  if (bookingChargeDisputesResult.error && !isBookingSchemaError(bookingChargeDisputesResult.error)) {
+    throw new Error(bookingChargeDisputesResult.error.message ?? "Unable to load booking charge disputes.");
+  }
   if (bookingConsentsResult.error && !isBookingSchemaError(bookingConsentsResult.error)) {
     throw new Error(bookingConsentsResult.error.message);
   }
@@ -1536,6 +1562,9 @@ export default async function AdminBookingDetailPage({
   const bookingCharges = isBookingSchemaError(bookingChargesResult.error)
     ? []
     : ((bookingChargesResult.data ?? []) as BookingChargeSummary[]);
+  const bookingChargeDisputes = isBookingSchemaError(bookingChargeDisputesResult.error)
+    ? []
+    : ((bookingChargeDisputesResult.data ?? []) as BookingChargeDisputeSummary[]);
   const bookingChargePayments = isBookingSchemaError(bookingChargePaymentsResult.error)
     ? []
     : ((bookingChargePaymentsResult.data ?? []) as BookingPaymentSummary[]).filter(
@@ -1553,6 +1582,12 @@ export default async function AdminBookingDetailPage({
     if (payment.booking_charge_id && !latestChargePaymentByChargeId.has(payment.booking_charge_id)) {
       latestChargePaymentByChargeId.set(payment.booking_charge_id, payment);
     }
+  }
+  const disputesByChargeId = new Map<string, BookingChargeDisputeSummary[]>();
+  for (const dispute of bookingChargeDisputes) {
+    const existing = disputesByChargeId.get(dispute.booking_charge_id) ?? [];
+    existing.push(dispute);
+    disputesByChargeId.set(dispute.booking_charge_id, existing);
   }
   const paymentMethodById = new Map(customerPaymentMethods.map((method) => [method.id, method]));
   const rentalTermsConsent = getLatestConsent(bookingConsents, "rental_terms");
@@ -1597,7 +1632,7 @@ export default async function AdminBookingDetailPage({
   const savedCardChargeActionLabel = !cardOnFileConsentAccepted
     ? "Authorization not available"
     : savedCardAvailable
-      ? "Approve & charge saved card"
+      ? "Review & charge saved card"
       : "No saved card available";
   const savedCardChargeSupport = !cardOnFileConsentAccepted
     ? "The customer did not authorize post-rental card charges."
@@ -2401,7 +2436,7 @@ export default async function AdminBookingDetailPage({
                       color: "#854F0B",
                     }}
                   >
-                    Needs approval
+                    Pending review
                   </span>
                 ) : (
                   <span
@@ -2423,7 +2458,7 @@ export default async function AdminBookingDetailPage({
               ) : null}
               {hasPendingAdditionalCharges ? (
                 <div className="mt-2 text-[13px] font-medium text-[#854F0B]">
-                  + {formatUsdFromCents(pendingAdditionalChargesCents)} pending approval
+                  + {formatUsdFromCents(pendingAdditionalChargesCents)} pending review
                 </div>
               ) : null}
             </div>
@@ -2473,6 +2508,12 @@ export default async function AdminBookingDetailPage({
               </div>
             ) : null}
 
+            {disputeError ? (
+              <div className="rounded-[14px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                {disputeError}
+              </div>
+            ) : null}
+
             <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white">
               <div className="divide-y divide-slate-200">
                 <div className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -2505,6 +2546,7 @@ export default async function AdminBookingDetailPage({
 
                 {bookingCharges.map((charge) => {
                   const chargePayment = latestChargePaymentByChargeId.get(charge.id) ?? null;
+                  const chargeDisputes = disputesByChargeId.get(charge.id) ?? [];
                   const chargePaymentMethod = charge.customer_payment_method_id
                     ? paymentMethodById.get(charge.customer_payment_method_id) ?? savedPaymentMethod
                     : savedPaymentMethod;
@@ -2598,6 +2640,73 @@ export default async function AdminBookingDetailPage({
                             <div className="mt-2 text-sm text-slate-500">
                               Payment attempt: {formatTitleLabel(chargePayment.status)}
                               {chargePayment.created_at ? ` on ${formatDateTime(chargePayment.created_at)}` : ""}.
+                            </div>
+                          ) : null}
+                          {chargeDisputes.length ? (
+                            <div className="mt-4 space-y-3">
+                              {chargeDisputes.map((dispute) => (
+                                <div
+                                  key={dispute.id}
+                                  className="rounded-[14px] border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-slate-700"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="font-semibold text-slate-900">
+                                      Customer dispute {dispute.status === "open" ? "open" : "resolved"}
+                                    </div>
+                                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                                      {formatTitleLabel(dispute.status)}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2">
+                                    <span className="font-medium text-slate-600">Submitted:</span>{" "}
+                                    {formatDateTime(dispute.submitted_at)}
+                                  </div>
+                                  <div className="mt-2">
+                                    <span className="font-medium text-slate-600">Customer explanation:</span>{" "}
+                                    {dispute.customer_explanation}
+                                  </div>
+                                  {dispute.resolution_notes ? (
+                                    <div className="mt-2">
+                                      <span className="font-medium text-slate-600">Resolution notes:</span>{" "}
+                                      {dispute.resolution_notes}
+                                    </div>
+                                  ) : null}
+                                  {dispute.resolved_at ? (
+                                    <div className="mt-2 text-slate-500">Resolved {formatDateTime(dispute.resolved_at)}</div>
+                                  ) : null}
+                                  {dispute.status === "open" ? (
+                                    <form action={resolveBookingChargeDisputeAction} className="mt-3 space-y-3">
+                                      <input type="hidden" name="bookingId" value={booking.id} />
+                                      <input type="hidden" name="disputeId" value={dispute.id} />
+                                      <label className="block">
+                                        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                          Resolution notes
+                                        </span>
+                                        <textarea
+                                          name="resolutionNotes"
+                                          rows={3}
+                                          required
+                                          minLength={5}
+                                          className="w-full rounded-[14px] border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-slate-400"
+                                          placeholder="Summarize the outcome for the customer record."
+                                        />
+                                      </label>
+                                      <FormSubmitButton
+                                        loadingLabel="Resolving..."
+                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold"
+                                        style={{
+                                          background: "#1f2937",
+                                          border: "none",
+                                          borderRadius: "var(--radius)",
+                                          color: "#ffffff",
+                                        }}
+                                      >
+                                        Resolve dispute
+                                      </FormSubmitButton>
+                                    </form>
+                                  ) : null}
+                                </div>
+                              ))}
                             </div>
                           ) : null}
                           {charge.status === "pending" ? (
@@ -2700,10 +2809,10 @@ export default async function AdminBookingDetailPage({
                     textTransform: "none",
                   }}
                 >
-                  Add charge for approval
+                  Add charge for review
                 </div>
                 <div className="mt-1 text-sm" style={{ color: "var(--text-secondary)" }}>
-                  Document an additional charge. The customer will not be charged until it is approved.
+                  Document an additional charge. The customer will not be charged until it is reviewed.
                 </div>
               </div>
 
@@ -2760,7 +2869,7 @@ export default async function AdminBookingDetailPage({
                   loadingLabel="Saving charge..."
                   className={PRIMARY_ACTION_BUTTON_CLASS}
                 >
-                  Save charge for approval
+                  Save charge for review
                 </FormSubmitButton>
               </div>
             </form>

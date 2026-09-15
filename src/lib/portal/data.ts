@@ -45,6 +45,28 @@ export type PortalBookingRequest = {
   submitted_at: string;
 };
 
+export type PortalBookingCharge = {
+  id: string;
+  charge_type: string;
+  description: string | null;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  evidence_notes: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
+export type PortalBookingChargeDispute = {
+  id: string;
+  booking_charge_id: string;
+  status: "open" | "resolved";
+  customer_explanation: string;
+  resolution_notes: string | null;
+  submitted_at: string;
+  resolved_at: string | null;
+};
+
 export type PortalLocation = {
   id: string;
   label: string;
@@ -198,7 +220,12 @@ export async function getPortalBookings(customerId: string) {
 
 export async function getPortalRental(customerId: string, bookingId: string) {
   const tenant = await getCurrentTenant();
-  const [{ data: booking, error: bookingError }, { data: requests, error: requestsError }] =
+  const [
+    { data: booking, error: bookingError },
+    { data: requests, error: requestsError },
+    { data: charges, error: chargesError },
+    { data: disputes, error: disputesError },
+  ] =
     await Promise.all([
       supabaseAdmin
         .from("bookings")
@@ -217,21 +244,46 @@ export async function getPortalRental(customerId: string, bookingId: string) {
         .eq("business_id", tenant.id)
         .eq("booking_id", bookingId)
         .order("submitted_at", { ascending: false }),
+      supabaseAdmin
+        .from("booking_charges")
+        .select("id, charge_type, description, amount_cents, currency, status, evidence_notes, paid_at, created_at")
+        .eq("business_id", tenant.id)
+        .eq("booking_id", bookingId)
+        .eq("status", "paid")
+        .order("paid_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false }),
+      supabaseAdmin
+        .from("booking_charge_disputes")
+        .select("id, booking_charge_id, status, customer_explanation, resolution_notes, submitted_at, resolved_at")
+        .eq("business_id", tenant.id)
+        .eq("booking_id", bookingId)
+        .eq("customer_id", customerId)
+        .order("submitted_at", { ascending: false }),
     ]);
 
   if (bookingError) throw new Error(bookingError.message);
   if (requestsError && !isPortalSchemaError(requestsError)) {
     throw new Error(requestsError.message);
   }
+  if (chargesError && !isPortalSchemaError(chargesError)) {
+    throw new Error(chargesError.message);
+  }
+  if (disputesError && !isPortalSchemaError(disputesError)) {
+    throw new Error(disputesError.message);
+  }
 
   if (!booking) return null;
 
   const requestRows = requestsError ? [] : ((requests ?? []) as PortalBookingRequest[]);
+  const chargeRows = chargesError ? [] : ((charges ?? []) as PortalBookingCharge[]);
+  const disputeRows = disputesError ? [] : ((disputes ?? []) as PortalBookingChargeDispute[]);
   const bookingSummary = withPortalRequestSummary(booking as PortalBooking, requestRows);
 
   return {
     booking: bookingSummary,
     requests: requestRows,
+    charges: chargeRows,
+    disputes: disputeRows,
     pickupEligibility: bookingSummary.pickupEligibility,
     extensionEligibility: bookingSummary.extensionEligibility,
     issueReportEligibility: bookingSummary.issueReportEligibility,

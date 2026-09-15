@@ -25,6 +25,7 @@ import { getPortalRentalLabel } from "@/lib/portal/rental-number";
 import { getPortalStageLabel } from "@/lib/portal/status";
 import type { PortalBookingRequest } from "@/lib/portal/data";
 import { formatUsdFromCents } from "@/lib/money";
+import { submitBookingChargeDisputeAction } from "./actions";
 import { PortalShell } from "../../_components/portal-shell";
 import { PortalStatusBadge } from "../../_components/portal-status-badge";
 import { RentalTimeline } from "../../_components/rental-timeline";
@@ -79,7 +80,33 @@ function getSubmissionMessage(searchParams: SearchParams) {
   if (submitted === "issue") {
     return "Your issue report was submitted.";
   }
+  if (submitted === "charge-dispute") {
+    return "Your dispute was submitted. The business will review it and follow up.";
+  }
   return null;
+}
+
+function getDisputeErrorMessage(searchParams: SearchParams) {
+  return readValue(searchParams, "disputeError") ?? null;
+}
+
+function getBookingChargeTypeLabel(chargeType: string | null | undefined) {
+  switch (chargeType) {
+    case "weight_overage":
+      return "Weight overage";
+    case "damage":
+      return "Damage";
+    case "extra_day":
+      return "Extra day";
+    case "trip_fee":
+      return "Trip fee";
+    case "prohibited_material":
+      return "Prohibited material";
+    case "manual_adjustment":
+      return "Manual adjustment";
+    default:
+      return "Additional charge";
+  }
 }
 
 function formatAddressLine(parts: Array<string | null | undefined>, fallback = "Not provided") {
@@ -269,8 +296,10 @@ export default async function PortalRentalDetailPage({
 
   if (!rental) notFound();
 
-  const { booking, requests, pickupEligibility, extensionEligibility, issueReportEligibility } = rental;
+  const { booking, requests, charges, disputes, pickupEligibility, extensionEligibility, issueReportEligibility } = rental;
   const submissionMessage = getSubmissionMessage(resolvedSearchParams);
+  const disputeError = getDisputeErrorMessage(resolvedSearchParams);
+  const disputesByChargeId = new Map(disputes.map((dispute) => [dispute.booking_charge_id, dispute]));
   const reorderEligible = canReorderBooking(booking.status);
   const bookingCustomerName = combineCustomerNameParts(booking.customer_first_name, booking.customer_last_name);
   const bookingContactDiffers =
@@ -399,11 +428,119 @@ export default async function PortalRentalDetailPage({
 
           <InfoCard title="Financial Summary" icon={CurrencyDollarIcon}>
             <InfoItem label="Rental total" value={formatUsdFromCents(booking.total_price_cents)} />
-            <InfoItem label="Billing details" value="Included in your booking confirmation" />
+            <InfoItem
+              label="Additional charges"
+              value={charges.length ? `${charges.length} paid charge${charges.length === 1 ? "" : "s"}` : "None recorded"}
+            />
             <InfoItem label="Billing questions" value="Use Report an issue for support" />
             <InfoItem label="Rebook this setup" value={reorderEligible ? "Available" : "Not available yet"} />
           </InfoCard>
         </section>
+
+        {charges.length ? (
+          <section
+            id="additional-charges"
+            className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Additional charges</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  Paid post-rental charges for this booking.
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                {charges.length} paid
+              </span>
+            </div>
+
+            {disputeError ? (
+              <div className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+                {disputeError}
+              </div>
+            ) : null}
+
+            <div className="mt-5 space-y-4">
+              {charges.map((charge) => {
+                const dispute = disputesByChargeId.get(charge.id) ?? null;
+                const disputeOpen = dispute?.status === "open";
+                const disputeResolved = dispute?.status === "resolved";
+
+                return (
+                  <div key={charge.id} className="rounded-[24px] border border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">
+                          {getBookingChargeTypeLabel(charge.charge_type)}
+                        </div>
+                        <div className="mt-1 text-sm leading-6 text-slate-600">
+                          {charge.description || "Additional rental charge"}
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-emerald-700">
+                          Paid{charge.paid_at ? ` on ${formatDateTime(charge.paid_at)}` : ""}
+                        </div>
+                      </div>
+                      <div className="text-base font-semibold text-slate-900">
+                        {formatUsdFromCents(charge.amount_cents)}
+                      </div>
+                    </div>
+
+                    {dispute ? (
+                      <div className="mt-4 rounded-2xl border border-amber-100 bg-white px-4 py-3 text-sm leading-6 text-slate-600">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold text-slate-900">
+                            {disputeOpen ? "Dispute under review" : "Dispute resolved"}
+                          </span>
+                          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                            {disputeOpen ? "Open" : "Resolved"}
+                          </span>
+                        </div>
+                        <div className="mt-2">
+                          <span className="font-medium text-slate-700">Your explanation:</span>{" "}
+                          {dispute.customer_explanation}
+                        </div>
+                        {disputeResolved && dispute.resolution_notes ? (
+                          <div className="mt-2">
+                            <span className="font-medium text-slate-700">Resolution:</span>{" "}
+                            {dispute.resolution_notes}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <form action={submitBookingChargeDisputeAction} className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <input type="hidden" name="booking_id" value={booking.id} />
+                        <input type="hidden" name="booking_charge_id" value={charge.id} />
+                        <label className="block">
+                          <span className="text-sm font-semibold text-slate-900">Dispute this charge</span>
+                          <textarea
+                            name="explanation"
+                            rows={3}
+                            required
+                            minLength={10}
+                            maxLength={2000}
+                            placeholder="Tell us what looks wrong or what you need reviewed."
+                            className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                          />
+                        </label>
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs leading-5 text-slate-500">
+                            Submitting a dispute does not automatically refund or reverse the payment.
+                          </p>
+                          <button
+                            type="submit"
+                            className="inline-flex w-full items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 sm:w-auto"
+                          >
+                            Submit dispute
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
           <div className="space-y-6">
