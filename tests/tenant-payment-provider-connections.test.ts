@@ -27,6 +27,7 @@ const originalEnv = {
   squareAccessToken: process.env.SQUARE_ACCESS_TOKEN,
   squareApplicationId: process.env.SQUARE_APPLICATION_ID,
   squareOauthApplicationId: process.env.SQUARE_OAUTH_APPLICATION_ID,
+  nextPublicSquareApplicationId: process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID,
   squareOauthApplicationSecret: process.env.SQUARE_OAUTH_APPLICATION_SECRET,
   squareOauthRedirectUrl: process.env.SQUARE_OAUTH_REDIRECT_URL,
   nextPublicSiteUrl: process.env.NEXT_PUBLIC_SITE_URL,
@@ -48,6 +49,7 @@ beforeEach(() => {
   process.env.SQUARE_ACCESS_TOKEN = "legacy-square-token";
   process.env.SQUARE_APPLICATION_ID = "sandbox-square-application-id";
   process.env.SQUARE_OAUTH_APPLICATION_ID = "sandbox-square-oauth-application-id";
+  process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID = "legacy-public-square-application-id";
   process.env.SQUARE_OAUTH_APPLICATION_SECRET = "square-oauth-application-secret";
   process.env.NEXT_PUBLIC_SITE_URL = "https://app.rybs.example";
   delete process.env.SQUARE_OAUTH_REDIRECT_URL;
@@ -60,6 +62,7 @@ afterEach(() => {
   restoreEnv("SQUARE_ACCESS_TOKEN", originalEnv.squareAccessToken);
   restoreEnv("SQUARE_APPLICATION_ID", originalEnv.squareApplicationId);
   restoreEnv("SQUARE_OAUTH_APPLICATION_ID", originalEnv.squareOauthApplicationId);
+  restoreEnv("NEXT_PUBLIC_SQUARE_APPLICATION_ID", originalEnv.nextPublicSquareApplicationId);
   restoreEnv("SQUARE_OAUTH_APPLICATION_SECRET", originalEnv.squareOauthApplicationSecret);
   restoreEnv("SQUARE_OAUTH_REDIRECT_URL", originalEnv.squareOauthRedirectUrl);
   restoreEnv("NEXT_PUBLIC_SITE_URL", originalEnv.nextPublicSiteUrl);
@@ -324,4 +327,66 @@ test("getSquareCheckoutConfigurationForBusiness returns only browser-safe Square
     locationId: "location-1",
   });
   assert.equal("accessToken" in config, false);
+});
+
+test("getSquareCheckoutConfigurationForBusiness does not use legacy app IDs for tenant Square connections", async () => {
+  delete process.env.SQUARE_OAUTH_APPLICATION_ID;
+  process.env.SQUARE_APPLICATION_ID = "legacy-square-application-id";
+  process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID = "legacy-public-square-application-id";
+
+  const encrypted = encryptPaymentProviderToken("tenant-square-token");
+  const mock = createMockSupabase([
+    {
+      id: CONNECTION_ID,
+      business_id: BUSINESS_ID,
+      provider: "square",
+      provider_environment: "sandbox",
+      status: "active",
+      provider_merchant_id: "merchant-1",
+      provider_location_id: "location-1",
+      encrypted_access_token: encrypted.encryptedToken,
+      token_cipher_version: encrypted.cipherVersion,
+      token_cipher_key_id: encrypted.keyId,
+    },
+  ]);
+
+  const config = await getSquareCheckoutConfigurationForBusiness(
+    { businessId: BUSINESS_ID },
+    { supabase: mock.client, getTenantById: async () => null },
+  );
+
+  assert.deepEqual(config, {
+    configured: false,
+    provider: "square",
+    reason: "Online card payment is unavailable right now.",
+  });
+});
+
+test("getSquareCheckoutConfigurationForBusiness keeps legacy public app IDs for Tan Can Man fallback", async () => {
+  delete process.env.SQUARE_OAUTH_APPLICATION_ID;
+  delete process.env.SQUARE_APPLICATION_ID;
+  process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID = "legacy-public-square-application-id";
+
+  const missingTable = { code: "42P01", message: "relation does not exist" };
+  const config = await getSquareCheckoutConfigurationForBusiness(
+    { businessId: BUSINESS_ID },
+    {
+      supabase: createMockSupabase([], missingTable).client,
+      getTenantById: async () => ({
+        id: BUSINESS_ID,
+        slug: "tan-can-man",
+        status: "active",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      }),
+    },
+  );
+
+  assert.deepEqual(config, {
+    configured: true,
+    provider: "square",
+    environment: "sandbox",
+    applicationId: "legacy-public-square-application-id",
+    locationId: "legacy-location",
+  });
 });

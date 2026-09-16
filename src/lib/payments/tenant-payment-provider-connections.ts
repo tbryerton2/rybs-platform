@@ -25,8 +25,8 @@ const TOKEN_KEY_ENV_NAMES = [
   "PAYMENT_PROVIDER_TOKEN_ENCRYPTION_KEY",
   "SQUARE_OAUTH_TOKEN_ENCRYPTION_KEY",
 ] as const;
-const SQUARE_OAUTH_APPLICATION_ID_ENV_NAMES = [
-  "SQUARE_OAUTH_APPLICATION_ID",
+const SQUARE_OAUTH_APPLICATION_ID_ENV_NAMES = ["SQUARE_OAUTH_APPLICATION_ID"] as const;
+const LEGACY_SQUARE_APPLICATION_ID_ENV_NAMES = [
   "SQUARE_APPLICATION_ID",
   "NEXT_PUBLIC_SQUARE_APPLICATION_ID",
 ] as const;
@@ -261,8 +261,20 @@ function getLegacySquareLocationId() {
   return locationId;
 }
 
-function getSquareApplicationId() {
+function getSquareOAuthApplicationId() {
   return firstConfiguredEnv(SQUARE_OAUTH_APPLICATION_ID_ENV_NAMES)?.value ?? null;
+}
+
+function getLegacySquareApplicationId() {
+  return firstConfiguredEnv(LEGACY_SQUARE_APPLICATION_ID_ENV_NAMES)?.value ?? null;
+}
+
+function getSquareApplicationIdForConnection(connection: PaymentProviderConnectionContext) {
+  if (connection.mode === "tenant_connection") {
+    return getSquareOAuthApplicationId();
+  }
+
+  return getLegacySquareApplicationId() ?? getSquareOAuthApplicationId();
 }
 
 function getSquareApplicationSecret() {
@@ -396,7 +408,7 @@ function tokenEncryptionKeyIsConfigured() {
 
 export function getSquareOAuthConfigurationStatus(): SquareOAuthConfigurationStatus {
   const environment = getConfiguredSquareEnvironment();
-  const applicationId = getSquareApplicationId();
+  const applicationId = getSquareOAuthApplicationId();
   const applicationSecret = getSquareApplicationSecret();
   const redirectUrl = getConfiguredRedirectUrl();
   const tokenKeyConfigured = tokenEncryptionKeyIsConfigured();
@@ -427,7 +439,7 @@ export function getSquareOAuthConfigurationStatus(): SquareOAuthConfigurationSta
 
 function requireSquareOAuthConfiguration(): SquareOAuthRuntimeConfiguration {
   const status = getSquareOAuthConfigurationStatus();
-  const applicationId = getSquareApplicationId();
+  const applicationId = getSquareOAuthApplicationId();
   const applicationSecret = getSquareApplicationSecret();
   const redirectUrl = getConfiguredRedirectUrl();
 
@@ -1090,15 +1102,6 @@ export async function getSquareCheckoutConfigurationForBusiness(
   },
   options: ResolveTenantPaymentProviderConnectionOptions = {},
 ): Promise<SquareCheckoutConfiguration> {
-  const applicationId = getSquareApplicationId();
-  if (!applicationId) {
-    return {
-      configured: false,
-      provider: "square",
-      reason: "Online card payment is unavailable right now.",
-    };
-  }
-
   try {
     const connection = await resolveTenantPaymentProviderConnection(
       {
@@ -1107,6 +1110,15 @@ export async function getSquareCheckoutConfigurationForBusiness(
       },
       options,
     );
+
+    const applicationId = getSquareApplicationIdForConnection(connection);
+    if (!applicationId) {
+      return {
+        configured: false,
+        provider: "square",
+        reason: "Online card payment is unavailable right now.",
+      };
+    }
 
     return {
       configured: true,
