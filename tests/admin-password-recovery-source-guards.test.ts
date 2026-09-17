@@ -11,14 +11,45 @@ function readRepoFile(path: string) {
 
 test("business-admin forgot password sends Supabase recovery to admin update-password", () => {
   const source = readRepoFile("src/app/admin/(auth)/forgot-password/actions.ts");
+  const helper = readRepoFile("src/lib/admin/password-recovery.ts");
 
-  assert.match(source, /resetPasswordForEmail\(email,\s*\{/);
-  assert.match(source, /redirectTo/);
-  assert.match(source, /\/admin\/update-password/);
+  assert.match(source, /sendAdminPasswordRecoveryEmail\(\{/);
   assert.match(source, /NEXT_PUBLIC_SITE_URL/);
   assert.match(source, /headers\(\)/);
+  assert.match(source, /x-forwarded-host/);
+  assert.match(source, /x-forwarded-proto/);
+  assert.match(helper, /generateLink\(\{[\s\S]*type: "recovery"/);
+  assert.match(helper, /resolveTenantEmailSender/);
+  assert.match(helper, /tenantSenderSendEmailOptions/);
+  assert.match(helper, /\.from\("business_admin_memberships"\)/);
+  assert.match(helper, /\/admin\/update-password/);
   assert.doesNotMatch(source, /platform-admin/);
-  assert.doesNotMatch(source, /business_admin_memberships/);
+});
+
+test("business-admin recovery redirect prefers request host before site url", () => {
+  const source = readRepoFile("src/lib/admin/password-recovery.ts");
+
+  assert.match(source, /forwardedHost/);
+  assert.match(source, /normalizePublicHostname/);
+  assert.match(source, /requestHost[\s\S]*siteUrl/);
+  assert.match(source, /\/admin\/update-password/);
+  assert.doesNotMatch(source, /demo-preview\.rybsoftware\.com/);
+});
+
+test("business-admin recovery uses tenant-aware SES sender, not Supabase direct email", () => {
+  const action = readRepoFile("src/app/admin/(auth)/forgot-password/actions.ts");
+  const helper = readRepoFile("src/lib/admin/password-recovery.ts");
+
+  assert.doesNotMatch(action, /resetPasswordForEmail/);
+  assert.doesNotMatch(helper, /resetPasswordForEmail/);
+  assert.match(helper, /resolveTenantFromHostname\(requestHost\)/);
+  assert.match(helper, /findAuthUserByEmail\(input\.email\)/);
+  assert.match(helper, /hasActiveAdminMembership/);
+  assert.match(helper, /businessId: tenant\.id/);
+  assert.match(helper, /authUserId: authUser\.id/);
+  assert.match(helper, /buildAdminPasswordRecoveryEmail/);
+  assert.match(helper, /sendEmail\(\{/);
+  assert.doesNotMatch(helper, /Tan Can Man/);
 });
 
 test("business-admin update password consumes recovery session and updates Supabase password", () => {

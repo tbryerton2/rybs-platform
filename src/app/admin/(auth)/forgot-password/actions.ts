@@ -2,35 +2,23 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createAdminAuthClient } from "@/lib/admin/auth";
+import { sendAdminPasswordRecoveryEmail } from "@/lib/admin/password-recovery";
 import { normalizeEmail } from "@/lib/customers";
 
 function cleanEmail(value: FormDataEntryValue | null) {
   return normalizeEmail(typeof value === "string" ? value : "");
 }
 
-function normalizeProtocol(value: string | null) {
-  const protocol = String(value ?? "").split(",")[0]?.trim().toLowerCase();
-  return protocol === "https" || protocol === "http" ? protocol : null;
-}
-
-async function getAdminPasswordRecoveryRedirectUrl() {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (siteUrl) {
-    return new URL("/admin/update-password", siteUrl).toString();
-  }
-
+async function getAdminPasswordRecoveryRequestContext() {
   const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
-  const protocol =
-    normalizeProtocol(headerStore.get("x-forwarded-proto")) ??
-    (process.env.NODE_ENV === "production" ? "https" : "http");
 
-  if (!host) {
-    return "http://localhost:3000/admin/update-password";
-  }
-
-  return new URL("/admin/update-password", `${protocol}://${host}`).toString();
+  return {
+    forwardedHost: headerStore.get("x-forwarded-host"),
+    host: headerStore.get("host"),
+    forwardedProto: headerStore.get("x-forwarded-proto"),
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+    nodeEnv: process.env.NODE_ENV,
+  };
 }
 
 export async function sendAdminPasswordResetAction(formData: FormData) {
@@ -40,13 +28,16 @@ export async function sendAdminPasswordResetAction(formData: FormData) {
     redirect("/admin/forgot-password?error=invalid-email");
   }
 
-  const authClient = createAdminAuthClient();
-  const redirectTo = await getAdminPasswordRecoveryRedirectUrl();
-  const { error } = await authClient.auth.resetPasswordForEmail(email, {
-    redirectTo,
-  });
-
-  if (error) {
+  try {
+    await sendAdminPasswordRecoveryEmail({
+      email,
+      ...(await getAdminPasswordRecoveryRequestContext()),
+    });
+  } catch (error) {
+    console.warn("[admin-password-recovery] reset email failed", {
+      email,
+      message: error instanceof Error ? error.message : "unknown",
+    });
     redirect(`/admin/forgot-password?error=send-failed&email=${encodeURIComponent(email)}`);
   }
 
