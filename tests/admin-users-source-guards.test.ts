@@ -37,6 +37,9 @@ test("tenant admin users service uses selected business context and tenant-aware
   assert.match(service, /p_business_id: session\.business\.id/);
   assert.match(service, /generateLink\(\{[\s\S]*type: "invite"/);
   assert.match(service, /generateLink\(\{[\s\S]*type: "magiclink"/);
+  assert.match(service, /options:\s*\{[\s\S]*redirectTo/);
+  assert.match(service, /resendBusinessAdminInvitation[\s\S]*!isPendingInvite\(authUser\)/);
+  assert.match(service, /Only pending invitations can be resent/);
   assert.match(service, /resolveTenantEmailSender/);
   assert.match(service, /tenantSenderSendEmailOptions/);
   assert.match(service, /buildAdminUserInviteEmail/);
@@ -46,6 +49,20 @@ test("tenant admin users service uses selected business context and tenant-aware
   assert.match(service, /\/admin\/accept-invite/);
   assert.doesNotMatch(service, /inviteUserByEmail/);
   assert.doesNotMatch(service, /Tan Can Man/);
+});
+
+test("tenant admin user mutations are bounded and surface clear failures", () => {
+  const service = readRepoFile("src/lib/admin/users.ts");
+  const actions = readRepoFile("src/app/admin/(protected)/settings/users/actions.ts");
+
+  assert.match(service, /ADMIN_USER_REQUEST_TIMEOUT_MS/);
+  assert.match(service, /withAdminUserRequestTimeout/);
+  assert.match(service, /Removing admin access/);
+  assert.match(service, /taking longer than expected/);
+  assert.match(service, /mapDatabaseMutationError\(membershipError\)/);
+  assert.match(actions, /redirectUnexpectedMutationError/);
+  assert.match(actions, /unexpected_mutation_error/);
+  assert.match(actions, /revalidatePath\("\/admin\/settings\/users"\);[\s\S]*redirect\("\/admin\/settings\/users\?status=removed"\)/);
 });
 
 test("tenant users page exposes phase one controls without accepting forged business ids", () => {

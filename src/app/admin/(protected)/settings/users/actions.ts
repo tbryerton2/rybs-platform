@@ -19,41 +19,56 @@ function redirectMutationError(error: BusinessAdminUserMutationError): never {
   redirect(`/admin/settings/users?error=${encodeURIComponent(error.message)}`);
 }
 
+function redirectUnexpectedMutationError(error: unknown): never {
+  console.error("[admin-users-action]", {
+    event: "unexpected_mutation_error",
+    message: error instanceof Error ? error.message : String(error),
+  });
+
+  redirect(
+    `/admin/settings/users?error=${encodeURIComponent("We could not update Users. Try again in a moment.")}`,
+  );
+}
+
 export async function inviteBusinessAdminUserAction(formData: FormData) {
+  let result: Awaited<ReturnType<typeof inviteBusinessAdminUser>>;
+
   try {
-    const result = await inviteBusinessAdminUser({
+    result = await inviteBusinessAdminUser({
       email: formString(formData, "email"),
       role: formString(formData, "role"),
     });
-
-    revalidatePath("/admin/settings/users");
-    redirect(
-      `/admin/settings/users?status=${result.pending ? "invited" : "granted"}&email=${encodeURIComponent(result.email)}`,
-    );
   } catch (error) {
     if (error instanceof BusinessAdminUserMutationError) {
       redirectMutationError(error);
     }
 
-    throw error;
+    redirectUnexpectedMutationError(error);
   }
+
+  revalidatePath("/admin/settings/users");
+  redirect(
+    `/admin/settings/users?status=${result.pending ? "invited" : "granted"}&email=${encodeURIComponent(result.email)}`,
+  );
 }
 
 export async function resendBusinessAdminInvitationAction(formData: FormData) {
+  let result: Awaited<ReturnType<typeof resendBusinessAdminInvitation>>;
+
   try {
-    const result = await resendBusinessAdminInvitation({
+    result = await resendBusinessAdminInvitation({
       membershipId: formString(formData, "membershipId"),
     });
-
-    revalidatePath("/admin/settings/users");
-    redirect(`/admin/settings/users?status=resent&email=${encodeURIComponent(result.email)}`);
   } catch (error) {
     if (error instanceof BusinessAdminUserMutationError) {
       redirectMutationError(error);
     }
 
-    throw error;
+    redirectUnexpectedMutationError(error);
   }
+
+  revalidatePath("/admin/settings/users");
+  redirect(`/admin/settings/users?status=resent&email=${encodeURIComponent(result.email)}`);
 }
 
 export async function updateBusinessAdminUserRoleAction(formData: FormData) {
@@ -62,16 +77,16 @@ export async function updateBusinessAdminUserRoleAction(formData: FormData) {
       membershipId: formString(formData, "membershipId"),
       role: formString(formData, "role"),
     });
-
-    revalidatePath("/admin/settings/users");
-    redirect("/admin/settings/users?status=role-updated");
   } catch (error) {
     if (error instanceof BusinessAdminUserMutationError) {
       redirectMutationError(error);
     }
 
-    throw error;
+    redirectUnexpectedMutationError(error);
   }
+
+  revalidatePath("/admin/settings/users");
+  redirect("/admin/settings/users?status=role-updated");
 }
 
 export async function disableBusinessAdminUserAction(formData: FormData) {
@@ -80,14 +95,14 @@ export async function disableBusinessAdminUserAction(formData: FormData) {
       membershipId: formString(formData, "membershipId"),
       confirmationEmail: formString(formData, "confirmationEmail"),
     });
-
-    revalidatePath("/admin/settings/users");
-    redirect("/admin/settings/users?status=removed");
   } catch (error) {
     if (error instanceof BusinessAdminUserMutationError) {
       redirectMutationError(error);
     }
 
-    throw error;
+    redirectUnexpectedMutationError(error);
   }
+
+  revalidatePath("/admin/settings/users");
+  redirect("/admin/settings/users?status=removed");
 }

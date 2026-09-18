@@ -56,6 +56,8 @@ type AdminUserEmailMessage = {
   useDefaultReplyTo?: boolean;
 };
 
+const ADMIN_USER_REQUEST_TIMEOUT_MS = 15_000;
+
 export type BusinessAdminUser = {
   membershipId: string;
   authUserId: string;
@@ -87,6 +89,30 @@ export class BusinessAdminUserMutationError extends Error {
     super(message);
     this.name = "BusinessAdminUserMutationError";
     this.code = code;
+  }
+}
+
+async function withAdminUserRequestTimeout<T>(promise: PromiseLike<T>, operation: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(
+            new BusinessAdminUserMutationError(
+              "database_error",
+              `${operation} is taking longer than expected. Refresh Users to check whether it completed, then try again.`,
+            ),
+          );
+        }, ADMIN_USER_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 }
 
@@ -143,10 +169,13 @@ async function listAuthUsersById() {
   const maxPages = 20;
 
   for (let page = 1; page <= maxPages; page += 1) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page,
-      perPage,
-    });
+    const { data, error } = await withAdminUserRequestTimeout(
+      supabaseAdmin.auth.admin.listUsers({
+        page,
+        perPage,
+      }),
+      "Listing admin users",
+    );
 
     if (error) {
       throw new BusinessAdminUserMutationError(
@@ -283,12 +312,15 @@ async function grantMembership(input: {
   targetAuthUserId: string;
   role: AdminMembershipRole;
 }) {
-  const { data, error } = await supabaseAdmin.rpc("business_admin_grant_membership", {
-    p_actor_auth_user_id: input.actorAuthUserId,
-    p_business_id: input.businessId,
-    p_target_auth_user_id: input.targetAuthUserId,
-    p_role: input.role,
-  });
+  const { data, error } = await withAdminUserRequestTimeout(
+    supabaseAdmin.rpc("business_admin_grant_membership", {
+      p_actor_auth_user_id: input.actorAuthUserId,
+      p_business_id: input.businessId,
+      p_target_auth_user_id: input.targetAuthUserId,
+      p_role: input.role,
+    }),
+    "Granting admin access",
+  );
 
   if (error) {
     mapDatabaseMutationError(error);
@@ -299,13 +331,16 @@ async function grantMembership(input: {
 
 async function generateAdminInviteLink(email: string, tenant: TenantRecord) {
   const redirectTo = await getAdminInviteRedirectTo(tenant);
-  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-    type: "invite",
-    email,
-    options: {
-      redirectTo,
-    },
-  });
+  const { data, error } = await withAdminUserRequestTimeout(
+    supabaseAdmin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: {
+        redirectTo,
+      },
+    }),
+    "Generating the admin invite",
+  );
 
   if (error || !data.user || !data.properties?.action_link) {
     throw new BusinessAdminUserMutationError(
@@ -322,13 +357,16 @@ async function generateAdminInviteLink(email: string, tenant: TenantRecord) {
 
 async function generateExistingUserAdminLink(email: string, tenant: TenantRecord) {
   const redirectTo = await getAdminInviteRedirectTo(tenant);
-  const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: {
-      redirectTo,
-    },
-  });
+  const { data, error } = await withAdminUserRequestTimeout(
+    supabaseAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: {
+        redirectTo,
+      },
+    }),
+    "Generating the admin sign-in link",
+  );
 
   if (error || !data.user || !data.properties?.action_link) {
     throw new BusinessAdminUserMutationError(
@@ -495,16 +533,19 @@ export async function resendBusinessAdminInvitation(input: {
   const session = await requireAdminBusinessOwner();
   const membershipId = normalizeMembershipId(input.membershipId);
   const usersById = await listAuthUsersById();
-  const { data: membership, error: membershipError } = await supabaseAdmin
-    .from("business_admin_memberships")
-    .select("id, business_id, auth_user_id, role, status")
-    .eq("id", membershipId)
-    .eq("business_id", session.business.id)
-    .eq("status", "active")
-    .maybeSingle();
+  const { data: membership, error: membershipError } = await withAdminUserRequestTimeout(
+    supabaseAdmin
+      .from("business_admin_memberships")
+      .select("id, business_id, auth_user_id, role, status")
+      .eq("id", membershipId)
+      .eq("business_id", session.business.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    "Loading the pending invite",
+  );
 
   if (membershipError) {
-    throw new Error(membershipError.message);
+    mapDatabaseMutationError(membershipError);
   }
 
   if (!membership) {
@@ -544,13 +585,16 @@ export async function updateBusinessAdminUserRole(input: {
   const session = await requireAdminBusinessOwner();
   const membershipId = normalizeMembershipId(input.membershipId);
   const role = normalizeBusinessAdminRole(input.role);
-  const { error } = await supabaseAdmin.rpc("business_admin_update_membership", {
-    p_actor_auth_user_id: session.user.id,
-    p_business_id: session.business.id,
-    p_membership_id: membershipId,
-    p_role: role,
-    p_status: null,
-  });
+  const { error } = await withAdminUserRequestTimeout(
+    supabaseAdmin.rpc("business_admin_update_membership", {
+      p_actor_auth_user_id: session.user.id,
+      p_business_id: session.business.id,
+      p_membership_id: membershipId,
+      p_role: role,
+      p_status: null,
+    }),
+    "Updating admin access",
+  );
 
   if (error) {
     mapDatabaseMutationError(error);
@@ -566,15 +610,18 @@ export async function disableBusinessAdminUser(input: {
   const session = await requireAdminBusinessOwner();
   const membershipId = normalizeMembershipId(input.membershipId);
   const confirmationEmail = normalizeConfirmationEmail(input.confirmationEmail);
-  const { data: membership, error: membershipError } = await supabaseAdmin
-    .from("business_admin_memberships")
-    .select("id, business_id, auth_user_id")
-    .eq("id", membershipId)
-    .eq("business_id", session.business.id)
-    .maybeSingle();
+  const { data: membership, error: membershipError } = await withAdminUserRequestTimeout(
+    supabaseAdmin
+      .from("business_admin_memberships")
+      .select("id, business_id, auth_user_id")
+      .eq("id", membershipId)
+      .eq("business_id", session.business.id)
+      .maybeSingle(),
+    "Loading admin access",
+  );
 
   if (membershipError) {
-    throw new Error(membershipError.message);
+    mapDatabaseMutationError(membershipError);
   }
 
   if (!membership) {
@@ -592,13 +639,16 @@ export async function disableBusinessAdminUser(input: {
     );
   }
 
-  const { error } = await supabaseAdmin.rpc("business_admin_update_membership", {
-    p_actor_auth_user_id: session.user.id,
-    p_business_id: session.business.id,
-    p_membership_id: membershipId,
-    p_role: null,
-    p_status: "disabled",
-  });
+  const { error } = await withAdminUserRequestTimeout(
+    supabaseAdmin.rpc("business_admin_update_membership", {
+      p_actor_auth_user_id: session.user.id,
+      p_business_id: session.business.id,
+      p_membership_id: membershipId,
+      p_role: null,
+      p_status: "disabled",
+    }),
+    "Removing admin access",
+  );
 
   if (error) {
     mapDatabaseMutationError(error);
