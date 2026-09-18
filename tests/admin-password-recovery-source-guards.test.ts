@@ -29,10 +29,13 @@ test("business-admin forgot password sends Supabase recovery to admin update-pas
 
 test("business-admin recovery redirect prefers request host before site url", () => {
   const source = readRepoFile("src/lib/admin/password-recovery.ts");
+  const redirects = readRepoFile("src/lib/admin/auth-redirects.ts");
 
-  assert.match(source, /forwardedHost/);
-  assert.match(source, /normalizePublicHostname/);
-  assert.match(source, /requestHost[\s\S]*siteUrl/);
+  assert.match(source, /AdminAuthRedirectInput/);
+  assert.match(source, /getAdminAuthRedirectUrl\("\/admin\/update-password"/);
+  assert.match(redirects, /forwardedHost/);
+  assert.match(redirects, /normalizePublicHostname/);
+  assert.match(redirects, /requestHost[\s\S]*siteUrl/);
   assert.match(source, /\/admin\/update-password/);
   assert.doesNotMatch(source, /demo-preview\.rybsoftware\.com/);
 });

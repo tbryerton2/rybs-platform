@@ -41,6 +41,8 @@ test("tenant admin users service uses selected business context and tenant-aware
   assert.match(service, /tenantSenderSendEmailOptions/);
   assert.match(service, /buildAdminUserInviteEmail/);
   assert.match(service, /getTenantCommunicationSettings\(session\.business/);
+  assert.match(service, /getAdminAuthRedirectUrl\("\/admin\/accept-invite"/);
+  assert.match(service, /getTenantPublicBaseUrl\(tenant\)/);
   assert.match(service, /\/admin\/accept-invite/);
   assert.doesNotMatch(service, /inviteUserByEmail/);
   assert.doesNotMatch(service, /Tan Can Man/);

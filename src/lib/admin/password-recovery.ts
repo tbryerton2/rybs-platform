@@ -1,7 +1,12 @@
 import "server-only";
 
+import {
+  getAdminAuthRedirectRequestHost,
+  getAdminAuthRedirectRequestProtocol,
+  getAdminAuthRedirectUrl,
+  type AdminAuthRedirectInput,
+} from "./auth-redirects.ts";
 import { buildAdminPasswordRecoveryEmail } from "../email/templates/admin-password-recovery.ts";
-import { normalizePublicHostname } from "../tenant/resolution.ts";
 import type { TenantEmailSender } from "@/lib/email/tenant-sender";
 import type { TenantRecord } from "@/lib/tenant/server";
 
@@ -22,13 +27,7 @@ type AdminRecoveryEmailMessage = {
   useDefaultReplyTo?: boolean;
 };
 
-type RecoveryRedirectInput = {
-  forwardedHost?: string | null;
-  host?: string | null;
-  forwardedProto?: string | null;
-  siteUrl?: string | null;
-  nodeEnv?: string | null;
-};
+type RecoveryRedirectInput = AdminAuthRedirectInput;
 
 export type SendAdminPasswordRecoveryInput = RecoveryRedirectInput & {
   email: string;
@@ -82,62 +81,19 @@ export type SendAdminPasswordRecoveryDeps = {
   sendEmail?: (message: AdminRecoveryEmailMessage) => Promise<unknown>;
 };
 
-function firstHeaderValue(value: string | null | undefined) {
-  return value?.split(",")[0]?.trim() || null;
-}
-
-function cleanRequestHost(value: string | null | undefined) {
-  const rawHost = firstHeaderValue(value)
-    ?.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
-    .split(/[/?#]/)[0]
-    ?.toLowerCase()
-    .replace(/\.$/, "");
-
-  if (!rawHost) return null;
-  return normalizePublicHostname(rawHost) ? rawHost : null;
-}
-
-function normalizeProtocol(value: string | null | undefined) {
-  const protocol = firstHeaderValue(value)?.toLowerCase();
-  return protocol === "https" || protocol === "http" ? protocol : null;
-}
-
-function getRequestProtocol(host: string, input: RecoveryRedirectInput) {
-  const forwardedProtocol = normalizeProtocol(input.forwardedProto);
-  if (forwardedProtocol) return forwardedProtocol;
-
-  if (host.includes("localhost") || host.startsWith("127.0.0.1") || host.startsWith("[::1]")) {
-    return "http";
-  }
-
-  return input.nodeEnv === "production" ? "https" : "http";
-}
-
 export function getAdminPasswordRecoveryRequestHost(input: RecoveryRedirectInput) {
-  return cleanRequestHost(input.forwardedHost) ?? cleanRequestHost(input.host);
+  return getAdminAuthRedirectRequestHost(input);
 }
 
 export function getAdminPasswordRecoveryRequestProtocol(
   host: string,
   input: RecoveryRedirectInput,
 ) {
-  return getRequestProtocol(host, input);
+  return getAdminAuthRedirectRequestProtocol(host, input);
 }
 
 export function getAdminPasswordRecoveryRedirectUrl(input: RecoveryRedirectInput) {
-  const requestHost = getAdminPasswordRecoveryRequestHost(input);
-
-  if (requestHost) {
-    const protocol = getRequestProtocol(requestHost, input);
-    return new URL("/admin/update-password", `${protocol}://${requestHost}`).toString();
-  }
-
-  const siteUrl = input.siteUrl?.trim();
-  if (siteUrl) {
-    return new URL("/admin/update-password", siteUrl).toString();
-  }
-
-  return "http://localhost:3000/admin/update-password";
+  return getAdminAuthRedirectUrl("/admin/update-password", input);
 }
 
 async function defaultResolveTenantFromHostname(hostname: string) {

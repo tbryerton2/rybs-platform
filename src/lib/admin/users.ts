@@ -3,6 +3,12 @@ import "server-only";
 import { headers } from "next/headers";
 import type { User } from "@supabase/supabase-js";
 import {
+  getAdminAuthRedirectRequestHost,
+  getAdminAuthRedirectRequestProtocol,
+  getAdminAuthRedirectUrl,
+  type AdminAuthRedirectInput,
+} from "@/lib/admin/auth-redirects";
+import {
   requireAdminBusinessOwner,
   type AdminMembershipRole,
 } from "@/lib/admin/auth";
@@ -15,7 +21,11 @@ import {
 import { sendEmail } from "@/lib/email/ses";
 import { normalizeEmail } from "@/lib/identity";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { getTenantCommunicationSettings } from "@/lib/tenant/communications";
+import {
+  getTenantCommunicationSettings,
+  getTenantPublicBaseUrl,
+} from "@/lib/tenant/communications";
+import type { TenantRecord } from "@/lib/tenant/server";
 
 type BusinessAdminMembershipRow = {
   id: string;
@@ -169,38 +179,41 @@ async function findAuthUserByExactEmail(email: string): Promise<User | null> {
   return null;
 }
 
-function firstHeaderValue(value: string | null | undefined) {
-  return value?.split(",")[0]?.trim() || null;
-}
-
-function normalizeProtocol(value: string | null | undefined) {
-  const protocol = firstHeaderValue(value)?.toLowerCase();
-  return protocol === "https" || protocol === "http" ? protocol : null;
-}
-
-async function getRequestUrlContext() {
+async function getRequestUrlContext(): Promise<AdminAuthRedirectInput> {
   const headerStore = await headers();
-  const host = firstHeaderValue(headerStore.get("x-forwarded-host")) ?? firstHeaderValue(headerStore.get("host"));
-  const protocol =
-    normalizeProtocol(headerStore.get("x-forwarded-proto")) ??
-    (host?.includes("localhost") || host?.startsWith("127.0.0.1") ? "http" : "https");
 
-  return { host, protocol };
+  return {
+    forwardedHost: headerStore.get("x-forwarded-host"),
+    host: headerStore.get("host"),
+    forwardedProto: headerStore.get("x-forwarded-proto"),
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+    nodeEnv: process.env.NODE_ENV,
+  };
 }
 
-async function getAdminInviteRedirectTo() {
-  const { host, protocol } = await getRequestUrlContext();
-  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
-  const origin = host ? `${protocol}://${host}` : configuredSiteUrl;
+function getTenantCommunicationRequestContext(input: AdminAuthRedirectInput) {
+  const requestHost = getAdminAuthRedirectRequestHost(input);
+  if (!requestHost) return {};
 
-  if (!origin) {
-    throw new BusinessAdminUserMutationError(
-      "database_error",
-      "Could not determine the admin invite URL.",
-    );
-  }
+  return {
+    host: requestHost,
+    protocol: getAdminAuthRedirectRequestProtocol(requestHost, input),
+  };
+}
 
-  return new URL("/admin/accept-invite", origin).toString();
+export function getAdminInviteRedirectUrl(input: AdminAuthRedirectInput) {
+  return getAdminAuthRedirectUrl("/admin/accept-invite", input);
+}
+
+async function getAdminInviteRedirectTo(tenant: TenantRecord) {
+  const requestContext = await getRequestUrlContext();
+  const requestHost = getAdminAuthRedirectRequestHost(requestContext);
+  const fallbackBaseUrl = requestHost ? null : await getTenantPublicBaseUrl(tenant);
+
+  return getAdminInviteRedirectUrl({
+    ...requestContext,
+    fallbackBaseUrl,
+  });
 }
 
 function mapDatabaseMutationError(error: SupabaseDbError): never {
@@ -284,8 +297,8 @@ async function grantMembership(input: {
   return String(data);
 }
 
-async function generateAdminInviteLink(email: string) {
-  const redirectTo = await getAdminInviteRedirectTo();
+async function generateAdminInviteLink(email: string, tenant: TenantRecord) {
+  const redirectTo = await getAdminInviteRedirectTo(tenant);
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: "invite",
     email,
@@ -307,8 +320,8 @@ async function generateAdminInviteLink(email: string) {
   };
 }
 
-async function generateExistingUserAdminLink(email: string) {
-  const redirectTo = await getAdminInviteRedirectTo();
+async function generateExistingUserAdminLink(email: string, tenant: TenantRecord) {
+  const redirectTo = await getAdminInviteRedirectTo(tenant);
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: "magiclink",
     email,
@@ -338,7 +351,7 @@ async function sendTenantAdminInviteEmail(input: {
   sendEmailOverride?: (message: AdminUserEmailMessage) => Promise<unknown>;
 }) {
   const session = await requireAdminBusinessOwner();
-  const requestContext = await getRequestUrlContext();
+  const requestContext = getTenantCommunicationRequestContext(await getRequestUrlContext());
   const communication = await getTenantCommunicationSettings(session.business, requestContext);
   const sender =
     input.sender ??
@@ -427,12 +440,12 @@ export async function inviteBusinessAdminUser(input: {
 
   if (authUser) {
     const generated = isPendingInvite(authUser)
-      ? await generateAdminInviteLink(email)
-      : await generateExistingUserAdminLink(email);
+      ? await generateAdminInviteLink(email, session.business)
+      : await generateExistingUserAdminLink(email, session.business);
     authUser = generated.authUser;
     actionLink = generated.actionLink;
   } else {
-    const generated = await generateAdminInviteLink(email);
+    const generated = await generateAdminInviteLink(email, session.business);
     authUser = generated.authUser;
     actionLink = generated.actionLink;
     createdInviteUser = true;
@@ -513,7 +526,7 @@ export async function resendBusinessAdminInvitation(input: {
     );
   }
 
-  const generated = await generateAdminInviteLink(email);
+  const generated = await generateAdminInviteLink(email, session.business);
 
   await sendTenantAdminInviteEmail({
     email,

@@ -1,0 +1,60 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { getAdminAuthRedirectUrl } from "../src/lib/admin/auth-redirects.ts";
+
+test("admin invite redirect prefers Demo request host over localhost site url", () => {
+  assert.equal(
+    getAdminAuthRedirectUrl("/admin/accept-invite", {
+      forwardedHost: "demo-preview.rybsoftware.com",
+      forwardedProto: "https",
+      siteUrl: "http://localhost:3000",
+      nodeEnv: "production",
+    }),
+    "https://demo-preview.rybsoftware.com/admin/accept-invite",
+  );
+});
+
+test("admin invite redirect keeps future tenant hosts tenant-specific", () => {
+  assert.equal(
+    getAdminAuthRedirectUrl("/admin/accept-invite", {
+      host: "customer.example.com",
+      forwardedProto: "https",
+      siteUrl: "https://rybsoftware.com",
+      nodeEnv: "production",
+    }),
+    "https://customer.example.com/admin/accept-invite",
+  );
+});
+
+test("admin invite redirect keeps local development links local", () => {
+  assert.equal(
+    getAdminAuthRedirectUrl("/admin/accept-invite", {
+      host: "localhost:3000",
+      siteUrl: "https://app.rybsoftware.com",
+      nodeEnv: "development",
+    }),
+    "http://localhost:3000/admin/accept-invite",
+  );
+});
+
+test("admin invite redirect ignores malformed forwarded hosts before tenant fallback", () => {
+  assert.equal(
+    getAdminAuthRedirectUrl("/admin/accept-invite", {
+      forwardedHost: "https://bad_host_name:3000/admin",
+      fallbackBaseUrl: "https://fallback-tenant.example.com",
+      siteUrl: "http://localhost:3000",
+      nodeEnv: "production",
+    }),
+    "https://fallback-tenant.example.com/admin/accept-invite",
+  );
+});
+
+test("admin password recovery still falls back to localhost without request or configured URLs", () => {
+  assert.equal(
+    getAdminAuthRedirectUrl("/admin/update-password", {
+      nodeEnv: "development",
+    }),
+    "http://localhost:3000/admin/update-password",
+  );
+});
