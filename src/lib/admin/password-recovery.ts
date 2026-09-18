@@ -185,7 +185,7 @@ async function defaultHasActiveAdminMembership(input: {
     .select("id")
     .eq("business_id", input.businessId)
     .eq("auth_user_id", input.authUserId)
-    .eq("role", "owner")
+    .in("role", ["owner", "admin"])
     .eq("status", "active")
     .maybeSingle();
 

@@ -22,6 +22,7 @@ test("business-admin forgot password sends Supabase recovery to admin update-pas
   assert.match(helper, /resolveTenantEmailSender/);
   assert.match(helper, /tenantSenderSendEmailOptions/);
   assert.match(helper, /\.from\("business_admin_memberships"\)/);
+  assert.match(helper, /\.in\("role", \["owner", "admin"\]\)/);
   assert.match(helper, /\/admin\/update-password/);
   assert.doesNotMatch(source, /platform-admin/);
 });

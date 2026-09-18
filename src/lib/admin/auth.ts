@@ -20,7 +20,7 @@ export const adminAuthCookieOptions = {
   path: ADMIN_AUTH_COOKIE_PATH,
 };
 
-export type AdminMembershipRole = "owner";
+export type AdminMembershipRole = "owner" | "admin";
 export type AdminMembershipStatus = "active" | "disabled";
 
 export type AdminMembership = {
@@ -293,7 +293,7 @@ async function loadActiveAdminMembershipsForUser(userId: string) {
     .from("business_admin_memberships")
     .select("id, business_id, auth_user_id, role, status, created_at, updated_at")
     .eq("auth_user_id", userId)
-    .eq("role", "owner")
+    .in("role", ["owner", "admin"])
     .eq("status", "active");
 
   if (membershipLookup.error) {
@@ -460,6 +460,20 @@ export async function requireAdminOwner(): Promise<AdminSessionContext> {
 }
 
 export const requireAdminBusinessContext = requireAdminOwner;
+
+export function isAdminBusinessOwner(session: AdminSessionContext) {
+  return session.membership.role === "owner" && session.membership.status === "active";
+}
+
+export async function requireAdminBusinessOwner(): Promise<AdminSessionContext> {
+  const session = await requireAdminOwner();
+
+  if (!isAdminBusinessOwner(session)) {
+    throw new AdminAccessDeniedError("Only active business owners can manage business users.");
+  }
+
+  return session;
+}
 
 function getAdminAccessDeniedMessage(reason: AdminAccessDeniedReason) {
   switch (reason) {

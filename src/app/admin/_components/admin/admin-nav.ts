@@ -6,6 +6,7 @@ export type AdminNavItem = {
     | "bookings"
     | "schedule"
     | "customers"
+    | "users"
     | "employees"
     | "financials"
     | "payments"
@@ -54,6 +55,7 @@ const allAdminNavGroups: AdminNavGroup[] = [
     label: "People",
     items: [
       { label: "Customers", href: "/admin/customers", icon: "customers", matchers: ["/admin/customers"] },
+      { label: "Users", href: "/admin/settings/users", icon: "users", matchers: ["/admin/settings/users"] },
       { label: "Employees", href: "/admin/employees", icon: "employees", matchers: ["/admin/employees"] },
     ],
   },

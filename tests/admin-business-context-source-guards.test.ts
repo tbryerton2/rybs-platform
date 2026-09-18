@@ -32,7 +32,7 @@ test("admin auth derives business context from exactly one active business membe
   assert.doesNotMatch(source, /getCurrentTenant/);
   assert.match(source, /\.from\("business_admin_memberships"\)/);
   assert.match(source, /\.eq\("auth_user_id", userId\)/);
-  assert.match(source, /\.eq\("role", "owner"\)/);
+  assert.match(source, /\.in\("role", \["owner", "admin"\]\)/);
   assert.match(source, /\.eq\("status", "active"\)/);
   assert.match(source, /memberships\.length === 0/);
   assert.match(source, /loadAdminBusinessTenant\(membership\)/);

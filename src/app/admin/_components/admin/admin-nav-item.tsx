@@ -30,6 +30,7 @@ const iconMap = {
   bookings: ClipboardDocumentCheckIcon,
   schedule: CalendarDaysIcon,
   customers: UsersIcon,
+  users: UsersIcon,
   employees: IdentificationIcon,
   financials: BanknotesIcon,
   payments: CreditCardIcon,
