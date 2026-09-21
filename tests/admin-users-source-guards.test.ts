@@ -27,6 +27,34 @@ test("business admin memberships support owner and admin roles with same-busines
   assert.match(migration, /to service_role/);
 });
 
+test("business admin membership update rpc runs as a locked-down definer without broad auth grants", () => {
+  const migration = readRepoFile(
+    "supabase/migrations/20260921142749_security_definer_business_admin_update_membership.sql",
+  );
+
+  assert.match(migration, /create or replace function public\.business_admin_update_membership\(\s*p_actor_auth_user_id uuid,\s*p_business_id uuid,\s*p_membership_id uuid,\s*p_role text default null,\s*p_status text default null\s*\)/);
+  assert.match(migration, /returns uuid\s+language plpgsql\s+security definer\s+set search_path = public/);
+  assert.doesNotMatch(migration, /business_admin_grant_membership/);
+
+  assert.match(migration, /p_role is not null and p_role not in \('owner', 'admin'\)/);
+  assert.match(migration, /p_status is not null and p_status not in \('active', 'disabled'\)/);
+  assert.match(migration, /business_id = p_business_id[\s\S]*auth_user_id = p_actor_auth_user_id[\s\S]*role = 'owner'[\s\S]*status = 'active'/);
+  assert.match(migration, /BUSINESS_ADMIN_OWNER_REQUIRED/);
+  assert.match(migration, /where id = p_membership_id\s+and business_id = p_business_id/);
+  assert.match(migration, /BUSINESS_ADMIN_MEMBERSHIP_NOT_FOUND/);
+  assert.match(migration, /BUSINESS_ADMIN_SELF_UPDATE_BLOCKED/);
+  assert.match(migration, /current_membership\.role = 'owner'[\s\S]*current_membership\.status = 'active'[\s\S]*coalesce\(current_owner_confirmed, false\)/);
+  assert.match(migration, /join auth\.users au on au\.id = business_admin_memberships\.auth_user_id/);
+  assert.match(migration, /BUSINESS_ADMIN_LAST_OWNER/);
+  assert.match(migration, /return p_membership_id/);
+
+  assert.match(migration, /revoke all on function public\.business_admin_update_membership\(uuid, uuid, uuid, text, text\) from public/);
+  assert.match(migration, /revoke all on function public\.business_admin_update_membership\(uuid, uuid, uuid, text, text\) from anon/);
+  assert.match(migration, /revoke all on function public\.business_admin_update_membership\(uuid, uuid, uuid, text, text\) from authenticated/);
+  assert.match(migration, /grant execute on function public\.business_admin_update_membership\(uuid, uuid, uuid, text, text\) to service_role/);
+  assert.doesNotMatch(migration, /grant\s+(select|all|usage)[\s\S]*auth\.users[\s\S]*service_role/i);
+});
+
 test("tenant admin users service uses selected business context and tenant-aware invite email", () => {
   const service = readRepoFile("src/lib/admin/users.ts");
 
