@@ -8,6 +8,7 @@ import {
   getAdminAuthRedirectUrl,
   type AdminAuthRedirectInput,
 } from "@/lib/admin/auth-redirects";
+import { buildAdminInviteAcceptanceUrl } from "@/lib/admin/invite-acceptance";
 import {
   requireAdminBusinessOwner,
   type AdminMembershipRole,
@@ -342,7 +343,7 @@ async function generateAdminInviteLink(email: string, tenant: TenantRecord) {
     "Generating the admin invite",
   );
 
-  if (error || !data.user || !data.properties?.action_link) {
+  if (error || !data.user || !data.properties?.hashed_token) {
     throw new BusinessAdminUserMutationError(
       "database_error",
       error?.message ?? "Supabase Auth did not return an invite link.",
@@ -351,7 +352,12 @@ async function generateAdminInviteLink(email: string, tenant: TenantRecord) {
 
   return {
     authUser: data.user,
-    actionLink: data.properties.action_link,
+    actionLink: buildAdminInviteAcceptanceUrl({
+      redirectTo,
+      businessId: tenant.id,
+      tokenHash: data.properties.hashed_token,
+      type: "invite",
+    }),
   };
 }
 
@@ -368,7 +374,7 @@ async function generateExistingUserAdminLink(email: string, tenant: TenantRecord
     "Generating the admin sign-in link",
   );
 
-  if (error || !data.user || !data.properties?.action_link) {
+  if (error || !data.user || !data.properties?.hashed_token) {
     throw new BusinessAdminUserMutationError(
       "database_error",
       error?.message ?? "Supabase Auth did not return a sign-in link.",
@@ -377,7 +383,12 @@ async function generateExistingUserAdminLink(email: string, tenant: TenantRecord
 
   return {
     authUser: data.user,
-    actionLink: data.properties.action_link,
+    actionLink: buildAdminInviteAcceptanceUrl({
+      redirectTo,
+      businessId: tenant.id,
+      tokenHash: data.properties.hashed_token,
+      type: "magiclink",
+    }),
   };
 }
 

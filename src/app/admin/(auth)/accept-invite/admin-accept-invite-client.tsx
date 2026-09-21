@@ -2,19 +2,15 @@
 
 import { createClient, type Session } from "@supabase/supabase-js";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { parseAdminInviteBrowserLocation } from "@/lib/admin/invite-acceptance";
 
 type InviteState =
   | { status: "checking" }
   | { status: "ready"; session: Session }
   | { status: "finishing" }
   | { status: "error"; message: string };
-
-function parseHashParams(hash: string) {
-  const cleaned = hash.startsWith("#") ? hash.slice(1) : hash;
-  return new URLSearchParams(cleaned);
-}
 
 function createBrowserAdminAuthClient() {
   return createClient(
@@ -30,7 +26,7 @@ function createBrowserAdminAuthClient() {
   );
 }
 
-async function finishAdminSession(session: Session) {
+async function finishAdminSession(session: Session, intendedBusinessId: string | null) {
   const response = await fetch("/admin/auth/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -38,6 +34,7 @@ async function finishAdminSession(session: Session) {
       accessToken: session.access_token,
       refreshToken: session.refresh_token,
       type: "invite",
+      intendedBusinessId,
     }),
   });
 
@@ -59,36 +56,33 @@ async function finishAdminSession(session: Session) {
 
 export function AdminAcceptInviteClient() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const authClient = useMemo(() => createBrowserAdminAuthClient(), []);
   const [state, setState] = useState<InviteState>({ status: "checking" });
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const inviteProcessingRef = useRef<Promise<void> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
+  useLayoutEffect(() => {
     async function loadInviteSession() {
-      const hashParams = parseHashParams(window.location.hash);
-      const errorCode = searchParams.get("error") ?? hashParams.get("error");
-      const errorDescription =
-        searchParams.get("error_description") ?? hashParams.get("error_description");
+      const invite = parseAdminInviteBrowserLocation({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: window.location.hash,
+      });
 
-      if (errorCode) {
+      window.history.replaceState(window.history.state, "", invite.cleanUrl);
+
+      if (invite.errorCode) {
         setState({
           status: "error",
-          message: errorDescription || "This invitation link is invalid or expired.",
+          message: invite.errorDescription || "This invitation link is invalid or expired.",
         });
         return;
       }
 
-      const tokenHash = searchParams.get("token_hash");
-      const type = searchParams.get("type") ?? hashParams.get("type");
-      const code = searchParams.get("code") ?? hashParams.get("code");
-      const accessToken = hashParams.get("access_token");
-      const refreshToken = hashParams.get("refresh_token");
+      const { tokenHash, type, code, accessToken, refreshToken, intendedBusinessId } = invite;
 
       try {
         let session: Session | null = null;
@@ -130,35 +124,25 @@ export function AdminAcceptInviteClient() {
         }
 
         if (type !== "invite") {
-          if (!cancelled) {
-            setState({ status: "finishing" });
-          }
+          setState({ status: "finishing" });
 
-          const redirectTo = await finishAdminSession(session);
+          const redirectTo = await finishAdminSession(session, intendedBusinessId);
           router.replace(redirectTo);
           router.refresh();
           return;
         }
 
-        if (!cancelled) {
-          setState({ status: "ready", session });
-        }
+        setState({ status: "ready", session });
       } catch (error) {
-        if (!cancelled) {
-          setState({
-            status: "error",
-            message: error instanceof Error ? error.message : "This invitation link could not be verified.",
-          });
-        }
+        setState({
+          status: "error",
+          message: error instanceof Error ? error.message : "This invitation link could not be verified.",
+        });
       }
     }
 
-    void loadInviteSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authClient, router, searchParams]);
+    inviteProcessingRef.current ??= loadInviteSession();
+  }, [authClient, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -189,7 +173,12 @@ export function AdminAcceptInviteClient() {
     }
 
     try {
-      const redirectTo = await finishAdminSession(state.session);
+      const invite = parseAdminInviteBrowserLocation({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        hash: "",
+      });
+      const redirectTo = await finishAdminSession(state.session, invite.intendedBusinessId);
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {

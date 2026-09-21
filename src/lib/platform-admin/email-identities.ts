@@ -9,6 +9,7 @@ import {
   type TenantEmailIdentity,
   type TenantEmailIdentityRow,
 } from "@/lib/email/tenant-email-identity";
+import { isSuitableTenantReplyToEmail } from "@/lib/email/tenant-sender";
 import { requirePlatformAdmin } from "@/lib/platform-admin/auth";
 import {
   normalizePlatformTenantId,
@@ -153,15 +154,24 @@ function normalizeSenderLocalPart(input: unknown) {
   return senderLocalPart;
 }
 
-function normalizeOptionalEmail(input: unknown) {
+function normalizeOptionalEmail(input: unknown, senderDomain: string) {
   const value = typeof input === "string" ? input.trim().toLowerCase() : "";
   if (!value) return null;
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    throwValidationError("Enter a valid Reply-To email address.", "replyToEmail");
+  const replyToEmail = isSuitableTenantReplyToEmail(value);
+  const replyToDomain = replyToEmail?.split("@")[1];
+
+  if (
+    !replyToEmail ||
+    (replyToDomain !== senderDomain && !replyToDomain?.endsWith(`.${senderDomain}`))
+  ) {
+    throwValidationError(
+      "Enter a non-placeholder Reply-To address on the verified sender domain.",
+      "replyToEmail",
+    );
   }
 
-  return value;
+  return replyToEmail;
 }
 
 function normalizeOptionalDisplayName(input: unknown) {
@@ -389,7 +399,7 @@ export async function savePlatformTenantEmailIdentity(input: SavePlatformTenantE
   const senderDomain = normalizeSenderDomain(input.senderDomain);
   const senderLocalPart = normalizeSenderLocalPart(input.senderLocalPart);
   const senderDisplayName = normalizeOptionalDisplayName(input.senderDisplayName);
-  const replyToEmail = normalizeOptionalEmail(input.replyToEmail);
+  const replyToEmail = normalizeOptionalEmail(input.replyToEmail, senderDomain);
   const existing = await getTenantEmailIdentityByBusinessId(tenant.id);
 
   assertDomainCanBeChanged(existing, senderDomain);

@@ -5,7 +5,9 @@ process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://example.supabase.co";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const {
+  isSuitableTenantReplyToEmail,
   resolveTenantEmailSender,
+  resolveTenantReplyToEmail,
   TenantEmailSenderError,
 } = await import("../src/lib/email/tenant-sender.ts");
 const {
@@ -142,14 +144,14 @@ test("Demo without verified identity uses explicit RYBS managed sender", async (
   const sender = await resolveTenantEmailSender({
     tenant: tenant(DEMO_BUSINESS_ID, "demo-dumpster-company"),
     businessName: "Demo Dumpster Company",
-    supportEmail: "fallback@demo.example",
+    supportEmail: "support@demo-dumpster.com",
   });
 
   assert.equal(sender.source, "rybs_managed");
   assert.equal(sender.senderDisplayName, "Demo Dumpster Company");
   assert.equal(sender.senderEmail, "bookings@mail.rybsoftware.com");
   assert.equal(sender.formattedFrom, '"Demo Dumpster Company" <bookings@mail.rybsoftware.com>');
-  assert.equal(sender.replyToEmail, "support@demo.example");
+  assert.equal(sender.replyToEmail, "support@demo-dumpster.com");
   assert.equal(sender.sesRegion, "us-west-2");
   assert.equal(sender.providerStatus, "verified");
   assert.equal(sender.verificationStatus, "verified");
@@ -213,4 +215,48 @@ test("Reply-To falls back to tenant support email when identity reply-to is empt
   });
 
   assert.equal(sender.replyToEmail, "support-fallback@tancanman.com");
+});
+
+test("pending identity personal Reply-To is ignored in favor of neutral RYBS fallback", () => {
+  assert.equal(
+    resolveTenantReplyToEmail({
+      verifiedIdentityReplyToEmail: undefined,
+      verifiedIdentitySenderDomain: undefined,
+      supportEmail: "test@test.com",
+      rybsManagedSenderEmail: "notifications@rybsoftware.com",
+      senderEmail: "notifications@rybsoftware.com",
+    }),
+    "notifications@rybsoftware.com",
+  );
+});
+
+test("verified tenant Reply-To must belong to the verified sender domain", () => {
+  assert.equal(
+    resolveTenantReplyToEmail({
+      verifiedIdentityReplyToEmail: "owner@gmail.com",
+      verifiedIdentitySenderDomain: "demodumpstercompany.com",
+      supportEmail: null,
+      rybsManagedSenderEmail: "notifications@rybsoftware.com",
+      senderEmail: "bookings@demodumpstercompany.com",
+    }),
+    "notifications@rybsoftware.com",
+  );
+
+  assert.equal(
+    resolveTenantReplyToEmail({
+      verifiedIdentityReplyToEmail: "support@demodumpstercompany.com",
+      verifiedIdentitySenderDomain: "demodumpstercompany.com",
+      supportEmail: null,
+      rybsManagedSenderEmail: "notifications@rybsoftware.com",
+      senderEmail: "bookings@demodumpstercompany.com",
+    }),
+    "support@demodumpstercompany.com",
+  );
+});
+
+test("tenant support email is accepted while placeholder addresses are rejected", () => {
+  assert.equal(isSuitableTenantReplyToEmail("dispatch@demo-dumpster.com"), "dispatch@demo-dumpster.com");
+  assert.equal(isSuitableTenantReplyToEmail("test@test.com"), null);
+  assert.equal(isSuitableTenantReplyToEmail("hello@example.com"), null);
+  assert.equal(isSuitableTenantReplyToEmail("hello@demo.local"), null);
 });

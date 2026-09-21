@@ -1367,7 +1367,7 @@ function EmailSendingSection({
           </div>
           <div>
             <label htmlFor="replyToEmail" className="text-sm font-semibold text-slate-700">
-              Reply-To email
+              Reply-To on sender domain
             </label>
             <input
               id="replyToEmail"

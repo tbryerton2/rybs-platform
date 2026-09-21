@@ -66,6 +66,9 @@ test("tenant admin users service uses selected business context and tenant-aware
   assert.match(service, /generateLink\(\{[\s\S]*type: "invite"/);
   assert.match(service, /generateLink\(\{[\s\S]*type: "magiclink"/);
   assert.match(service, /options:\s*\{[\s\S]*redirectTo/);
+  assert.match(service, /data\.properties\.hashed_token/);
+  assert.match(service, /buildAdminInviteAcceptanceUrl\(\{/);
+  assert.doesNotMatch(service, /actionLink:\s*data\.properties\.action_link/);
   assert.match(service, /resendBusinessAdminInvitation[\s\S]*!isPendingInvite\(authUser\)/);
   assert.match(service, /Only pending invitations can be resent/);
   assert.match(service, /resolveTenantEmailSender/);
@@ -114,15 +117,21 @@ test("tenant users page exposes phase one controls without accepting forged busi
   assert.match(nav, /\/admin\/settings\/users/);
 });
 
-test("admin invite acceptance sets password before creating app admin session", () => {
+test("admin invite acceptance cleans auth tokens and selects the invited tenant", () => {
   const client = readRepoFile("src/app/admin/(auth)/accept-invite/admin-accept-invite-client.tsx");
   const page = readRepoFile("src/app/admin/(auth)/accept-invite/page.tsx");
+  const sessionRoute = readRepoFile("src/app/admin/(auth)/auth/session/route.ts");
 
   assert.match(page, /AdminAcceptInviteClient/);
   assert.match(client, /verifyOtp\(\{[\s\S]*type/);
   assert.match(client, /exchangeCodeForSession\(code\)/);
   assert.match(client, /updateUser\(\{ password \}\)/);
   assert.match(client, /fetch\("\/admin\/auth\/session"/);
+  assert.match(client, /window\.history\.replaceState\(window\.history\.state, "", invite\.cleanUrl\)/);
+  assert.match(client, /intendedBusinessId/);
   assert.match(client, /router\.replace\(redirectTo\)/);
+  assert.match(sessionRoute, /findInvitedBusiness\(businessOptions, intendedBusinessId\)/);
+  assert.match(sessionRoute, /setAdminSelectedBusinessCookie\(response, selectedBusiness\.id\)/);
+  assert.match(sessionRoute, /This invitation no longer grants access to the invited business/);
   assert.doesNotMatch(client, /Tan Can Man/);
 });

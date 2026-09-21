@@ -52,6 +52,67 @@ function cleanEmail(value: string | null | undefined) {
   return cleaned && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned) ? cleaned : null;
 }
 
+export function isSuitableTenantReplyToEmail(value: string | null | undefined) {
+  const email = cleanEmail(value);
+  if (!email) return null;
+
+  const [localPart, domain] = email.split("@");
+  const reservedDomains = new Set([
+    "example.com",
+    "example.net",
+    "example.org",
+    "test.com",
+  ]);
+
+  if (
+    !localPart ||
+    !domain ||
+    (localPart === "test" && domain === "test.com") ||
+    reservedDomains.has(domain) ||
+    domain.endsWith(".example") ||
+    domain.endsWith(".invalid") ||
+    domain.endsWith(".local") ||
+    domain.endsWith(".test")
+  ) {
+    return null;
+  }
+
+  return email;
+}
+
+function isReplyToOnVerifiedSenderDomain(
+  replyToEmail: string | null | undefined,
+  senderDomain: string,
+) {
+  const email = isSuitableTenantReplyToEmail(replyToEmail);
+  if (!email) return null;
+
+  const domain = email.split("@")[1];
+  return domain === senderDomain || domain?.endsWith(`.${senderDomain}`) ? email : null;
+}
+
+export function resolveTenantReplyToEmail(input: {
+  verifiedIdentityReplyToEmail?: string | null;
+  verifiedIdentitySenderDomain?: string | null;
+  supportEmail?: string | null;
+  rybsManagedSenderEmail?: string | null;
+  senderEmail: string;
+}) {
+  const identityReplyTo = input.verifiedIdentitySenderDomain
+    ? isReplyToOnVerifiedSenderDomain(
+        input.verifiedIdentityReplyToEmail,
+        input.verifiedIdentitySenderDomain,
+      )
+    : null;
+
+  return (
+    identityReplyTo ??
+    isSuitableTenantReplyToEmail(input.supportEmail) ??
+    cleanEmail(input.rybsManagedSenderEmail) ??
+    input.senderEmail
+  );
+}
+
 function assertTrustedBusinessId(input: ResolveTenantEmailSenderInput) {
   const businessId = clean(input.businessId) ?? clean(input.tenant?.id);
 
@@ -129,11 +190,6 @@ export async function resolveTenantEmailSender(
     getTenantEmailIdentityByBusinessId(businessId),
     loadTenantContext(input, businessId),
   ]);
-  const allowSupportFallback = input.allowSupportReplyToFallback !== false;
-  const [brand, support] = await Promise.all([
-    input.businessName ? null : getBrandSettingsForTenant(tenant),
-    input.supportEmail || !allowSupportFallback ? null : getSupportSettingsForTenant(businessId),
-  ]);
   const verifiedIdentity = isVerifiedIdentity(identity, businessId) ? identity : null;
   const rybsManagedSender = getRybManagedEmailSenderConfig();
   const senderEmail = verifiedIdentity?.fromEmail ?? rybsManagedSender.senderEmail;
@@ -142,17 +198,29 @@ export async function resolveTenantEmailSender(
     throw new TenantEmailSenderError("not_verified");
   }
 
+  const allowSupportFallback = input.allowSupportReplyToFallback !== false;
+  const providedSupportEmail = allowSupportFallback
+    ? isSuitableTenantReplyToEmail(input.supportEmail)
+    : null;
+  const [brand, support] = await Promise.all([
+    input.businessName ? null : getBrandSettingsForTenant(tenant),
+    providedSupportEmail || !allowSupportFallback ? null : getSupportSettingsForTenant(businessId),
+  ]);
   const senderDisplayName =
     clean(verifiedIdentity?.senderDisplayName) ??
     clean(identity?.senderDisplayName) ??
     clean(input.businessName) ??
     clean(brand?.name) ??
     tenant.slug;
-  const replyToEmail =
-    cleanEmail(verifiedIdentity?.replyToEmail) ??
-    cleanEmail(identity?.replyToEmail) ??
-    cleanEmail(input.supportEmail) ??
-    (allowSupportFallback ? cleanEmail(support?.email) : null);
+  const replyToEmail = resolveTenantReplyToEmail({
+    verifiedIdentityReplyToEmail: verifiedIdentity?.replyToEmail,
+    verifiedIdentitySenderDomain: verifiedIdentity?.senderDomain,
+    supportEmail:
+      providedSupportEmail ??
+      (allowSupportFallback ? isSuitableTenantReplyToEmail(support?.email) : null),
+    rybsManagedSenderEmail: rybsManagedSender.senderEmail,
+    senderEmail,
+  });
   const source = verifiedIdentity ? "tenant_verified" : "rybs_managed";
   const sesRegion = verifiedIdentity?.sesRegion ?? rybsManagedSender.sesRegion;
 
