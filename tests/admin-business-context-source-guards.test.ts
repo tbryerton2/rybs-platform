@@ -114,10 +114,9 @@ test("admin business selector revalidates cookie and submitted business ids agai
   assert.match(page, /context\.businesses\.length === 1/);
   assert.match(loginAction, /businessOptions\.length === 1/);
   assert.match(loginAction, /businessOptions\.length > 1 \? "\/admin\/select-business" : "\/admin"/);
-  assert.match(sessionRoute, /findInvitedBusiness\(businessOptions, intendedBusinessId\)/);
-  assert.match(sessionRoute, /businessOptions\.length === 1 \? businessOptions\[0\] : null/);
-  assert.match(sessionRoute, /selectedBusiness \? "\/admin" : "\/admin\/select-business"/);
-  assert.match(sessionRoute, /setAdminSelectedBusinessCookie\(response, selectedBusiness\.id\)/);
+  assert.match(sessionRoute, /resolveAdminInviteDestination\(businessOptions, intendedBusinessId\)/);
+  assert.match(sessionRoute, /redirectTo: destination\.redirectTo/);
+  assert.match(sessionRoute, /setAdminSelectedBusinessCookie\(response, destination\.selectedBusiness\.id\)/);
   assert.match(logoutRoute, /clearAdminSessionCookies\(response, host\)/);
 });
 

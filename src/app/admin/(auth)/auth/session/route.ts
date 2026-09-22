@@ -6,7 +6,7 @@ import {
   setAdminSelectedBusinessCookie,
   setAdminSessionCookies,
 } from "@/lib/admin/auth";
-import { findInvitedBusiness } from "@/lib/admin/invite-acceptance";
+import { resolveAdminInviteDestination } from "@/lib/admin/invite-acceptance";
 
 type SessionPayload = {
   tokenHash?: string;
@@ -108,9 +108,9 @@ export async function POST(req: Request) {
 
     const businessOptions = userId ? await loadActiveAdminBusinessOptionsForUser(userId) : [];
     const intendedBusinessId = body.intendedBusinessId?.trim() || null;
-    const invitedBusiness = findInvitedBusiness(businessOptions, intendedBusinessId);
+    const destination = resolveAdminInviteDestination(businessOptions, intendedBusinessId);
 
-    if (intendedBusinessId && !invitedBusiness) {
+    if (!destination.ok) {
       logAdminAuthSessionError("invited_business_not_available", {
         userId,
         intendedBusinessId,
@@ -119,12 +119,10 @@ export async function POST(req: Request) {
       return badRequest("This invitation no longer grants access to the invited business.", 403);
     }
 
-    const selectedBusiness = invitedBusiness ?? (businessOptions.length === 1 ? businessOptions[0] : null);
-    const redirectTo = selectedBusiness ? "/admin" : "/admin/select-business";
-    const response = NextResponse.json({ ok: true, redirectTo });
+    const response = NextResponse.json({ ok: true, redirectTo: destination.redirectTo });
     setAdminSessionCookies(response, { accessToken, refreshToken });
-    if (selectedBusiness) {
-      setAdminSelectedBusinessCookie(response, selectedBusiness.id);
+    if (destination.selectedBusiness) {
+      setAdminSelectedBusinessCookie(response, destination.selectedBusiness.id);
     } else {
       clearAdminSelectedBusinessCookie(response, req.headers.get("host"));
     }

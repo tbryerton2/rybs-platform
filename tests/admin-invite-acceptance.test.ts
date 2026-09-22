@@ -5,6 +5,7 @@ import {
   buildAdminInviteAcceptanceUrl,
   findInvitedBusiness,
   parseAdminInviteBrowserLocation,
+  resolveAdminInviteDestination,
 } from "../src/lib/admin/invite-acceptance.ts";
 
 const DEMO_BUSINESS_ID = "22222222-2222-4222-8222-222222222222";
@@ -78,6 +79,42 @@ test("tenant-target selection preserves every other business membership", () => 
 
   assert.equal(selected?.id, DEMO_BUSINESS_ID);
   assert.deepEqual(businesses.map((business) => business.id), [TAN_BUSINESS_ID, DEMO_BUSINESS_ID]);
+});
+
+test("invite destination routes directly to the invited tenant after password setup", () => {
+  const businesses = [
+    { id: TAN_BUSINESS_ID, name: "Tan Can Man" },
+    { id: DEMO_BUSINESS_ID, name: "Demo Dumpster Company" },
+  ];
+
+  const destination = resolveAdminInviteDestination(businesses, DEMO_BUSINESS_ID);
+
+  assert.equal(destination.ok, true);
+  assert.equal(destination.redirectTo, "/admin");
+  assert.equal(destination.selectedBusiness?.id, DEMO_BUSINESS_ID);
+});
+
+test("invite destination preserves other memberships while selecting the invited business", () => {
+  const businesses = [
+    { id: TAN_BUSINESS_ID, name: "Tan Can Man" },
+    { id: DEMO_BUSINESS_ID, name: "Demo Dumpster Company" },
+  ];
+
+  resolveAdminInviteDestination(businesses, DEMO_BUSINESS_ID);
+
+  assert.deepEqual(businesses.map((business) => business.id), [TAN_BUSINESS_ID, DEMO_BUSINESS_ID]);
+});
+
+test("invite destination rejects tenant targets outside active memberships", () => {
+  const destination = resolveAdminInviteDestination(
+    [{ id: TAN_BUSINESS_ID, name: "Tan Can Man" }],
+    DEMO_BUSINESS_ID,
+  );
+
+  assert.equal(destination.ok, false);
+  assert.equal(destination.reason, "invited_business_not_available");
+  assert.equal(destination.redirectTo, null);
+  assert.equal(destination.selectedBusiness, null);
 });
 
 test("tenant targeting cannot select a business outside active memberships", () => {

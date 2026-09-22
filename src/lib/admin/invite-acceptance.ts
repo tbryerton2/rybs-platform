@@ -65,3 +65,27 @@ export function findInvitedBusiness<T extends { id: string }>(
   if (!businessId) return null;
   return businesses.find((business) => business.id === businessId) ?? null;
 }
+
+export function resolveAdminInviteDestination<T extends { id: string }>(
+  businesses: readonly T[],
+  intendedBusinessId: string | null | undefined,
+) {
+  const invitedBusiness = findInvitedBusiness(businesses, intendedBusinessId);
+
+  if (intendedBusinessId?.trim() && !invitedBusiness) {
+    return {
+      ok: false,
+      reason: "invited_business_not_available",
+      selectedBusiness: null,
+      redirectTo: null,
+    } as const;
+  }
+
+  const selectedBusiness = invitedBusiness ?? (businesses.length === 1 ? businesses[0] : null);
+
+  return {
+    ok: true,
+    selectedBusiness,
+    redirectTo: selectedBusiness ? "/admin" : "/admin/select-business",
+  } as const;
+}

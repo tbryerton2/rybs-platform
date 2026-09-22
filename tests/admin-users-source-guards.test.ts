@@ -130,8 +130,8 @@ test("admin invite acceptance cleans auth tokens and selects the invited tenant"
   assert.match(client, /window\.history\.replaceState\(window\.history\.state, "", invite\.cleanUrl\)/);
   assert.match(client, /intendedBusinessId/);
   assert.match(client, /router\.replace\(redirectTo\)/);
-  assert.match(sessionRoute, /findInvitedBusiness\(businessOptions, intendedBusinessId\)/);
-  assert.match(sessionRoute, /setAdminSelectedBusinessCookie\(response, selectedBusiness\.id\)/);
+  assert.match(sessionRoute, /resolveAdminInviteDestination\(businessOptions, intendedBusinessId\)/);
+  assert.match(sessionRoute, /setAdminSelectedBusinessCookie\(response, destination\.selectedBusiness\.id\)/);
   assert.match(sessionRoute, /This invitation no longer grants access to the invited business/);
   assert.doesNotMatch(client, /Tan Can Man/);
 });

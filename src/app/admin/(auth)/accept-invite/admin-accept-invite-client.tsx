@@ -9,7 +9,6 @@ import { parseAdminInviteBrowserLocation } from "@/lib/admin/invite-acceptance";
 type InviteState =
   | { status: "checking" }
   | { status: "ready"; session: Session }
-  | { status: "finishing" }
   | { status: "error"; message: string };
 
 function createBrowserAdminAuthClient() {
@@ -54,7 +53,11 @@ async function finishAdminSession(session: Session, intendedBusinessId: string |
   return result.redirectTo;
 }
 
-export function AdminAcceptInviteClient() {
+export function AdminAcceptInviteClient({
+  businessName,
+}: {
+  businessName?: string | null;
+}) {
   const router = useRouter();
   const authClient = useMemo(() => createBrowserAdminAuthClient(), []);
   const [state, setState] = useState<InviteState>({ status: "checking" });
@@ -82,7 +85,7 @@ export function AdminAcceptInviteClient() {
         return;
       }
 
-      const { tokenHash, type, code, accessToken, refreshToken, intendedBusinessId } = invite;
+      const { tokenHash, type, code, accessToken, refreshToken } = invite;
 
       try {
         let session: Session | null = null;
@@ -121,15 +124,6 @@ export function AdminAcceptInviteClient() {
 
         if (!session) {
           throw new Error("This invitation link is missing session data.");
-        }
-
-        if (type !== "invite") {
-          setState({ status: "finishing" });
-
-          const redirectTo = await finishAdminSession(session, intendedBusinessId);
-          router.replace(redirectTo);
-          router.refresh();
-          return;
         }
 
         setState({ status: "ready", session });
@@ -189,19 +183,17 @@ export function AdminAcceptInviteClient() {
     }
   }
 
-  if (state.status === "checking" || state.status === "finishing") {
+  if (state.status === "checking") {
     return (
       <div className="w-full rounded-[20px] border border-slate-200 bg-white px-6 py-10 text-center shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
         <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">
           Admin invitation
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-          {state.status === "checking" ? "Verifying invite" : "Opening admin"}
+          Verifying invite
         </h1>
         <p className="mt-3 text-sm leading-6 text-slate-500">
-          {state.status === "checking"
-            ? "Please wait while we check your secure invitation."
-            : "Please wait while we finish setting up your admin session."}
+          Please wait while we check your secure invitation.
         </p>
       </div>
     );
@@ -235,7 +227,7 @@ export function AdminAcceptInviteClient() {
         Set your password
       </h1>
       <p className="mt-3 text-sm leading-6 text-slate-500">
-        Choose a password for your business-admin account.
+        Choose a password for your {businessName ? `${businessName} ` : ""}business-admin account.
       </p>
 
       {submitError ? (
@@ -282,7 +274,7 @@ export function AdminAcceptInviteClient() {
           disabled={isSubmitting}
           className="admin-btn admin-btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {isSubmitting ? "Opening admin..." : "Accept Invite"}
+          {isSubmitting ? "Opening admin..." : "Set password and enter admin"}
         </button>
       </form>
     </div>
