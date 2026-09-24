@@ -2,6 +2,7 @@ import "server-only";
 
 import { headers } from "next/headers";
 import type { User } from "@supabase/supabase-js";
+import { getAdminAuthRedirectUrl } from "@/lib/admin/auth-redirects";
 import {
   requirePlatformOwner,
   type PlatformAdminMembershipStatus,
@@ -156,31 +157,17 @@ async function findAuthUserByExactEmail(email: string): Promise<User | null> {
   return null;
 }
 
-function normalizeProtocol(value: string | null) {
-  if (value === "http" || value === "https") {
-    return value;
-  }
-
-  return null;
-}
-
 async function getPlatformAdminInviteRedirectTo() {
   const headerStore = await headers();
-  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "");
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
-  const protocol =
-    normalizeProtocol(headerStore.get("x-forwarded-proto")) ??
-    (process.env.NODE_ENV === "production" ? "https" : "http");
-  const origin = host ? `${protocol}://${host}` : configuredSiteUrl;
 
-  if (!origin) {
-    throw new PlatformAdminUserMutationError(
-      "database_error",
-      "Could not determine the Platform Admin invite redirect URL.",
-    );
-  }
-
-  return `${origin}/platform-admin/auth/callback`;
+  return getAdminAuthRedirectUrl("/platform-admin/auth/callback", {
+    adminAppUrl: process.env.ADMIN_APP_URL,
+    forwardedHost: headerStore.get("x-forwarded-host"),
+    host: headerStore.get("host"),
+    forwardedProto: headerStore.get("x-forwarded-proto"),
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
 
 function mapDatabaseMutationError(error: SupabaseDbError): never {

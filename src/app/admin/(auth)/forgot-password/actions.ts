@@ -13,6 +13,7 @@ async function getAdminPasswordRecoveryRequestContext() {
   const headerStore = await headers();
 
   return {
+    adminAppUrl: process.env.ADMIN_APP_URL,
     forwardedHost: headerStore.get("x-forwarded-host"),
     host: headerStore.get("host"),
     forwardedProto: headerStore.get("x-forwarded-proto"),

@@ -1,8 +1,10 @@
 import "server-only";
 
+import { normalizeAdminAppOrigin } from "@/lib/admin/app-url";
 import { normalizePublicHostname } from "@/lib/tenant/resolution";
 
 export type AdminAuthRedirectInput = {
+  adminAppUrl?: string | null;
   forwardedHost?: string | null;
   host?: string | null;
   forwardedProto?: string | null;
@@ -57,6 +59,11 @@ export function getAdminAuthRedirectUrl(
   path: `/${string}`,
   input: AdminAuthRedirectInput,
 ) {
+  const adminOrigin = normalizeAdminAppOrigin(input.adminAppUrl);
+  if (adminOrigin) {
+    return new URL(path, adminOrigin).toString();
+  }
+
   const requestHost = getAdminAuthRedirectRequestHost(input);
 
   if (requestHost) {

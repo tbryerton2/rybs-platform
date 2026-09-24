@@ -14,45 +14,41 @@ test("business-admin forgot password sends Supabase recovery to admin update-pas
   const helper = readRepoFile("src/lib/admin/password-recovery.ts");
 
   assert.match(source, /sendAdminPasswordRecoveryEmail\(\{/);
-  assert.match(source, /NEXT_PUBLIC_SITE_URL/);
-  assert.match(source, /headers\(\)/);
-  assert.match(source, /x-forwarded-host/);
-  assert.match(source, /x-forwarded-proto/);
+  assert.match(source, /ADMIN_APP_URL/);
   assert.match(helper, /generateLink\(\{[\s\S]*type: "recovery"/);
-  assert.match(helper, /resolveTenantEmailSender/);
-  assert.match(helper, /tenantSenderSendEmailOptions/);
+  assert.match(helper, /getRybManagedEmailSenderConfig/);
+  assert.match(helper, /RYBS_MANAGED_SES_FROM_EMAIL is required/);
   assert.match(helper, /\.from\("business_admin_memberships"\)/);
   assert.match(helper, /\.in\("role", \["owner", "admin"\]\)/);
   assert.match(helper, /\/admin\/update-password/);
   assert.doesNotMatch(source, /platform-admin/);
 });
 
-test("business-admin recovery redirect prefers request host before site url", () => {
+test("business-admin recovery redirect prefers the canonical admin app", () => {
   const source = readRepoFile("src/lib/admin/password-recovery.ts");
   const redirects = readRepoFile("src/lib/admin/auth-redirects.ts");
 
   assert.match(source, /AdminAuthRedirectInput/);
   assert.match(source, /getAdminAuthRedirectUrl\("\/admin\/update-password"/);
-  assert.match(redirects, /forwardedHost/);
-  assert.match(redirects, /normalizePublicHostname/);
-  assert.match(redirects, /requestHost[\s\S]*siteUrl/);
+  assert.match(redirects, /normalizeAdminAppOrigin/);
+  assert.match(redirects, /adminOrigin[\s\S]*requestHost/);
   assert.match(source, /\/admin\/update-password/);
   assert.doesNotMatch(source, /demo-preview\.rybsoftware\.com/);
 });
 
-test("business-admin recovery uses tenant-aware SES sender, not Supabase direct email", () => {
+test("business-admin recovery uses RYBS sender and active membership, not tenant hostname", () => {
   const action = readRepoFile("src/app/admin/(auth)/forgot-password/actions.ts");
   const helper = readRepoFile("src/lib/admin/password-recovery.ts");
 
   assert.doesNotMatch(action, /resetPasswordForEmail/);
   assert.doesNotMatch(helper, /resetPasswordForEmail/);
-  assert.match(helper, /resolveTenantFromHostname\(requestHost\)/);
   assert.match(helper, /findAuthUserByEmail\(input\.email\)/);
   assert.match(helper, /hasActiveAdminMembership/);
-  assert.match(helper, /businessId: tenant\.id/);
-  assert.match(helper, /authUserId: authUser\.id/);
+  assert.match(helper, /hasActiveAdminMembership\(authUser\.id\)/);
   assert.match(helper, /buildAdminPasswordRecoveryEmail/);
+  assert.match(helper, /businessName: "RYBS Platform"/);
   assert.match(helper, /sendEmail\(\{/);
+  assert.doesNotMatch(helper, /resolvePublicTenantFromHostname/);
   assert.doesNotMatch(helper, /Tan Can Man/);
 });
 

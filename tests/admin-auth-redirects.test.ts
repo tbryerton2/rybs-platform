@@ -3,27 +3,28 @@ import assert from "node:assert/strict";
 
 import { getAdminAuthRedirectUrl } from "../src/lib/admin/auth-redirects.ts";
 
-test("admin invite redirect prefers Demo request host over localhost site url", () => {
+test("admin invite redirect prefers the configured admin app over the request host", () => {
   assert.equal(
     getAdminAuthRedirectUrl("/admin/accept-invite", {
+      adminAppUrl: "https://app.rybsoftware.com",
       forwardedHost: "demo-preview.rybsoftware.com",
       forwardedProto: "https",
       siteUrl: "http://localhost:3000",
       nodeEnv: "production",
     }),
-    "https://demo-preview.rybsoftware.com/admin/accept-invite",
+    "https://app.rybsoftware.com/admin/accept-invite",
   );
 });
 
-test("admin invite redirect keeps future tenant hosts tenant-specific", () => {
+test("admin invite redirect keeps preview hosts usable when no canonical app is configured", () => {
   assert.equal(
     getAdminAuthRedirectUrl("/admin/accept-invite", {
-      host: "customer.example.com",
+      host: "demo-preview.rybsoftware.com",
       forwardedProto: "https",
       siteUrl: "https://rybsoftware.com",
       nodeEnv: "production",
     }),
-    "https://customer.example.com/admin/accept-invite",
+    "https://demo-preview.rybsoftware.com/admin/accept-invite",
   );
 });
 
