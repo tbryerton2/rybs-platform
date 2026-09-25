@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bars3Icon } from "@heroicons/react/24/outline";
+import { ArrowsRightLeftIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { adminNavGroups, getActiveAdminNavItem, isAdminNavItemActive } from "./admin-nav";
@@ -15,9 +15,11 @@ import {
 function MobileNav({
   pathname,
   businessName,
+  canSwitchBusiness,
 }: {
   pathname: string;
   businessName: string;
+  canSwitchBusiness: boolean;
 }) {
   return (
     <div className="border-b border-slate-200 bg-white lg:hidden">
@@ -32,6 +34,15 @@ function MobileNav({
             </p>
             <p className="text-base font-semibold text-slate-900">Admin</p>
           </div>
+          {canSwitchBusiness ? (
+            <Link
+              href="/admin/select-business"
+              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+              aria-label="Switch business"
+            >
+              <ArrowsRightLeftIcon className="h-4 w-4" />
+            </Link>
+          ) : null}
         </div>
       </div>
 
@@ -64,9 +75,11 @@ function MobileNav({
 export function AdminShell({
   children,
   businessName,
+  canSwitchBusiness = false,
 }: {
   children: React.ReactNode;
   businessName: string;
+  canSwitchBusiness?: boolean;
 }) {
   const pathname = usePathname();
   const activeItem = getActiveAdminNavItem(pathname);
@@ -86,6 +99,8 @@ export function AdminShell({
     !pathname.startsWith("/admin/equipment") &&
     !pathname.startsWith("/admin/analytics") &&
     pathname !== "/admin/settings/pricing" &&
+    pathname !== "/admin/settings/payments" &&
+    pathname !== "/admin/settings/users" &&
     !pathname.startsWith("/admin/settings/zips") &&
     pathname !== "/admin/settings/retail-site" &&
     !pathname.startsWith("/admin/cms");
@@ -101,12 +116,17 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <MobileNav pathname={pathname} businessName={businessName} />
+      <MobileNav
+        pathname={pathname}
+        businessName={businessName}
+        canSwitchBusiness={canSwitchBusiness}
+      />
 
       <div className="w-full lg:px-5 lg:pb-6 lg:pt-6 xl:px-6 2xl:px-8">
         <AdminSidebar
           pathname={pathname}
           businessName={businessName}
+          canSwitchBusiness={canSwitchBusiness}
           collapsed={sidebarCollapsed}
           onToggle={toggleSidebar}
         />

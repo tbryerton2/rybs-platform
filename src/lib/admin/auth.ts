@@ -9,6 +9,7 @@ import { getBrandSettingsForTenant, type TenantRecord } from "@/lib/tenant/serve
 
 export const ADMIN_ACCESS_TOKEN_COOKIE = "tcm_admin_access_token";
 export const ADMIN_REFRESH_TOKEN_COOKIE = "tcm_admin_refresh_token";
+export const ADMIN_SELECTED_BUSINESS_COOKIE = "rybs_admin_selected_business_id";
 export const ADMIN_AUTH_COOKIE_PATH = "/";
 const LEGACY_ADMIN_AUTH_COOKIE_PATH = "/admin";
 
@@ -19,7 +20,7 @@ export const adminAuthCookieOptions = {
   path: ADMIN_AUTH_COOKIE_PATH,
 };
 
-export type AdminMembershipRole = "owner";
+export type AdminMembershipRole = "owner" | "admin";
 export type AdminMembershipStatus = "active" | "disabled";
 
 export type AdminMembership = {
@@ -47,6 +48,7 @@ export type AdminSessionContext = {
   userId: string;
   email?: string;
   businessId: string;
+  availableBusinesses: AdminBusinessSummary[];
   tenant: {
     id: string;
     slug: string;
@@ -57,9 +59,20 @@ export type AdminSessionContext = {
   membership: AdminMembership;
 };
 
+export type AdminBusinessSummary = {
+  id: string;
+  slug: string;
+  name: string;
+};
+
+export type AdminBusinessSelectionOption = TenantRecord & {
+  name: string;
+  membership: AdminMembership;
+};
+
 export type AdminAccessDeniedReason =
   | "no_active_membership"
-  | "multiple_active_memberships"
+  | "business_selection_required"
   | "inactive_tenant";
 
 export class AdminAccessDeniedError extends Error {
@@ -135,6 +148,42 @@ export async function setAdminSessionCookiesFromServerAction(input: {
   }
 }
 
+function selectedBusinessCookieOptions() {
+  return {
+    ...adminAuthCookieOptions,
+    maxAge: 60 * 60 * 24 * 30,
+  };
+}
+
+export function setAdminSelectedBusinessCookie(response: NextResponse, businessId: string) {
+  response.cookies.set(ADMIN_SELECTED_BUSINESS_COOKIE, businessId, selectedBusinessCookieOptions());
+}
+
+export async function setAdminSelectedBusinessCookieFromServerAction(businessId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set(ADMIN_SELECTED_BUSINESS_COOKIE, businessId, selectedBusinessCookieOptions());
+}
+
+export function clearAdminSelectedBusinessCookie(response: NextResponse, hostname?: string | null) {
+  const domains = getAdminCookieClearDomains(hostname);
+
+  for (const path of [ADMIN_AUTH_COOKIE_PATH, LEGACY_ADMIN_AUTH_COOKIE_PATH]) {
+    response.headers.append("Set-Cookie", serializeExpiredAdminCookie(ADMIN_SELECTED_BUSINESS_COOKIE, path));
+
+    for (const domain of domains) {
+      response.headers.append("Set-Cookie", serializeExpiredAdminCookie(ADMIN_SELECTED_BUSINESS_COOKIE, path, domain));
+    }
+  }
+}
+
+export async function clearAdminSelectedBusinessCookieFromServerAction() {
+  const cookieStore = await cookies();
+  cookieStore.set(ADMIN_SELECTED_BUSINESS_COOKIE, "", {
+    ...adminAuthCookieOptions,
+    maxAge: 0,
+  });
+}
+
 function serializeExpiredAdminCookie(name: string, path: string, domain?: string) {
   const parts = [
     `${name}=`,
@@ -166,7 +215,7 @@ function getAdminCookieClearDomains(hostname?: string | null) {
 export function clearAdminSessionCookies(response: NextResponse, hostname?: string | null) {
   const domains = getAdminCookieClearDomains(hostname);
 
-  for (const cookieName of [ADMIN_ACCESS_TOKEN_COOKIE, ADMIN_REFRESH_TOKEN_COOKIE]) {
+  for (const cookieName of [ADMIN_ACCESS_TOKEN_COOKIE, ADMIN_REFRESH_TOKEN_COOKIE, ADMIN_SELECTED_BUSINESS_COOKIE]) {
     for (const path of [ADMIN_AUTH_COOKIE_PATH, LEGACY_ADMIN_AUTH_COOKIE_PATH]) {
       response.headers.append("Set-Cookie", serializeExpiredAdminCookie(cookieName, path));
 
@@ -201,6 +250,20 @@ type AdminSessionResolution =
 
 type TenantLookupRow = TenantRecord;
 
+async function getAuthenticatedAdminUserFromCookies() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ADMIN_ACCESS_TOKEN_COOKIE)?.value;
+
+  if (!accessToken) return null;
+
+  const authClient = createAdminAuthClient();
+  const { data, error } = await authClient.auth.getUser(accessToken);
+
+  if (error || !data.user) return null;
+
+  return data.user;
+}
+
 async function loadAdminBusinessTenant(membership: AdminMembership) {
   const { data, error } = await supabaseAdmin
     .from("tenants")
@@ -225,16 +288,88 @@ async function loadAdminBusinessTenant(membership: AdminMembership) {
   };
 }
 
+async function loadActiveAdminMembershipsForUser(userId: string) {
+  const membershipLookup = await supabaseAdmin
+    .from("business_admin_memberships")
+    .select("id, business_id, auth_user_id, role, status, created_at, updated_at")
+    .eq("auth_user_id", userId)
+    .in("role", ["owner", "admin"])
+    .eq("status", "active");
+
+  if (membershipLookup.error) {
+    throw new Error(membershipLookup.error.message);
+  }
+
+  return ((membershipLookup.data ?? []) as AdminMembershipRow[]).map(mapAdminMembership);
+}
+
+async function loadActiveAdminBusinessOptions(
+  memberships: AdminMembership[],
+): Promise<AdminBusinessSelectionOption[]> {
+  const options = await Promise.all(
+    memberships.map(async (membership) => {
+      const business = await loadAdminBusinessTenant(membership);
+      if (!business) return null;
+
+      return {
+        ...business,
+        membership,
+      };
+    }),
+  );
+
+  return options.filter((option): option is AdminBusinessSelectionOption => option !== null);
+}
+
+export async function loadActiveAdminBusinessOptionsForUser(userId: string): Promise<AdminBusinessSelectionOption[]> {
+  const memberships = await loadActiveAdminMembershipsForUser(userId);
+  return loadActiveAdminBusinessOptions(memberships);
+}
+
+export async function getAdminBusinessSelectionContext() {
+  const user = await getAuthenticatedAdminUserFromCookies();
+
+  if (!user) {
+    redirect("/admin/login");
+  }
+
+  const memberships = await loadActiveAdminMembershipsForUser(user.id);
+  const businesses = await loadActiveAdminBusinessOptions(memberships);
+
+  if (memberships.length === 0) {
+    throw new AdminAccessDeniedError(getAdminAccessDeniedMessage("no_active_membership"), "no_active_membership");
+  }
+
+  if (businesses.length === 0) {
+    throw new AdminAccessDeniedError(getAdminAccessDeniedMessage("inactive_tenant"), "inactive_tenant");
+  }
+
+  return {
+    user,
+    userId: user.id,
+    email: user.email ?? undefined,
+    businesses,
+  };
+}
+
 export function buildAdminBusinessContext(input: {
   user: User;
   membership: AdminMembership;
   business: TenantRecord & { name: string };
+  availableBusinesses?: AdminBusinessSummary[];
 }): AdminSessionContext {
   return {
     user: input.user,
     userId: input.user.id,
     email: input.user.email ?? undefined,
     businessId: input.business.id,
+    availableBusinesses: input.availableBusinesses ?? [
+      {
+        id: input.business.id,
+        slug: input.business.slug,
+        name: input.business.name,
+      },
+    ],
     tenant: {
       id: input.business.id,
       slug: input.business.slug,
@@ -266,44 +401,38 @@ async function resolveAdminSession(): Promise<AdminSessionResolution> {
 
   if (error || !data.user) return { status: "unauthenticated" };
 
-  const membershipLookup = await supabaseAdmin
-    .from("business_admin_memberships")
-    .select("id, business_id, auth_user_id, role, status, created_at, updated_at")
-    .eq("auth_user_id", data.user.id)
-    .eq("role", "owner")
-    .eq("status", "active");
-
-  if (membershipLookup.error) {
-    throw new Error(membershipLookup.error.message);
-  }
-
-  const memberships = ((membershipLookup.data ?? []) as AdminMembershipRow[]).map(mapAdminMembership);
+  const memberships = await loadActiveAdminMembershipsForUser(data.user.id);
 
   if (memberships.length === 0) {
     return { status: "unauthorized", user: data.user, reason: "no_active_membership" };
   }
 
-  if (memberships.length > 1) {
-    return { status: "unauthorized", user: data.user, reason: "multiple_active_memberships" };
-  }
+  const options = await loadActiveAdminBusinessOptions(memberships);
 
-  const membership = memberships[0];
-  if (!membership) {
-    return { status: "unauthorized", user: data.user, reason: "no_active_membership" };
-  }
-
-  const business = await loadAdminBusinessTenant(membership);
-
-  if (!business) {
+  if (options.length === 0) {
     return { status: "unauthorized", user: data.user, reason: "inactive_tenant" };
+  }
+
+  let option = options[0] as AdminBusinessSelectionOption;
+  const selectedBusinessId = cookieStore.get(ADMIN_SELECTED_BUSINESS_COOKIE)?.value?.trim() || "";
+
+  if (options.length > 1) {
+    const selectedOption = options.find((candidate) => candidate.id === selectedBusinessId);
+
+    if (!selectedOption) {
+      return { status: "unauthorized", user: data.user, reason: "business_selection_required" };
+    }
+
+    option = selectedOption;
   }
 
   return {
     status: "authorized",
     session: buildAdminBusinessContext({
       user: data.user,
-      business,
-      membership,
+      business: option,
+      membership: option.membership,
+      availableBusinesses: options.map(({ id, slug, name }) => ({ id, slug, name })),
     }),
   };
 }
@@ -320,6 +449,10 @@ export async function requireAdminOwner(): Promise<AdminSessionContext> {
   }
 
   if (result.status === "unauthorized") {
+    if (result.reason === "business_selection_required") {
+      redirect("/admin/select-business");
+    }
+
     throw new AdminAccessDeniedError(getAdminAccessDeniedMessage(result.reason), result.reason);
   }
 
@@ -328,10 +461,24 @@ export async function requireAdminOwner(): Promise<AdminSessionContext> {
 
 export const requireAdminBusinessContext = requireAdminOwner;
 
+export function isAdminBusinessOwner(session: AdminSessionContext) {
+  return session.membership.role === "owner" && session.membership.status === "active";
+}
+
+export async function requireAdminBusinessOwner(): Promise<AdminSessionContext> {
+  const session = await requireAdminOwner();
+
+  if (!isAdminBusinessOwner(session)) {
+    throw new AdminAccessDeniedError("Only active business owners can manage business users.");
+  }
+
+  return session;
+}
+
 function getAdminAccessDeniedMessage(reason: AdminAccessDeniedReason) {
   switch (reason) {
-    case "multiple_active_memberships":
-      return "Multiple business memberships were found. Business switching is not available yet.";
+    case "business_selection_required":
+      return "Select a business to continue.";
     case "inactive_tenant":
       return "Your business is inactive. Contact support before using the admin.";
     case "no_active_membership":

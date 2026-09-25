@@ -6,5 +6,5 @@ export default function PlatformAdminRootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="tcm-admin">{children}</div>;
+  return <div className="rybs-admin">{children}</div>;
 }

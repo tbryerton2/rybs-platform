@@ -10,7 +10,7 @@ import type {
 
 const DEFAULT_PAYMENT_PROVIDER = "square" satisfies PaymentProvider;
 const CUSTOMER_PROVIDER_ACCOUNT_SELECT =
-  "id, business_id, customer_id, provider, provider_environment, provider_customer_id, status, created_at, updated_at";
+  "id, business_id, customer_id, provider, provider_environment, payment_provider_connection_id, provider_merchant_id, provider_customer_id, status, created_at, updated_at";
 
 type CustomerProviderAccountRow = {
   id: string;
@@ -18,6 +18,8 @@ type CustomerProviderAccountRow = {
   customer_id: string;
   provider: string;
   provider_environment: string;
+  payment_provider_connection_id?: string | null;
+  provider_merchant_id?: string | null;
   provider_customer_id: string;
   status: string;
   created_at: string;
@@ -40,6 +42,11 @@ function cleanRequired(value: string | undefined, fieldName: string) {
     throw new CustomerProviderAccountServiceError(`${fieldName} is required.`);
   }
   return cleaned;
+}
+
+function clean(value: string | null | undefined) {
+  const cleaned = value?.trim();
+  return cleaned ? cleaned : null;
 }
 
 function assertUuid(value: string, fieldName: string) {
@@ -70,6 +77,8 @@ function toStoredCustomerProviderAccount(row: CustomerProviderAccountRow): Store
     customerId: row.customer_id,
     provider: row.provider as PaymentProvider,
     providerEnvironment: row.provider_environment as PaymentProviderEnvironment,
+    paymentProviderConnectionId: row.payment_provider_connection_id ?? null,
+    providerMerchantId: row.provider_merchant_id ?? null,
     providerCustomerId: row.provider_customer_id,
     status: row.status as StoredCustomerProviderAccount["status"],
     createdAt: row.created_at,
@@ -84,6 +93,8 @@ function assertSameMapping(
     customerId: string;
     provider: PaymentProvider;
     providerEnvironment: PaymentProviderEnvironment;
+    paymentProviderConnectionId?: string | null;
+    providerMerchantId?: string | null;
     providerCustomerId: string;
   },
 ) {
@@ -103,6 +114,16 @@ function assertSameMapping(
       "customer already has a different providerCustomerId for this provider environment.",
     );
   }
+
+  if (
+    input.paymentProviderConnectionId &&
+    row.paymentProviderConnectionId &&
+    row.paymentProviderConnectionId !== input.paymentProviderConnectionId
+  ) {
+    throw new CustomerProviderAccountServiceError(
+      "providerCustomerId is already mapped to a different payment provider connection.",
+    );
+  }
 }
 
 async function findByCustomer(input: {
@@ -110,14 +131,21 @@ async function findByCustomer(input: {
   customerId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
 }) {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("customer_provider_accounts")
     .select(CUSTOMER_PROVIDER_ACCOUNT_SELECT)
     .eq("business_id", input.businessId)
     .eq("customer_id", input.customerId)
     .eq("provider", input.provider)
-    .eq("provider_environment", input.providerEnvironment)
+    .eq("provider_environment", input.providerEnvironment);
+
+  if (input.paymentProviderConnectionId) {
+    query = query.eq("payment_provider_connection_id", input.paymentProviderConnectionId);
+  }
+
+  const { data, error } = await query
     .maybeSingle<CustomerProviderAccountRow>();
 
   if (error) {
@@ -130,14 +158,21 @@ async function findByCustomer(input: {
 async function findByProviderCustomer(input: {
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
   providerCustomerId: string;
 }) {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("customer_provider_accounts")
     .select(CUSTOMER_PROVIDER_ACCOUNT_SELECT)
     .eq("provider", input.provider)
     .eq("provider_environment", input.providerEnvironment)
-    .eq("provider_customer_id", input.providerCustomerId)
+    .eq("provider_customer_id", input.providerCustomerId);
+
+  if (input.paymentProviderConnectionId) {
+    query = query.eq("payment_provider_connection_id", input.paymentProviderConnectionId);
+  }
+
+  const { data, error } = await query
     .maybeSingle<CustomerProviderAccountRow>();
 
   if (error) {
@@ -152,6 +187,7 @@ export async function findCustomerProviderAccount(input: {
   customerId: string;
   provider?: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
 }) {
   const businessId = cleanRequired(input.businessId, "businessId");
   const customerId = cleanRequired(input.customerId, "customerId");
@@ -163,6 +199,7 @@ export async function findCustomerProviderAccount(input: {
     customerId,
     provider: normalizeProvider(input.provider),
     providerEnvironment: normalizeProviderEnvironment(input.providerEnvironment),
+    paymentProviderConnectionId: input.paymentProviderConnectionId ?? null,
   });
 }
 
@@ -174,15 +211,22 @@ export async function findOrCreateCustomerProviderAccount(
   const providerCustomerId = cleanRequired(input.providerCustomerId, "providerCustomerId");
   const provider = normalizeProvider(input.provider);
   const providerEnvironment = normalizeProviderEnvironment(input.providerEnvironment);
+  const paymentProviderConnectionId = clean(input.paymentProviderConnectionId);
+  const providerMerchantId = clean(input.providerMerchantId);
 
   assertUuid(businessId, "businessId");
   assertUuid(customerId, "customerId");
+  if (paymentProviderConnectionId) {
+    assertUuid(paymentProviderConnectionId, "paymentProviderConnectionId");
+  }
 
   const normalizedInput = {
     businessId,
     customerId,
     provider,
     providerEnvironment,
+    paymentProviderConnectionId,
+    providerMerchantId,
     providerCustomerId,
   };
 
@@ -198,16 +242,26 @@ export async function findOrCreateCustomerProviderAccount(
     return existingByProviderCustomer;
   }
 
+  const insertValues: Record<string, unknown> = {
+    business_id: businessId,
+    customer_id: customerId,
+    provider,
+    provider_environment: providerEnvironment,
+    provider_customer_id: providerCustomerId,
+    status: "active",
+  };
+
+  if (paymentProviderConnectionId) {
+    insertValues.payment_provider_connection_id = paymentProviderConnectionId;
+  }
+
+  if (providerMerchantId) {
+    insertValues.provider_merchant_id = providerMerchantId;
+  }
+
   const { data, error } = await supabaseAdmin
     .from("customer_provider_accounts")
-    .insert({
-      business_id: businessId,
-      customer_id: customerId,
-      provider,
-      provider_environment: providerEnvironment,
-      provider_customer_id: providerCustomerId,
-      status: "active",
-    })
+    .insert(insertValues)
     .select(CUSTOMER_PROVIDER_ACCOUNT_SELECT)
     .single<CustomerProviderAccountRow>();
 

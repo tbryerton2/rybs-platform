@@ -1,6 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getCanonicalAdminRedirectUrl } from "@/lib/admin/app-url";
 
 export function middleware(request: NextRequest) {
+  const canonicalUrl = getCanonicalAdminRedirectUrl({
+    requestUrl: request.url,
+    adminAppUrl: process.env.ADMIN_APP_URL,
+  });
+
+  if (canonicalUrl) {
+    return NextResponse.redirect(canonicalUrl);
+  }
+
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-current-pathname", request.nextUrl.pathname);
 

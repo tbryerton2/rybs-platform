@@ -8,7 +8,6 @@ import { createBookingRecord } from "@/lib/booking-records";
 import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { ensureRentalWindowAvailability } from "@/lib/ensure-rental-window-availability";
 import { getCustomerFacingBookingLabel } from "@/lib/identity";
-import { supabase } from "@/lib/supabase";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { normalizePhone } from "@/lib/customers";
 import { getDumpsterPriceForZip } from "@/lib/pricing";
@@ -517,7 +516,7 @@ export async function POST(req: Request) {
     }
 
     // 1) Atomically "claim" the hold so two requests can't confirm the same hold
-    const claim = await supabase
+    const claim = await supabaseAdmin
       .from("booking_holds")
       .update({ status: "converting" })
       .eq("id", holdId)
@@ -559,7 +558,7 @@ export async function POST(req: Request) {
           }),
       });
     } catch (availabilityError) {
-      await supabase
+      await supabaseAdmin
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
@@ -594,7 +593,7 @@ export async function POST(req: Request) {
             : `Dumpster rental on ${deliveryDate}`,
         });
       } catch (paymentError) {
-        await supabase
+        await supabaseAdmin
           .from("booking_holds")
           .update({ status: "active" })
           .eq("id", holdId)
@@ -618,7 +617,7 @@ export async function POST(req: Request) {
       }
 
       if (!checkoutPayment.ok || checkoutPayment.status !== "paid") {
-        await supabase
+        await supabaseAdmin
           .from("booking_holds")
           .update({ status: "active" })
           .eq("id", holdId)
@@ -728,7 +727,7 @@ export async function POST(req: Request) {
       }
 
       // If booking insert fails, try to revert hold back to active (best-effort)
-      await supabase
+      await supabaseAdmin
         .from("booking_holds")
         .update({ status: "active" })
         .eq("id", holdId)
@@ -839,19 +838,14 @@ export async function POST(req: Request) {
               customerId: createdBooking.customerId,
               provider: "square",
               providerEnvironment: checkoutPayment.providerEnvironment,
+              paymentProviderConnectionId: checkoutPayment.paymentProviderConnectionId,
+              providerMerchantId: checkoutPayment.providerMerchantId,
               cardSaveSourceId: checkoutPayment.providerPaymentId,
               name: customerName,
               givenName: customerFirstName || null,
               familyName: customerLastName || null,
               email: customerEmail,
               phone: customerPhone,
-              address: {
-                addressLine1: customerStreet,
-                locality: customerCity,
-                administrativeDistrictLevel1: customerState,
-                postalCode: customerZip,
-                country: "US",
-              },
               consentText: cardOnFileConsent.consentText,
               consentAcceptedAt: cardOnFileConsent.acceptedAt,
               customerIdempotencyKey: `cof-customer-${createdBooking.customerId}`,
@@ -1006,7 +1000,7 @@ export async function POST(req: Request) {
         totalPriceCents: pricing.priceQuote.totalCents,
       });
 
-      const msg = await supabase
+      const msg = await supabaseAdmin
         .from("booking_messages")
         .insert({
           business_id: tenant.id,
@@ -1039,7 +1033,7 @@ export async function POST(req: Request) {
         error: bookingEmailError,
       });
 
-      const msg = await supabase
+      const msg = await supabaseAdmin
         .from("booking_messages")
         .insert({
           business_id: tenant.id,
@@ -1062,7 +1056,7 @@ export async function POST(req: Request) {
     }
 
     // 3) Mark hold as converted (best-effort)
-    const finalize = await supabase
+    const finalize = await supabaseAdmin
       .from("booking_holds")
       .update({ status: "converted" })
       .eq("id", holdId)

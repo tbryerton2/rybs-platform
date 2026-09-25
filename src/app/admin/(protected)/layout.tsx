@@ -55,7 +55,12 @@ export default async function ProtectedAdminLayout({
   return (
     <>
       <AdminToastProvider />
-      <AdminShell businessName={adminSession.tenant.name}>{children}</AdminShell>
+      <AdminShell
+        businessName={adminSession.tenant.name}
+        canSwitchBusiness={adminSession.availableBusinesses.length > 1}
+      >
+        {children}
+      </AdminShell>
     </>
   );
 }

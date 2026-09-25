@@ -37,6 +37,7 @@ import { getPlatformDomainIntegrationStatus } from "@/lib/platform-admin/domains
 import { getPlatformEmailIdentityIntegrationStatus } from "@/lib/platform-admin/email-identities";
 import { CURRENT_SITE_DEACTIVATION_CONFIRMATION } from "@/lib/platform-admin/tenant-validation";
 import { getPlatformTenantDetail, type PlatformTenantDomain } from "@/lib/platform-admin/tenants";
+import { getRybManagedEmailSenderConfig } from "@/lib/email/tenant-sender";
 import type { TenantEmailIdentity, TenantEmailIdentityStatus } from "@/lib/email/tenant-email-identity";
 import type {
   PlatformTenantSummary,
@@ -1080,27 +1081,64 @@ function EmailDnsInstructions({ identity }: { identity: TenantEmailIdentity }) {
   );
 }
 
-function EmailIdentityReadiness({ emailIdentity }: { emailIdentity: TenantEmailIdentity | null }) {
-  if (!emailIdentity) {
+type EffectiveEmailSendingStatus = "tenant_verified" | "rybs_managed" | "unable";
+
+function getEffectiveEmailSendingStatus(input: {
+  emailIdentity: TenantEmailIdentity | null;
+  awsConfigured: boolean;
+  rybsSenderConfigured: boolean;
+}): EffectiveEmailSendingStatus {
+  if (!input.awsConfigured) return "unable";
+
+  if (
+    input.emailIdentity?.provider === "ses" &&
+    input.emailIdentity.providerStatus === "verified" &&
+    input.emailIdentity.verificationStatus === "verified"
+  ) {
+    return "tenant_verified";
+  }
+
+  return input.rybsSenderConfigured ? "rybs_managed" : "unable";
+}
+
+function EmailIdentityReadiness({
+  emailIdentity,
+  effectiveStatus,
+  rybsManagedSender,
+}: {
+  emailIdentity: TenantEmailIdentity | null;
+  effectiveStatus: EffectiveEmailSendingStatus;
+  rybsManagedSender: ReturnType<typeof getRybManagedEmailSenderConfig>;
+}) {
+  if (effectiveStatus === "tenant_verified") {
     return (
-      <Alert tone="warning">
-        No tenant sender identity is configured yet. Current email delivery still uses the existing SES environment sender.
+      <Alert tone="success">
+        Customer emails use the verified tenant sender identity.
       </Alert>
     );
   }
 
-  if (emailIdentity.verificationStatus === "verified") {
+  if (effectiveStatus === "rybs_managed") {
     return (
-      <Alert tone="success">
-        SES reports this sender identity is verified. Current email delivery still uses the existing SES environment sender.
+      <Alert tone="warning">
+        Customer emails use the RYBS managed sender
+        {rybsManagedSender.senderEmail ? ` (${rybsManagedSender.senderEmail})` : ""} with this tenant&apos;s display name and Reply-To.
+      </Alert>
+    );
+  }
+
+  if (!emailIdentity) {
+    return (
+      <Alert tone="error">
+        Unable to send customer emails. Configure RYBS_MANAGED_SES_FROM_EMAIL or verify a tenant sender identity.
       </Alert>
     );
   }
 
   if (emailIdentity.verificationStatus === "dns_required") {
     return (
-      <Alert tone="warning">
-        SES returned DKIM records. Add the CNAMEs below, then check verification again.
+      <Alert tone="error">
+        Unable to send customer emails. SES returned DKIM records for the tenant sender, but no RYBS managed sender is configured.
       </Alert>
     );
   }
@@ -1114,8 +1152,8 @@ function EmailIdentityReadiness({ emailIdentity }: { emailIdentity: TenantEmailI
   }
 
   return (
-    <Alert tone="warning">
-      This sender identity is saved but not ready for tenant-aware email sending.
+    <Alert tone="error">
+      Unable to send customer emails. This sender identity is saved but not verified, and no RYBS managed sender is configured.
     </Alert>
   );
 }
@@ -1130,9 +1168,27 @@ function EmailSendingSection({
   checkedEmailIdentity?: string;
 }) {
   const integration = getPlatformEmailIdentityIntegrationStatus();
+  const rybsManagedSender = getRybManagedEmailSenderConfig();
+  const effectiveStatus = getEffectiveEmailSendingStatus({
+    emailIdentity,
+    awsConfigured: integration.configured,
+    rybsSenderConfigured: rybsManagedSender.configured,
+  });
   const canProvision = emailIdentity &&
     (emailIdentity.providerStatus === "pending" || emailIdentity.providerStatus === "failed");
   const canDisable = emailIdentity && emailIdentity.providerStatus !== "disabled";
+  const effectiveStatusLabel =
+    effectiveStatus === "tenant_verified"
+      ? "Using verified tenant sender"
+      : effectiveStatus === "rybs_managed"
+        ? "Using RYBS managed sender"
+        : "Unable to send";
+  const effectiveStatusClasses =
+    effectiveStatus === "tenant_verified"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : effectiveStatus === "rybs_managed"
+        ? "bg-sky-50 text-sky-700 ring-sky-200"
+        : "bg-rose-50 text-rose-700 ring-rose-200";
 
   return (
     <section id="email-sending" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -1146,25 +1202,32 @@ function EmailSendingSection({
         <span
           className={joinClasses(
             "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-            emailIdentity?.verificationStatus === "verified"
-              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-              : "bg-amber-50 text-amber-700 ring-amber-200",
+            effectiveStatusClasses,
           )}
         >
-          {emailIdentity?.verificationStatus === "verified" ? "Ready" : "Setup needed"}
+          {effectiveStatusLabel}
         </span>
       </div>
 
       <div className="mt-4 grid gap-3">
-        <EmailIdentityReadiness emailIdentity={emailIdentity} />
+        <EmailIdentityReadiness
+          emailIdentity={emailIdentity}
+          effectiveStatus={effectiveStatus}
+          rybsManagedSender={rybsManagedSender}
+        />
         {!integration.configured ? (
           <Alert tone="warning">
             SES identity provisioning needs AWS_REGION or SES_REGION, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.
           </Alert>
         ) : null}
+        {!rybsManagedSender.configured ? (
+          <Alert tone="warning">
+            RYBS managed sender fallback needs RYBS_MANAGED_SES_FROM_EMAIL.
+          </Alert>
+        ) : null}
       </div>
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Region</dt>
           <dd className="mt-1 text-slate-900">{integration.regionConfigured ? "Set" : "Missing"}</dd>
@@ -1176,6 +1239,10 @@ function EmailSendingSection({
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Secret key</dt>
           <dd className="mt-1 text-slate-900">{integration.secretKeyConfigured ? "Set" : "Missing"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">RYBS sender</dt>
+          <dd className="mt-1 break-all text-slate-900">{rybsManagedSender.senderEmail ?? "Missing"}</dd>
         </div>
       </dl>
 
@@ -1300,7 +1367,7 @@ function EmailSendingSection({
           </div>
           <div>
             <label htmlFor="replyToEmail" className="text-sm font-semibold text-slate-700">
-              Reply-To email
+              Reply-To on sender domain
             </label>
             <input
               id="replyToEmail"

@@ -44,8 +44,11 @@ test("platform dashboard uses tenant summaries instead of navigation cards", () 
 });
 
 test("platform admin shell exposes dashboard businesses and users navigation", () => {
+  const layout = readRepoFile("src/app/platform-admin/layout.tsx");
   const shell = readRepoFile("src/app/platform-admin/_components/platform-admin-shell.tsx");
 
+  assert.match(layout, /className="rybs-admin"/);
+  assert.doesNotMatch(layout, /tcm-admin/);
   assert.match(shell, /href="\/platform-admin"/);
   assert.match(shell, /href="\/platform-admin\/businesses"/);
   assert.match(shell, /href="\/platform-admin\/users"/);
@@ -70,6 +73,8 @@ test("platform user management remains owner-only and separate from business mem
   assert.match(service, /membership_rpc_missing/);
   assert.match(service, /deleteUser\(authUser\.id\)/);
   assert.match(service, /invite_membership_failure_cleanup_failed/);
+  assert.match(service, /getAdminAuthRedirectUrl\("\/platform-admin\/auth\/callback"/);
+  assert.match(service, /adminAppUrl: process\.env\.ADMIN_APP_URL/);
   assert.match(page, /isPlatformAdminOwner/);
   assert.match(actions, /grantPlatformAdminUser/);
   assert.match(actions, /disablePlatformAdminUser/);

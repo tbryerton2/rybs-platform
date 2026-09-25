@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import {
+  clearAdminSelectedBusinessCookie,
   createAdminAuthClient,
+  loadActiveAdminBusinessOptionsForUser,
+  setAdminSelectedBusinessCookie,
   setAdminSessionCookies,
 } from "@/lib/admin/auth";
+import { resolveAdminInviteDestination } from "@/lib/admin/invite-acceptance";
 
 type SessionPayload = {
   tokenHash?: string;
@@ -10,6 +14,7 @@ type SessionPayload = {
   accessToken?: string;
   refreshToken?: string | null;
   code?: string;
+  intendedBusinessId?: string | null;
   diagnostics?: Record<string, unknown>;
 };
 
@@ -45,6 +50,7 @@ export async function POST(req: Request) {
     const authClient = createAdminAuthClient();
     let accessToken = body.accessToken?.trim() || "";
     let refreshToken = body.refreshToken?.trim() || "";
+    let userId = "";
 
     if (body.tokenHash && body.type) {
       const { data, error } = await authClient.auth.verifyOtp({
@@ -64,6 +70,7 @@ export async function POST(req: Request) {
 
       accessToken = data.session.access_token;
       refreshToken = data.session.refresh_token;
+      userId = data.user.id;
     } else if (body.code) {
       const { data, error } = await authClient.auth.exchangeCodeForSession(body.code);
 
@@ -79,6 +86,7 @@ export async function POST(req: Request) {
 
       accessToken = data.session.access_token;
       refreshToken = data.session.refresh_token;
+      userId = data.user.id;
     } else if (accessToken) {
       const { data, error } = await authClient.auth.getUser(accessToken);
 
@@ -91,13 +99,33 @@ export async function POST(req: Request) {
         });
         return badRequest("We could not validate your admin session token.", 401);
       }
+
+      userId = data.user.id;
     } else {
       logAdminAuthSessionError("unusable_payload", payloadShape);
       return badRequest("Admin callback did not include usable session data.");
     }
 
-    const response = NextResponse.json({ ok: true, redirectTo: "/admin" });
+    const businessOptions = userId ? await loadActiveAdminBusinessOptionsForUser(userId) : [];
+    const intendedBusinessId = body.intendedBusinessId?.trim() || null;
+    const destination = resolveAdminInviteDestination(businessOptions, intendedBusinessId);
+
+    if (!destination.ok) {
+      logAdminAuthSessionError("invited_business_not_available", {
+        userId,
+        intendedBusinessId,
+        activeBusinessCount: businessOptions.length,
+      });
+      return badRequest("This invitation no longer grants access to the invited business.", 403);
+    }
+
+    const response = NextResponse.json({ ok: true, redirectTo: destination.redirectTo });
     setAdminSessionCookies(response, { accessToken, refreshToken });
+    if (destination.selectedBusiness) {
+      setAdminSelectedBusinessCookie(response, destination.selectedBusiness.id);
+    } else {
+      clearAdminSelectedBusinessCookie(response, req.headers.get("host"));
+    }
 
     return response;
   } catch (error) {

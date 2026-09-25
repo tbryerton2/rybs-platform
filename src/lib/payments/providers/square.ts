@@ -10,6 +10,7 @@ import type {
   PaymentProviderAdapter,
   PaymentProviderChargeInput,
   PaymentProviderChargeResult,
+  PaymentProviderConnectionContext,
   PaymentProviderEnvironment,
   PaymentProviderSavePaymentMethodInput,
   PaymentProviderSavePaymentMethodResult,
@@ -30,7 +31,10 @@ function resolveSquareBaseUrl(environment: PaymentProviderEnvironment) {
   return environment === "production" ? SquareEnvironment.Production : SquareEnvironment.Sandbox;
 }
 
-function getSquareAccessToken() {
+function getSquareAccessToken(accessToken?: string | null) {
+  const connectionToken = clean(accessToken);
+  if (connectionToken) return connectionToken;
+
   const token = process.env.SQUARE_ACCESS_TOKEN?.trim();
   if (!token) {
     throw new Error("SQUARE_ACCESS_TOKEN is required for Square checkout payments.");
@@ -60,19 +64,35 @@ export class SquarePaymentProviderOperationError extends Error {
   }
 }
 
-function getSquareLocationId() {
-  const locationId = process.env.SQUARE_LOCATION_ID?.trim();
-  if (!locationId) {
+function getSquareLocationId(locationId?: string | null) {
+  const connectionLocationId = clean(locationId);
+  if (connectionLocationId) return connectionLocationId;
+
+  const configuredLocationId = process.env.SQUARE_LOCATION_ID?.trim();
+  if (!configuredLocationId) {
     throw new Error("SQUARE_LOCATION_ID is required for Square checkout payments. Add it to .env.local.");
   }
-  return locationId;
+  return configuredLocationId;
 }
 
-function createSquareClient(environment: PaymentProviderEnvironment) {
+function createSquareClient(environment: PaymentProviderEnvironment, accessToken?: string | null) {
   return new SquareClient({
     environment: resolveSquareBaseUrl(environment),
-    token: getSquareAccessToken(),
+    token: getSquareAccessToken(accessToken),
   });
+}
+
+function resolveSquareRuntime(connection?: PaymentProviderConnectionContext) {
+  const environment = connection?.providerEnvironment ?? resolveSquareEnvironment();
+
+  return {
+    environment,
+    accessToken: connection?.accessToken ?? null,
+    providerLocationId: connection?.providerLocationId ?? null,
+    paymentProviderConnectionId: connection?.id ?? null,
+    providerMerchantId: connection?.providerMerchantId ?? null,
+    connectionMode: connection?.mode ?? "legacy_tan_can_man_fallback",
+  };
 }
 
 function mapSquareStatus(status: string | null | undefined): PaymentStatus {
@@ -218,8 +238,8 @@ function bigintToNumber(value: bigint | number | null | undefined) {
 export async function createOrReuseSquareCustomer(
   input: PaymentProviderCustomerInput,
 ): Promise<PaymentProviderCustomerResult> {
-  const environment = resolveSquareEnvironment();
-  const client = createSquareClient(environment);
+  const runtime = resolveSquareRuntime(input.connection);
+  const client = createSquareClient(runtime.environment, runtime.accessToken);
   const referenceId = getProviderCustomerReferenceId(input);
 
   if (referenceId) {
@@ -249,7 +269,9 @@ export async function createOrReuseSquareCustomer(
       if (existingCustomer?.id) {
         return {
           provider: "square",
-          providerEnvironment: environment,
+          providerEnvironment: runtime.environment,
+          paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+          providerMerchantId: runtime.providerMerchantId,
           providerCustomerId: existingCustomer.id,
           reused: true,
           rawProviderResponse: searchResponse,
@@ -298,7 +320,9 @@ export async function createOrReuseSquareCustomer(
 
     return {
       provider: "square",
-      providerEnvironment: environment,
+      providerEnvironment: runtime.environment,
+      paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+      providerMerchantId: runtime.providerMerchantId,
       providerCustomerId: requireSquareId(response.customer?.id, "providerCustomerId"),
       reused: false,
       rawProviderResponse: response,
@@ -311,6 +335,8 @@ export async function createOrReuseSquareCustomer(
 
 function toSavedPaymentMethodResult(input: {
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   providerCustomerId: string;
   card: {
     id?: string | null;
@@ -323,6 +349,8 @@ function toSavedPaymentMethodResult(input: {
   return {
     provider: "square",
     providerEnvironment: input.providerEnvironment,
+    paymentProviderConnectionId: input.paymentProviderConnectionId ?? null,
+    providerMerchantId: input.providerMerchantId ?? null,
     providerCustomerId: input.providerCustomerId,
     providerPaymentMethodId: requireSquareId(input.card?.id, "providerPaymentMethodId"),
     cardBrand: input.card?.cardBrand ?? null,
@@ -335,8 +363,8 @@ function toSavedPaymentMethodResult(input: {
 export async function findReusableSquareCard(
   input: PaymentProviderFindSavedPaymentMethodInput,
 ): Promise<PaymentProviderSavePaymentMethodResult | null> {
-  const environment = resolveSquareEnvironment();
-  const client = createSquareClient(environment);
+  const runtime = resolveSquareRuntime(input.connection);
+  const client = createSquareClient(runtime.environment, runtime.accessToken);
   const providerCustomerId = requireSquareId(input.providerCustomerId, "providerCustomerId");
   const referenceId = clean(input.referenceId);
 
@@ -353,7 +381,9 @@ export async function findReusableSquareCard(
       if (referenceId && card.referenceId !== referenceId) continue;
 
       return toSavedPaymentMethodResult({
-        providerEnvironment: environment,
+        providerEnvironment: runtime.environment,
+        paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+        providerMerchantId: runtime.providerMerchantId,
         providerCustomerId,
         card,
       });
@@ -368,8 +398,8 @@ export async function findReusableSquareCard(
 export async function saveSquareCard(
   input: PaymentProviderSavePaymentMethodInput,
 ): Promise<PaymentProviderSavePaymentMethodResult> {
-  const environment = resolveSquareEnvironment();
-  const client = createSquareClient(environment);
+  const runtime = resolveSquareRuntime(input.connection);
+  const client = createSquareClient(runtime.environment, runtime.accessToken);
   const providerCustomerId = requireSquareId(input.providerCustomerId, "providerCustomerId");
   const cardSaveSourceId = requireSquareId(
     input.cardSaveSourceId ?? input.paymentMethodToken,
@@ -402,7 +432,9 @@ export async function saveSquareCard(
     const card = response.card;
     return {
       ...toSavedPaymentMethodResult({
-        providerEnvironment: environment,
+        providerEnvironment: runtime.environment,
+        paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+        providerMerchantId: runtime.providerMerchantId,
         providerCustomerId,
         card,
       }),
@@ -415,11 +447,12 @@ export async function saveSquareCard(
 }
 
 export async function verifySquareSavedCard(input: {
+  connection?: PaymentProviderConnectionContext;
   providerPaymentMethodId: string;
   providerCustomerId: string;
 }) {
-  const environment = resolveSquareEnvironment();
-  const client = createSquareClient(environment);
+  const runtime = resolveSquareRuntime(input.connection);
+  const client = createSquareClient(runtime.environment, runtime.accessToken);
   const cardId = requireSquareId(input.providerPaymentMethodId, "providerPaymentMethodId");
   const expectedCustomerId = requireSquareId(input.providerCustomerId, "providerCustomerId");
 
@@ -468,18 +501,24 @@ export async function verifySquareSavedCard(input: {
   }
 }
 
-export function createSquarePaymentAdapter(): PaymentProviderAdapter {
-  const environment = resolveSquareEnvironment();
+export function createSquarePaymentAdapter(
+  connection?: PaymentProviderConnectionContext,
+): PaymentProviderAdapter {
+  const runtime = resolveSquareRuntime(connection);
 
   return {
     provider: "square",
-    environment,
+    environment: runtime.environment,
+    paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+    providerMerchantId: runtime.providerMerchantId,
+    providerLocationId: runtime.providerLocationId,
+    connectionMode: runtime.connectionMode,
     async verifySavedPaymentMethod(input) {
-      return verifySquareSavedCard(input);
+      return verifySquareSavedCard({ ...input, connection });
     },
     async charge(input: PaymentProviderChargeInput): Promise<PaymentProviderChargeResult> {
-      const locationId = getSquareLocationId();
-      const client = createSquareClient(environment);
+      const locationId = getSquareLocationId(runtime.providerLocationId);
+      const client = createSquareClient(runtime.environment, runtime.accessToken);
       const sourceId = requireSquareId(
         input.paymentSourceId ?? input.paymentMethodToken,
         "paymentSourceId",
@@ -510,6 +549,8 @@ export function createSquarePaymentAdapter(): PaymentProviderAdapter {
           providerPaymentId: payment?.id ?? null,
           providerOrderId: payment?.orderId ?? null,
           providerLocationId: payment?.locationId ?? locationId,
+          paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+          providerMerchantId: runtime.providerMerchantId,
           rawProviderResponse: response,
           paidAt: status === "paid" ? payment?.updatedAt ?? new Date().toISOString() : null,
           failedAt,
@@ -525,6 +566,8 @@ export function createSquarePaymentAdapter(): PaymentProviderAdapter {
         return {
           status: "failed",
           providerLocationId: locationId,
+          paymentProviderConnectionId: runtime.paymentProviderConnectionId,
+          providerMerchantId: runtime.providerMerchantId,
           rawProviderResponse: squareError.raw,
           failedAt: new Date().toISOString(),
           failureCode: squareError.code,

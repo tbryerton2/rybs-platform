@@ -7,7 +7,7 @@ import { resolveSelectedDumpster } from "@/lib/booking-product";
 import { addDaysYmd, getRentalPeriodDetails } from "@/lib/booking-pricing";
 import { getDumpsterRentalPolicy } from "@/lib/dumpster-rental-policy";
 import { isPublicDumpsterProductError } from "@/lib/public-dumpster-product";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   getRetailCalendarClosureForDate,
   getRetailSiteSettingsForTenant,
@@ -117,7 +117,7 @@ export async function POST(req: Request) {
 
 
     // 0) If this client already has an active hold for THIS date, reuse it.
-    const existingHold = await supabase
+    const existingHold = await supabaseAdmin
       .from("booking_holds")
       .select("id, delivery_date, pickup_date, expires_at, zip, dumpster_size, dumpster_product_id")
       .eq("business_id", tenant.id)
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
       return setCookie ? await attachClientIdCookie(res, clientId, tenant.id) : res;
     }
 
-    const activeClientHold = await supabase
+    const activeClientHold = await supabaseAdmin
       .from("booking_holds")
       .select("id")
       .eq("business_id", tenant.id)
@@ -180,7 +180,7 @@ export async function POST(req: Request) {
     const tenSecondsAgoIso = new Date(Date.now() - 10_000).toISOString();
 
     if (!activeClientHold.data?.length) {
-      const recentHold = await supabase
+      const recentHold = await supabaseAdmin
         .from("booking_holds")
         .select("id")
         .eq("business_id", tenant.id)
@@ -205,7 +205,7 @@ export async function POST(req: Request) {
 
 
     // 1) Expire any OTHER active holds for this client (so one client can't hold many dates)
-    const expireRes = await supabase
+    const expireRes = await supabaseAdmin
       .from("booking_holds")
       .update({ status: "expired" })
       .eq("business_id", tenant.id)
@@ -258,7 +258,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const insert = await supabase
+    const insert = await supabaseAdmin
       .from("booking_holds")
       .insert({
         business_id: tenant.id,

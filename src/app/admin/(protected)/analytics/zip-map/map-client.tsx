@@ -264,7 +264,7 @@ export default function ZipMapClient({
         center={DEFAULT_CENTER}
         zoom={9}
         scrollWheelZoom={true}
-        className="tcm-zip-map h-full w-full"
+        className="admin-zip-map h-full w-full"
       >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
@@ -327,12 +327,12 @@ export default function ZipMapClient({
               });
 
               const tooltipHtml = [
-                `<div class="tcm-zip-tooltip-card${
-                  row.bookingCount === 0 ? " tcm-zip-tooltip-card--quiet" : ""
+                `<div class="admin-zip-tooltip-card${
+                  row.bookingCount === 0 ? " admin-zip-tooltip-card--quiet" : ""
                 }">`,
-                `<div class="tcm-zip-tooltip-zip">${row.zip}</div>`,
-                row.town ? `<div class="tcm-zip-tooltip-town">${row.town}</div>` : "",
-                `<div class="tcm-zip-tooltip-metrics">`,
+                `<div class="admin-zip-tooltip-zip">${row.zip}</div>`,
+                row.town ? `<div class="admin-zip-tooltip-town">${row.town}</div>` : "",
+                `<div class="admin-zip-tooltip-metrics">`,
                 `<div><span>Bookings:</span> <strong>${number(row.bookingCount)}</strong></div>`,
                 `<div><span>Revenue:</span> <strong>${formatUsd(row.revenue, { maximumFractionDigits: 0 })}</strong></div>`,
                 `<div><span>Avg booking:</span> <strong>${
@@ -345,29 +345,29 @@ export default function ZipMapClient({
               layer.bindTooltip(tooltipHtml, {
                 sticky: true,
                 direction: "top",
-                className: "tcm-zip-tooltip",
+                className: "admin-zip-tooltip",
               });
             }}
           />
         </Pane>
       </MapContainer>
 
-      <div className="tcm-zip-legend pointer-events-none absolute bottom-4 right-4 z-[500]">
-        <div className="tcm-zip-legend-title">{getMetricLabel(metric)}</div>
-        <div className="tcm-zip-legend-row">
-          <span className="tcm-zip-legend-swatch" style={{ backgroundColor: "#f8fafc" }} />
+      <div className="admin-zip-legend pointer-events-none absolute bottom-4 right-4 z-[500]">
+        <div className="admin-zip-legend-title">{getMetricLabel(metric)}</div>
+        <div className="admin-zip-legend-row">
+          <span className="admin-zip-legend-swatch" style={{ backgroundColor: "#f8fafc" }} />
           <span>none</span>
         </div>
-        <div className="tcm-zip-legend-row">
-          <span className="tcm-zip-legend-swatch" style={{ backgroundColor: "#fed7aa" }} />
+        <div className="admin-zip-legend-row">
+          <span className="admin-zip-legend-swatch" style={{ backgroundColor: "#fed7aa" }} />
           <span>low</span>
         </div>
-        <div className="tcm-zip-legend-row">
-          <span className="tcm-zip-legend-swatch" style={{ backgroundColor: "#fb923c" }} />
+        <div className="admin-zip-legend-row">
+          <span className="admin-zip-legend-swatch" style={{ backgroundColor: "#fb923c" }} />
           <span>medium</span>
         </div>
-        <div className="tcm-zip-legend-row">
-          <span className="tcm-zip-legend-swatch" style={{ backgroundColor: "#c2410c" }} />
+        <div className="admin-zip-legend-row">
+          <span className="admin-zip-legend-swatch" style={{ backgroundColor: "#c2410c" }} />
           <span>high</span>
         </div>
       </div>

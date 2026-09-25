@@ -1,0 +1,1 @@
+drop index if exists public.customer_provider_accounts_business_customer_provider_unique;

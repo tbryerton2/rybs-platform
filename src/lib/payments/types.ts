@@ -2,6 +2,21 @@ export type PaymentProvider = "square";
 
 export type PaymentProviderEnvironment = "sandbox" | "production";
 
+export type PaymentProviderConnectionMode =
+  | "tenant_connection"
+  | "legacy_tan_can_man_fallback";
+
+export type PaymentProviderConnectionContext = {
+  id: string | null;
+  businessId: string;
+  provider: PaymentProvider;
+  providerEnvironment: PaymentProviderEnvironment;
+  providerMerchantId: string | null;
+  providerLocationId: string;
+  accessToken: string;
+  mode: PaymentProviderConnectionMode;
+};
+
 export type SaveCustomerPaymentMethodFailureStage =
   | "finding_square_customer"
   | "creating_square_customer"
@@ -27,6 +42,8 @@ export type StoredCustomerProviderAccount = {
   customerId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId: string | null;
+  providerMerchantId: string | null;
   providerCustomerId: string;
   status: "active" | "disabled";
   createdAt: string;
@@ -38,6 +55,8 @@ export type FindOrCreateCustomerProviderAccountInput = {
   customerId: string;
   provider?: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   providerCustomerId: string;
 };
 
@@ -48,6 +67,8 @@ export type StoredCustomerPaymentMethod = {
   customerProviderAccountId: string | null;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId: string | null;
+  providerMerchantId: string | null;
   providerCustomerId: string;
   providerPaymentMethodId: string;
   cardBrand: string | null;
@@ -67,6 +88,8 @@ export type PersistCustomerPaymentMethodInput = {
   customerProviderAccountId?: string | null;
   provider?: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   providerCustomerId: string;
   providerPaymentMethodId: string;
   cardBrand?: string | null;
@@ -78,6 +101,7 @@ export type PersistCustomerPaymentMethodInput = {
 };
 
 export type PaymentProviderCustomerInput = {
+  connection?: PaymentProviderConnectionContext;
   localCustomerId?: string;
   idempotencyKey?: string;
   referenceId?: string;
@@ -100,12 +124,15 @@ export type PaymentProviderCustomerInput = {
 export type PaymentProviderCustomerResult = {
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   providerCustomerId: string;
   reused: boolean;
   rawProviderResponse?: unknown;
 };
 
 export type PaymentProviderSavePaymentMethodInput = {
+  connection?: PaymentProviderConnectionContext;
   providerCustomerId: string;
   paymentMethodToken?: string;
   cardSaveSourceId?: string;
@@ -126,6 +153,8 @@ export type PaymentProviderSavePaymentMethodInput = {
 export type PaymentProviderSavePaymentMethodResult = {
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   providerCustomerId: string;
   providerPaymentMethodId: string;
   cardBrand: string | null;
@@ -136,6 +165,7 @@ export type PaymentProviderSavePaymentMethodResult = {
 };
 
 export type PaymentProviderFindSavedPaymentMethodInput = {
+  connection?: PaymentProviderConnectionContext;
   providerCustomerId: string;
   referenceId?: string | null;
 };
@@ -145,6 +175,8 @@ export type SaveCustomerPaymentMethodInput = {
   customerId: string;
   provider?: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   paymentMethodToken?: string;
   cardSaveSourceId?: string;
   name?: string | null;
@@ -196,6 +228,8 @@ export type StoredCheckoutPayment = {
   providerPaymentId: string | null;
   providerOrderId: string | null;
   providerLocationId: string | null;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   idempotencyKey: string;
   failureCode: string | null;
   failureMessage: string | null;
@@ -226,6 +260,8 @@ export type PaymentProviderChargeResult = {
   providerPaymentId?: string | null;
   providerOrderId?: string | null;
   providerLocationId?: string | null;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   rawProviderResponse?: unknown | null;
   paidAt?: string | null;
   failedAt?: string | null;
@@ -234,6 +270,7 @@ export type PaymentProviderChargeResult = {
 };
 
 export type PaymentProviderSavedMethodVerificationInput = {
+  connection?: PaymentProviderConnectionContext;
   providerPaymentMethodId: string;
   providerCustomerId: string;
 };
@@ -251,6 +288,10 @@ export type PaymentProviderSavedMethodVerificationResult = {
 export type PaymentProviderAdapter = {
   provider: PaymentProvider;
   environment: PaymentProviderEnvironment;
+  paymentProviderConnectionId: string | null;
+  providerMerchantId: string | null;
+  providerLocationId: string | null;
+  connectionMode: PaymentProviderConnectionMode;
   charge(input: PaymentProviderChargeInput): Promise<PaymentProviderChargeResult>;
   verifySavedPaymentMethod?(
     input: PaymentProviderSavedMethodVerificationInput,
@@ -272,6 +313,8 @@ export type CheckoutPaymentResult = {
   providerPaymentId: string | null;
   providerOrderId: string | null;
   providerLocationId: string | null;
+  paymentProviderConnectionId?: string | null;
+  providerMerchantId?: string | null;
   paidAt: string | null;
   failedAt: string | null;
   failureCode: string | null;

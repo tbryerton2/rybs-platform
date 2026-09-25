@@ -87,8 +87,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
     }
 
-    const message = error instanceof Error ? error.message : "Availability check failed.";
     console.error("[api/availability] Delivery availability request failed.", error);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "Availability check failed. Please try again." },
+      { status: 500 },
+    );
   }
 }

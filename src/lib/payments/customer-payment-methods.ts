@@ -10,7 +10,7 @@ import type {
 
 const DEFAULT_PAYMENT_PROVIDER = "square" satisfies PaymentProvider;
 const CUSTOMER_PAYMENT_METHOD_SELECT =
-  "id, business_id, customer_id, customer_provider_account_id, provider, provider_environment, provider_customer_id, provider_payment_method_id, card_brand, card_last_4, card_exp_month, card_exp_year, status, consent_text, consent_accepted_at, created_at, updated_at";
+  "id, business_id, customer_id, customer_provider_account_id, provider, provider_environment, payment_provider_connection_id, provider_merchant_id, provider_customer_id, provider_payment_method_id, card_brand, card_last_4, card_exp_month, card_exp_year, status, consent_text, consent_accepted_at, created_at, updated_at";
 
 type CustomerPaymentMethodRow = {
   id: string;
@@ -19,6 +19,8 @@ type CustomerPaymentMethodRow = {
   customer_provider_account_id: string | null;
   provider: string;
   provider_environment: string;
+  payment_provider_connection_id?: string | null;
+  provider_merchant_id?: string | null;
   provider_customer_id: string;
   provider_payment_method_id: string;
   card_brand: string | null;
@@ -118,6 +120,8 @@ function toStoredCustomerPaymentMethod(row: CustomerPaymentMethodRow): StoredCus
     customerProviderAccountId: row.customer_provider_account_id,
     provider: row.provider as PaymentProvider,
     providerEnvironment: row.provider_environment as PaymentProviderEnvironment,
+    paymentProviderConnectionId: row.payment_provider_connection_id ?? null,
+    providerMerchantId: row.provider_merchant_id ?? null,
     providerCustomerId: row.provider_customer_id,
     providerPaymentMethodId: row.provider_payment_method_id,
     cardBrand: row.card_brand,
@@ -138,6 +142,7 @@ function assertSamePaymentMethodOwner(
     businessId: string;
     customerId: string;
     customerProviderAccountId: string | null;
+    paymentProviderConnectionId?: string | null;
     providerCustomerId: string;
   },
 ) {
@@ -160,19 +165,36 @@ function assertSamePaymentMethodOwner(
       "providerPaymentMethodId is already linked to a different customer provider account.",
     );
   }
+
+  if (
+    input.paymentProviderConnectionId &&
+    row.paymentProviderConnectionId &&
+    row.paymentProviderConnectionId !== input.paymentProviderConnectionId
+  ) {
+    throw new CustomerPaymentMethodServiceError(
+      "providerPaymentMethodId is already linked to a different payment provider connection.",
+    );
+  }
 }
 
 async function findByProviderPaymentMethod(input: {
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
   providerPaymentMethodId: string;
 }) {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("customer_payment_methods")
     .select(CUSTOMER_PAYMENT_METHOD_SELECT)
     .eq("provider", input.provider)
     .eq("provider_environment", input.providerEnvironment)
-    .eq("provider_payment_method_id", input.providerPaymentMethodId)
+    .eq("provider_payment_method_id", input.providerPaymentMethodId);
+
+  if (input.paymentProviderConnectionId) {
+    query = query.eq("payment_provider_connection_id", input.paymentProviderConnectionId);
+  }
+
+  const { data, error } = await query
     .maybeSingle<CustomerPaymentMethodRow>();
 
   if (error) {
@@ -185,11 +207,13 @@ async function findByProviderPaymentMethod(input: {
 export async function findCustomerPaymentMethodByProviderId(input: {
   provider?: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
   providerPaymentMethodId: string;
 }) {
   return findByProviderPaymentMethod({
     provider: normalizeProvider(input.provider),
     providerEnvironment: normalizeProviderEnvironment(input.providerEnvironment),
+    paymentProviderConnectionId: input.paymentProviderConnectionId ?? null,
     providerPaymentMethodId: cleanRequired(input.providerPaymentMethodId, "providerPaymentMethodId"),
   });
 }
@@ -200,6 +224,8 @@ export async function persistCustomerPaymentMethod(input: PersistCustomerPayment
   const customerProviderAccountId = clean(input.customerProviderAccountId);
   const provider = normalizeProvider(input.provider);
   const providerEnvironment = normalizeProviderEnvironment(input.providerEnvironment);
+  const paymentProviderConnectionId = clean(input.paymentProviderConnectionId);
+  const providerMerchantId = clean(input.providerMerchantId);
   const providerCustomerId = cleanRequired(input.providerCustomerId, "providerCustomerId");
   const providerPaymentMethodId = cleanRequired(input.providerPaymentMethodId, "providerPaymentMethodId");
   const cardBrand = clean(input.cardBrand);
@@ -214,10 +240,14 @@ export async function persistCustomerPaymentMethod(input: PersistCustomerPayment
   if (customerProviderAccountId) {
     assertUuid(customerProviderAccountId, "customerProviderAccountId");
   }
+  if (paymentProviderConnectionId) {
+    assertUuid(paymentProviderConnectionId, "paymentProviderConnectionId");
+  }
 
   const existing = await findByProviderPaymentMethod({
     provider,
     providerEnvironment,
+    paymentProviderConnectionId,
     providerPaymentMethodId,
   });
 
@@ -226,29 +256,40 @@ export async function persistCustomerPaymentMethod(input: PersistCustomerPayment
       businessId,
       customerId,
       customerProviderAccountId,
+      paymentProviderConnectionId,
       providerCustomerId,
     });
     return existing;
   }
 
+  const insertValues: Record<string, unknown> = {
+    business_id: businessId,
+    customer_id: customerId,
+    customer_provider_account_id: customerProviderAccountId,
+    provider,
+    provider_environment: providerEnvironment,
+    provider_customer_id: providerCustomerId,
+    provider_payment_method_id: providerPaymentMethodId,
+    card_brand: cardBrand,
+    card_last_4: cardLast4,
+    card_exp_month: cardExpMonth,
+    card_exp_year: cardExpYear,
+    status: "active",
+    consent_text: consentText,
+    consent_accepted_at: consentAcceptedAt,
+  };
+
+  if (paymentProviderConnectionId) {
+    insertValues.payment_provider_connection_id = paymentProviderConnectionId;
+  }
+
+  if (providerMerchantId) {
+    insertValues.provider_merchant_id = providerMerchantId;
+  }
+
   const { data, error } = await supabaseAdmin
     .from("customer_payment_methods")
-    .insert({
-      business_id: businessId,
-      customer_id: customerId,
-      customer_provider_account_id: customerProviderAccountId,
-      provider,
-      provider_environment: providerEnvironment,
-      provider_customer_id: providerCustomerId,
-      provider_payment_method_id: providerPaymentMethodId,
-      card_brand: cardBrand,
-      card_last_4: cardLast4,
-      card_exp_month: cardExpMonth,
-      card_exp_year: cardExpYear,
-      status: "active",
-      consent_text: consentText,
-      consent_accepted_at: consentAcceptedAt,
-    })
+    .insert(insertValues)
     .select(CUSTOMER_PAYMENT_METHOD_SELECT)
     .single<CustomerPaymentMethodRow>();
 
@@ -257,6 +298,7 @@ export async function persistCustomerPaymentMethod(input: PersistCustomerPayment
       const raced = await findByProviderPaymentMethod({
         provider,
         providerEnvironment,
+        paymentProviderConnectionId,
         providerPaymentMethodId,
       });
       if (raced) {
@@ -264,6 +306,7 @@ export async function persistCustomerPaymentMethod(input: PersistCustomerPayment
           businessId,
           customerId,
           customerProviderAccountId,
+          paymentProviderConnectionId,
           providerCustomerId,
         });
         return raced;

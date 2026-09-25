@@ -20,6 +20,10 @@ import {
   type ExternalPaymentMethod,
 } from "@/lib/payments/external-booking-charge-payment-service";
 import {
+  BookingChargeDisputeServiceError,
+  resolveBookingChargeDispute,
+} from "@/lib/booking-charge-disputes";
+import {
   sanitizePlacementDetails,
   validatePlacementDetails,
 } from "@/lib/placement";
@@ -101,6 +105,10 @@ function redirectWithAssignmentError(id: string, error: string): never {
 
 function redirectWithChargeError(id: string, error: string): never {
   redirect(`/admin/bookings/${id}?chargeError=${encodeURIComponent(error)}#charges-adjustments`);
+}
+
+function redirectWithDisputeError(id: string, error: string): never {
+  redirect(`/admin/bookings/${id}?disputeError=${encodeURIComponent(error)}#charges-adjustments`);
 }
 
 function formatAdminNoteEntry(input: {
@@ -420,7 +428,7 @@ export async function approveAndChargeBookingChargeAction(formData: FormData) {
   }
 
   if (charge.data.status !== "draft") {
-    redirectWithChargeError(bookingId, "Only charges needing approval can be approved and charged.");
+    redirectWithChargeError(bookingId, "Only charges pending review can be reviewed and charged.");
   }
 
   if (!Number.isFinite(charge.data.amount_cents) || charge.data.amount_cents <= 0) {
@@ -470,7 +478,7 @@ export async function approveAndChargeBookingChargeAction(formData: FormData) {
         .eq("status", "pending");
 
       if (restore.error) {
-        console.error("[admin-booking-charge] failed to restore charge approval status", restore.error);
+        console.error("[admin-booking-charge] failed to restore charge review status", restore.error);
       }
     }
 
@@ -512,7 +520,7 @@ export async function chargeBookingChargeSavedCardAction(formData: FormData) {
         .eq("status", "pending");
 
       if (restore.error) {
-        console.error("[admin-booking-charge] failed to restore charge approval status", restore.error);
+        console.error("[admin-booking-charge] failed to restore charge review status", restore.error);
       }
     }
 
@@ -637,6 +645,51 @@ export async function sendPostBookingChargeReceiptAction(formData: FormData) {
   revalidatePath("/admin");
 
   redirect(`/admin/bookings/${bookingId}?saved=receipt-sent#charges-adjustments`);
+}
+
+export async function resolveBookingChargeDisputeAction(formData: FormData) {
+  const adminSession = await requireAdminOwner();
+  const bookingId = asString(formData.get("bookingId"));
+  const disputeId = asString(formData.get("disputeId"));
+  const resolutionNotes = emptyToNull(asString(formData.get("resolutionNotes")));
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!disputeId) {
+    redirectWithDisputeError(bookingId, "Missing dispute id.");
+  }
+  if (!resolutionNotes) {
+    redirectWithDisputeError(bookingId, "Add resolution notes before resolving this dispute.");
+  }
+
+  try {
+    await resolveBookingChargeDispute(
+      {
+        businessId: adminSession.business.id,
+        disputeId,
+        resolvedBy: adminSession.user.id,
+        resolutionNotes,
+      },
+      { supabase: supabaseAdmin as never },
+    );
+  } catch (error) {
+    if (error instanceof BookingChargeDisputeServiceError) {
+      redirectWithDisputeError(bookingId, error.message);
+    }
+
+    console.error("[admin-booking-charge-dispute] resolve failed", {
+      businessId: adminSession.business.id,
+      bookingId,
+      disputeId,
+      error,
+    });
+    redirectWithDisputeError(bookingId, "Unable to resolve this dispute. Please try again.");
+  }
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin");
+
+  redirect(`/admin/bookings/${bookingId}?saved=dispute-resolved#charges-adjustments`);
 }
 
 export async function updateBookingStatusAction(formData: FormData) {

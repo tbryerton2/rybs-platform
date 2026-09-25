@@ -23,6 +23,10 @@ import { isPortalSchemaError } from "@/lib/portal/schema";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import { getTenantCommunicationSettings } from "@/lib/tenant/communications";
+import {
+  BookingChargeDisputeServiceError,
+  createBookingChargeDispute,
+} from "@/lib/booking-charge-disputes";
 
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
@@ -37,6 +41,10 @@ function toSearchParams(input: Record<string, string>) {
   }
 
   return params.toString();
+}
+
+function redirectWithDisputeError(bookingId: string, error: string): never {
+  redirect(`/portal/rentals/${bookingId}?disputeError=${encodeURIComponent(error)}#additional-charges`);
 }
 
 async function loadOwnedBookingWithRequests(customerId: string, bookingId: string) {
@@ -148,6 +156,48 @@ async function sendAdminPortalRequestEmail({
       error: portalRequestEmailError,
     });
   }
+}
+
+export async function submitBookingChargeDisputeAction(formData: FormData) {
+  const customer = await requirePortalCustomer();
+  const tenant = await getCurrentTenant();
+  const bookingId = value(formData, "booking_id");
+  const bookingChargeId = value(formData, "booking_charge_id");
+  const explanation = value(formData, "explanation");
+
+  if (!bookingId) throw new Error("Missing booking id");
+  if (!bookingChargeId) {
+    redirectWithDisputeError(bookingId, "Choose a charge to dispute.");
+  }
+
+  try {
+    await createBookingChargeDispute(
+      {
+        businessId: tenant.id,
+        customerId: customer.id,
+        bookingId,
+        bookingChargeId,
+        explanation,
+      },
+      { supabase: supabaseAdmin as never },
+    );
+  } catch (error) {
+    if (error instanceof BookingChargeDisputeServiceError) {
+      redirectWithDisputeError(bookingId, error.message);
+    }
+
+    console.error("[portal] booking charge dispute submission failed", {
+      businessId: tenant.id,
+      customerId: customer.id,
+      bookingId,
+      bookingChargeId,
+      error,
+    });
+    redirectWithDisputeError(bookingId, "We could not submit this dispute. Please try again.");
+  }
+
+  revalidatePath(`/portal/rentals/${bookingId}`);
+  redirect(`/portal/rentals/${bookingId}?submitted=charge-dispute#additional-charges`);
 }
 
 export async function submitPortalPickupRequestAction(formData: FormData) {

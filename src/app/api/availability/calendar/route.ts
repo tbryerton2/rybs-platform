@@ -253,8 +253,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: error.message }, { status: error.status });
     }
 
-    const message = error instanceof Error ? error.message : "Calendar availability check failed.";
     console.error("[api/availability/calendar] Delivery calendar request failed.", error);
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "Calendar availability check failed. Please try again." },
+      { status: 500 },
+    );
   }
 }
