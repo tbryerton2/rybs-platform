@@ -2,11 +2,13 @@
   "name": "rybs-platform",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --conditions=react-server --import tsx --import ./tests/setup.ts --test tests/*.test.ts",
     "test:availability": "node --test --experimental-strip-types tests/rental-window-availability.test.ts",
     "test:booking-origin": "node --test --experimental-strip-types tests/booking-origin.test.ts",
     "seed:qa-local": "docker exec -i supabase_db_rybs-platform psql -U postgres -d postgres < supabase/seed.sql",
@@ -19,11 +21,12 @@
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.93.1",
     "leaflet": "^1.9.4",
-    "next": "16.1.4",
+    "next": "16.3.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-leaflet": "^5.0.0",
     "resend": "^6.9.1",
+    "server-only": "0.0.1",
     "sonner": "^2.0.7",
     "square": "^44.0.1"
   },
@@ -34,9 +37,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.4",
+    "eslint-config-next": "16.3.6",
     "supabase": "^2.83.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
