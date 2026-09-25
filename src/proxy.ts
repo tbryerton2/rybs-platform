@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCanonicalAdminRedirectUrl } from "@/lib/admin/app-url";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const canonicalUrl = getCanonicalAdminRedirectUrl({
     requestUrl: request.url,
     adminAppUrl: process.env.ADMIN_APP_URL,
