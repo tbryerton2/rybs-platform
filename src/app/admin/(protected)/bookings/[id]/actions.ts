@@ -19,6 +19,7 @@ import {
   type ExternalBookingChargePaymentSupabaseClient,
   type ExternalPaymentMethod,
 } from "@/lib/payments/external-booking-charge-payment-service";
+import { getTenantPaymentPolicyForBusiness } from "@/lib/platform-admin/payment-settings";
 import {
   BookingChargeDisputeServiceError,
   resolveBookingChargeDispute,
@@ -568,6 +569,11 @@ export async function recordExternalBookingChargePaymentAction(formData: FormDat
   }
 
   try {
+    const paymentPolicy = await getTenantPaymentPolicyForBusiness(adminSession.business.id, "square", {
+      supabase: supabaseAdmin,
+    });
+    const providerEnvironment = paymentPolicy.mode === "production" ? "production" : "sandbox";
+
     await recordExternalBookingChargePayment(
       {
         businessId: adminSession.business.id,
@@ -579,7 +585,7 @@ export async function recordExternalBookingChargePaymentAction(formData: FormDat
         paymentDate,
         reference,
         notes,
-        providerEnvironment: process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox",
+        providerEnvironment,
       },
       { supabase: supabaseAdmin as unknown as ExternalBookingChargePaymentSupabaseClient },
     );

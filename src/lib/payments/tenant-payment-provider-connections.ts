@@ -1,15 +1,14 @@
 import "server-only";
 
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { getTenantPaymentPolicyForBusiness } from "@/lib/platform-admin/payment-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { findTenantByIdStrict, type TenantRecord } from "@/lib/tenant/server";
 import type {
   PaymentProvider,
   PaymentProviderConnectionContext,
   PaymentProviderEnvironment,
 } from "./types";
 
-const LEGACY_TAN_CAN_MAN_SLUG = "tan-can-man";
 const DEFAULT_PAYMENT_PROVIDER = "square" satisfies PaymentProvider;
 const TOKEN_CIPHER_VERSION = 1;
 const SQUARE_API_VERSION = "2026-08-19";
@@ -180,7 +179,6 @@ type SquareFetch = typeof fetch;
 
 type ResolveTenantPaymentProviderConnectionOptions = {
   supabase?: TenantConnectionSupabaseClient;
-  getTenantById?: (tenantId: string) => Promise<TenantRecord | null>;
 };
 
 export class TenantPaymentProviderConnectionError extends Error {
@@ -237,28 +235,6 @@ export function getConfiguredSquareEnvironment(): PaymentProviderEnvironment {
     "SQUARE_ENVIRONMENT must be either sandbox or production.",
     "PROVIDER_CONFIGURATION_ERROR",
   );
-}
-
-function getLegacySquareAccessToken() {
-  const token = clean(process.env.SQUARE_ACCESS_TOKEN);
-  if (!token) {
-    throw new TenantPaymentProviderConnectionError(
-      "SQUARE_ACCESS_TOKEN is required for the Tan Can Man legacy Square fallback.",
-      "LEGACY_SQUARE_ACCESS_TOKEN_MISSING",
-    );
-  }
-  return token;
-}
-
-function getLegacySquareLocationId() {
-  const locationId = clean(process.env.SQUARE_LOCATION_ID);
-  if (!locationId) {
-    throw new TenantPaymentProviderConnectionError(
-      "SQUARE_LOCATION_ID is required for the Tan Can Man legacy Square fallback.",
-      "LEGACY_SQUARE_LOCATION_ID_MISSING",
-    );
-  }
-  return locationId;
 }
 
 function getSquareOAuthApplicationId() {
@@ -1007,15 +983,22 @@ async function findActiveTenantConnection(input: {
   businessId: string;
   provider: PaymentProvider;
   providerEnvironment: PaymentProviderEnvironment;
+  expectedConnectionId?: string | null;
   supabase: TenantConnectionSupabaseClient;
 }) {
-  const { data, error } = await input.supabase
+  let query = input.supabase
     .from("tenant_payment_provider_connections")
     .select(TENANT_PAYMENT_PROVIDER_CONNECTION_SELECT)
     .eq("business_id", input.businessId)
     .eq("provider", input.provider)
-    .eq("provider_environment", input.providerEnvironment)
-    .eq("status", "active")
+    .eq("provider_environment", input.providerEnvironment);
+
+  const expectedConnectionId = clean(input.expectedConnectionId);
+  if (expectedConnectionId) {
+    query = query.eq("id", expectedConnectionId);
+  }
+
+  const { data, error } = await query
     .order("connected_at", { ascending: false })
     .limit(1)
     .maybeSingle<TenantPaymentProviderConnectionRow>();
@@ -1030,36 +1013,14 @@ async function findActiveTenantConnection(input: {
     );
   }
 
-  return data ? toConnectionContext(data) : null;
-}
-
-async function resolveLegacyTanCanManFallback(input: {
-  businessId: string;
-  provider: PaymentProvider;
-  providerEnvironment: PaymentProviderEnvironment;
-  getTenantById: (tenantId: string) => Promise<TenantRecord | null>;
-}) {
-  if (input.provider !== "square") return null;
-
-  const tenant = await input.getTenantById(input.businessId);
-  if (tenant?.slug !== LEGACY_TAN_CAN_MAN_SLUG) return null;
-
-  return {
-    id: null,
-    businessId: input.businessId,
-    provider: "square",
-    providerEnvironment: input.providerEnvironment,
-    providerMerchantId: null,
-    providerLocationId: getLegacySquareLocationId(),
-    accessToken: getLegacySquareAccessToken(),
-    mode: "legacy_tan_can_man_fallback",
-  } satisfies PaymentProviderConnectionContext;
+  return data ?? null;
 }
 
 export async function resolveTenantPaymentProviderConnection(input: {
   businessId: string;
   provider?: PaymentProvider;
   providerEnvironment?: PaymentProviderEnvironment;
+  paymentProviderConnectionId?: string | null;
 }, options: ResolveTenantPaymentProviderConnectionOptions = {}) {
   const businessId = clean(input.businessId);
   if (!businessId) {
@@ -1067,32 +1028,62 @@ export async function resolveTenantPaymentProviderConnection(input: {
   }
 
   const provider = normalizeProvider(input.provider);
-  const providerEnvironment = input.providerEnvironment ?? getConfiguredSquareEnvironment();
   const supabase = options.supabase ?? supabaseAdmin;
-  const getTenantById = options.getTenantById ?? ((tenantId: string) => findTenantByIdStrict(tenantId));
+  const policy = await getTenantPaymentPolicyForBusiness(businessId, provider, { supabase });
+
+  if (policy.mode === "disabled") {
+    throw new TenantPaymentProviderConnectionError(
+      "Payments are disabled for this business.",
+      "TENANT_PAYMENT_POLICY_DISABLED",
+    );
+  }
+
+  const providerEnvironment = policy.mode;
+  if (input.providerEnvironment && input.providerEnvironment !== providerEnvironment) {
+    throw new TenantPaymentProviderConnectionError(
+      "Requested payment environment does not match this business's protected payment mode.",
+      "TENANT_PAYMENT_POLICY_ENVIRONMENT_MISMATCH",
+    );
+  }
 
   const tenantConnection = await findActiveTenantConnection({
     businessId,
     provider,
     providerEnvironment,
+    expectedConnectionId: input.paymentProviderConnectionId,
     supabase,
   });
 
-  if (tenantConnection) return tenantConnection;
+  if (!tenantConnection) {
+    throw new TenantPaymentProviderConnectionError(
+      input.paymentProviderConnectionId
+        ? "The requested Square connection is not authorized for this business and payment mode."
+        : "This business does not have a Square connection for its protected payment mode.",
+      input.paymentProviderConnectionId
+        ? "TENANT_PAYMENT_PROVIDER_CONNECTION_MISMATCH"
+        : "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
+    );
+  }
 
-  const legacyFallback = await resolveLegacyTanCanManFallback({
-    businessId,
-    provider,
-    providerEnvironment,
-    getTenantById,
-  });
+  if (
+    tenantConnection.business_id !== businessId ||
+    tenantConnection.provider !== provider ||
+    tenantConnection.provider_environment !== providerEnvironment
+  ) {
+    throw new TenantPaymentProviderConnectionError(
+      "Square connection ownership or environment does not match this business's protected payment mode.",
+      "TENANT_PAYMENT_PROVIDER_CONNECTION_MISMATCH",
+    );
+  }
 
-  if (legacyFallback) return legacyFallback;
+  if (tenantConnection.status !== "active") {
+    throw new TenantPaymentProviderConnectionError(
+      "This business's Square connection is not active.",
+      "TENANT_PAYMENT_PROVIDER_CONNECTION_INACTIVE",
+    );
+  }
 
-  throw new TenantPaymentProviderConnectionError(
-    "This business does not have an active Square payment connection.",
-    "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
-  );
+  return toConnectionContext(tenantConnection);
 }
 
 
@@ -1132,8 +1123,12 @@ export async function getSquareCheckoutConfigurationForBusiness(
       error instanceof TenantPaymentProviderConnectionError &&
       [
         "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
-        "LEGACY_SQUARE_ACCESS_TOKEN_MISSING",
-        "LEGACY_SQUARE_LOCATION_ID_MISSING",
+        "TENANT_PAYMENT_POLICY_DISABLED",
+        "TENANT_PAYMENT_POLICY_ENVIRONMENT_MISMATCH",
+        "TENANT_PAYMENT_PROVIDER_CONNECTION_MISMATCH",
+        "TENANT_PAYMENT_PROVIDER_CONNECTION_INACTIVE",
+        "TENANT_SQUARE_LOCATION_MISSING",
+        "TENANT_SQUARE_ACCESS_TOKEN_MISSING",
       ].includes(error.code)
     ) {
       return {

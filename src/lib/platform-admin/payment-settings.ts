@@ -138,6 +138,10 @@ type PlatformPaymentSettingsOptions = {
   requirePlatformAdminSession?: () => Promise<PlatformPaymentSettingsSessionContext>;
 };
 
+type PlatformPaymentPolicyOptions = {
+  supabase?: Pick<PlatformPaymentSettingsSupabaseClient, "from">;
+};
+
 const SETTING_SELECT = "id, business_id, provider, mode, updated_by, created_at, updated_at";
 const EVENT_SELECT =
   "id, business_id, provider, previous_mode, new_mode, actor_platform_admin_user_id, created_at";
@@ -149,6 +153,10 @@ const UUID_PATTERN =
 
 function getClient(options?: PlatformPaymentSettingsOptions) {
   return options?.supabase ?? (supabaseAdmin as unknown as PlatformPaymentSettingsSupabaseClient);
+}
+
+function getReadClient(options?: PlatformPaymentPolicyOptions) {
+  return options?.supabase ?? (supabaseAdmin as unknown as Pick<PlatformPaymentSettingsSupabaseClient, "from">);
 }
 
 async function requireSession(options?: PlatformPaymentSettingsOptions) {
@@ -318,9 +326,9 @@ function asRpcSingleQuery<T>(query: unknown): QueryResult<T> {
 async function getSettingRow(
   businessId: string,
   provider: PlatformPaymentProvider,
-  options?: PlatformPaymentSettingsOptions,
+  options?: PlatformPaymentPolicyOptions,
 ) {
-  const client = getClient(options);
+  const client = getReadClient(options);
   const query = (client.from("tenant_payment_settings") as {
     select(columns: string): {
       eq(column: string, value: string): unknown;
@@ -492,7 +500,7 @@ export async function listPlatformTenantPaymentSettingEvents(
 export async function getTenantPaymentPolicyForBusiness(
   businessIdInput: unknown,
   providerInput: unknown = "square",
-  options?: Pick<PlatformPaymentSettingsOptions, "supabase">,
+  options?: PlatformPaymentPolicyOptions,
 ): Promise<PlatformTenantPaymentPolicy> {
   const businessId = normalizeUuid(businessIdInput);
   const provider = normalizePlatformPaymentProvider(providerInput);

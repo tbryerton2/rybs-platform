@@ -27,23 +27,20 @@ test("platform-admin payment settings service is server-only and protects mutati
   assert.doesNotMatch(source, /SQUARE_ENVIRONMENT/);
 });
 
-test("future payment policy reader is not connected to checkout or Square processing yet", () => {
-  const paymentRuntimeFiles = [
-    "src/lib/payments/payment-service.ts",
-    "src/lib/payments/providers/square.ts",
-    "src/lib/payments/tenant-payment-provider-connections.ts",
-    "src/app/api/payments/square/checkout-config/route.ts",
-    "src/app/api/webhooks/square/route.ts",
-    "src/app/checkout/page.tsx",
-    "src/app/checkout/checkout-page-client.tsx",
-  ];
+test("tenant payment runtime resolves protected policy before Square execution", () => {
+  const resolver = readRepoFile("src/lib/payments/tenant-payment-provider-connections.ts");
+  const squareProvider = readRepoFile("src/lib/payments/providers/square.ts");
 
-  for (const path of paymentRuntimeFiles) {
-    const source = readRepoFile(path);
-    assert.doesNotMatch(source, /getTenantPaymentPolicyForBusiness/);
-    assert.doesNotMatch(source, /tenant_payment_settings/);
-    assert.doesNotMatch(source, /tenant_payment_setting_events/);
-  }
+  assert.match(resolver, /getTenantPaymentPolicyForBusiness/);
+  assert.match(resolver, /policy\.mode === "disabled"/);
+  assert.match(resolver, /TENANT_PAYMENT_POLICY_DISABLED/);
+  assert.match(resolver, /TENANT_PAYMENT_POLICY_ENVIRONMENT_MISMATCH/);
+  assert.match(resolver, /\.eq\("business_id", input\.businessId\)/);
+  assert.match(resolver, /\.eq\("provider_environment", input\.providerEnvironment\)/);
+  assert.doesNotMatch(resolver, /legacy_tan_can_man_fallback/);
+  assert.doesNotMatch(squareProvider, /process\.env\.SQUARE_ACCESS_TOKEN/);
+  assert.doesNotMatch(squareProvider, /process\.env\.SQUARE_LOCATION_ID/);
+  assert.doesNotMatch(squareProvider, /process\.env\.SQUARE_ENVIRONMENT/);
 });
 
 test("business-admin payment settings code does not call the protected platform mutation", () => {
