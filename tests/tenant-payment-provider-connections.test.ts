@@ -21,6 +21,7 @@ const TEST_KEY = Buffer.from("12345678901234567890123456789012", "utf8").toStrin
 
 type Row = Record<string, unknown>;
 type Filter = { column: string; value: unknown };
+type QueryLog = { table: string; filters: Filter[] };
 
 const originalEnv = {
   squareEnvironment: process.env.SQUARE_ENVIRONMENT,
@@ -74,15 +75,35 @@ function matches(row: Row, filters: Filter[]) {
   return filters.every((filter) => row[filter.column] === filter.value);
 }
 
-function createMockSupabase(rows: Row[], lookupError: unknown = null) {
-  const filters: Filter[] = [];
+function paymentSetting(mode: "disabled" | "sandbox" | "production" = "sandbox"): Row {
+  return {
+    id: "99999999-9999-4999-8999-999999999999",
+    business_id: BUSINESS_ID,
+    provider: "square",
+    mode,
+    updated_by: null,
+    created_at: "2026-09-29T00:00:00.000Z",
+    updated_at: "2026-09-29T00:00:00.000Z",
+  };
+}
+
+function createMockSupabase(
+  connectionRows: Row[],
+  lookupError: unknown = null,
+  settingRows: Row[] = [paymentSetting("sandbox")],
+) {
+  const queryLog: QueryLog[] = [];
 
   const client = {
-    from(table: "tenant_payment_provider_connections") {
-      assert.equal(table, "tenant_payment_provider_connections");
+    from(table: "tenant_payment_provider_connections" | "tenant_payment_settings") {
+      const filters: Filter[] = [];
+      queryLog.push({ table, filters });
+
       return {
         select(columns: string) {
-          assert.match(columns, /encrypted_access_token/);
+          if (table === "tenant_payment_provider_connections") {
+            assert.match(columns, /encrypted_access_token/);
+          }
           return this;
         },
         eq(column: string, value: string) {
@@ -96,10 +117,11 @@ function createMockSupabase(rows: Row[], lookupError: unknown = null) {
           return this;
         },
         async maybeSingle() {
-          if (lookupError) {
+          if (table === "tenant_payment_provider_connections" && lookupError) {
             return { data: null, error: lookupError };
           }
 
+          const rows = table === "tenant_payment_provider_connections" ? connectionRows : settingRows;
           return {
             data: rows.find((row) => matches(row, filters)) ?? null,
             error: null,
@@ -111,7 +133,7 @@ function createMockSupabase(rows: Row[], lookupError: unknown = null) {
 
   return {
     client,
-    filters,
+    queryLog,
   };
 }
 
@@ -235,7 +257,7 @@ test("resolveTenantPaymentProviderConnection returns the active tenant Square co
 
   const connection = await resolveTenantPaymentProviderConnection(
     { businessId: BUSINESS_ID, provider: "square" },
-    { supabase: mock.client, getTenantById: async () => null },
+    { supabase: mock.client },
   );
 
   assert.equal(connection.id, CONNECTION_ID);
@@ -245,55 +267,199 @@ test("resolveTenantPaymentProviderConnection returns the active tenant Square co
   assert.equal(connection.providerLocationId, "location-1");
   assert.equal(connection.accessToken, "tenant-square-token");
   assert.deepEqual(
-    mock.filters.map((filter) => [filter.column, filter.value]),
+    mock.queryLog.find((query) => query.table === "tenant_payment_provider_connections")?.filters.map((filter) => [
+      filter.column,
+      filter.value,
+    ]),
     [
       ["business_id", BUSINESS_ID],
       ["provider", "square"],
       ["provider_environment", "sandbox"],
-      ["status", "active"],
     ],
   );
 });
 
-test("resolveTenantPaymentProviderConnection keeps the legacy Square fallback Tan Can Man-only", async () => {
-  const missingTable = { code: "42P01", message: "relation does not exist" };
-  const tanCanManConnection = await resolveTenantPaymentProviderConnection(
-    { businessId: BUSINESS_ID, provider: "square" },
-    {
-      supabase: createMockSupabase([], missingTable).client,
-      getTenantById: async () => ({
-        id: BUSINESS_ID,
-        slug: "tan-can-man",
+test("resolveTenantPaymentProviderConnection fails closed when policy is disabled", async () => {
+  const mock = createMockSupabase([], null, [paymentSetting("disabled")]);
+
+  await assert.rejects(
+    () =>
+      resolveTenantPaymentProviderConnection(
+        { businessId: BUSINESS_ID, provider: "square" },
+        { supabase: mock.client },
+      ),
+    (error) =>
+      error instanceof TenantPaymentProviderConnectionError &&
+      error.code === "TENANT_PAYMENT_POLICY_DISABLED",
+  );
+  assert.equal(
+    mock.queryLog.some((query) => query.table === "tenant_payment_provider_connections"),
+    false,
+  );
+});
+
+test("resolveTenantPaymentProviderConnection treats a missing policy row as disabled", async () => {
+  const mock = createMockSupabase([], null, []);
+
+  await assert.rejects(
+    () => resolveTenantPaymentProviderConnection({ businessId: BUSINESS_ID }, { supabase: mock.client }),
+    (error) =>
+      error instanceof TenantPaymentProviderConnectionError &&
+      error.code === "TENANT_PAYMENT_POLICY_DISABLED",
+  );
+});
+
+test("resolveTenantPaymentProviderConnection selects only the production connection for production policy", async () => {
+  const encrypted = encryptPaymentProviderToken("tenant-production-token");
+  const mock = createMockSupabase(
+    [
+      {
+        id: CONNECTION_ID,
+        business_id: BUSINESS_ID,
+        provider: "square",
+        provider_environment: "production",
         status: "active",
-        created_at: "2026-01-01T00:00:00.000Z",
-        updated_at: "2026-01-01T00:00:00.000Z",
-      }),
-    },
+        provider_merchant_id: "merchant-live",
+        provider_location_id: "live-location",
+        encrypted_access_token: encrypted.encryptedToken,
+        token_cipher_version: encrypted.cipherVersion,
+        token_cipher_key_id: encrypted.keyId,
+      },
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        business_id: BUSINESS_ID,
+        provider: "square",
+        provider_environment: "sandbox",
+        status: "active",
+        provider_merchant_id: "merchant-sandbox",
+        provider_location_id: "sandbox-location",
+        encrypted_access_token: encrypted.encryptedToken,
+        token_cipher_version: encrypted.cipherVersion,
+        token_cipher_key_id: encrypted.keyId,
+      },
+    ],
+    null,
+    [paymentSetting("production")],
   );
 
-  assert.equal(tanCanManConnection.mode, "legacy_tan_can_man_fallback");
-  assert.equal(tanCanManConnection.id, null);
-  assert.equal(tanCanManConnection.accessToken, "legacy-square-token");
-  assert.equal(tanCanManConnection.providerLocationId, "legacy-location");
+  const connection = await resolveTenantPaymentProviderConnection(
+    { businessId: BUSINESS_ID, provider: "square" },
+    { supabase: mock.client },
+  );
+
+  assert.equal(connection.providerEnvironment, "production");
+  assert.equal(connection.providerLocationId, "live-location");
+  assert.equal(connection.accessToken, "tenant-production-token");
+  assert.deepEqual(
+    mock.queryLog.find((query) => query.table === "tenant_payment_provider_connections")?.filters.map((filter) => [
+      filter.column,
+      filter.value,
+    ]),
+    [
+      ["business_id", BUSINESS_ID],
+      ["provider", "square"],
+      ["provider_environment", "production"],
+    ],
+  );
+});
+
+test("resolveTenantPaymentProviderConnection rejects requested environment mismatches", async () => {
+  const mock = createMockSupabase([], null, [paymentSetting("sandbox")]);
+
+  await assert.rejects(
+    () =>
+      resolveTenantPaymentProviderConnection(
+        { businessId: BUSINESS_ID, provider: "square", providerEnvironment: "production" },
+        { supabase: mock.client },
+      ),
+    (error) =>
+      error instanceof TenantPaymentProviderConnectionError &&
+      error.code === "TENANT_PAYMENT_POLICY_ENVIRONMENT_MISMATCH",
+  );
+});
+
+test("resolveTenantPaymentProviderConnection fails closed for inactive and location-less connections", async () => {
+  const encrypted = encryptPaymentProviderToken("tenant-square-token");
 
   await assert.rejects(
     () =>
       resolveTenantPaymentProviderConnection(
         { businessId: BUSINESS_ID, provider: "square" },
         {
-          supabase: createMockSupabase([], missingTable).client,
-          getTenantById: async () => ({
-            id: BUSINESS_ID,
-            slug: "demo-dumpster-company",
-            status: "active",
-            created_at: "2026-01-01T00:00:00.000Z",
-            updated_at: "2026-01-01T00:00:00.000Z",
-          }),
+          supabase: createMockSupabase([
+            {
+              id: CONNECTION_ID,
+              business_id: BUSINESS_ID,
+              provider: "square",
+              provider_environment: "sandbox",
+              status: "reauth_required",
+              provider_merchant_id: "merchant-1",
+              provider_location_id: "location-1",
+              encrypted_access_token: encrypted.encryptedToken,
+              token_cipher_version: encrypted.cipherVersion,
+              token_cipher_key_id: encrypted.keyId,
+            },
+          ]).client,
         },
       ),
     (error) =>
       error instanceof TenantPaymentProviderConnectionError &&
-      error.code === "TENANT_PAYMENT_PROVIDER_CONNECTION_MISSING",
+      error.code === "TENANT_PAYMENT_PROVIDER_CONNECTION_INACTIVE",
+  );
+
+  await assert.rejects(
+    () =>
+      resolveTenantPaymentProviderConnection(
+        { businessId: BUSINESS_ID, provider: "square" },
+        {
+          supabase: createMockSupabase([
+            {
+              id: CONNECTION_ID,
+              business_id: BUSINESS_ID,
+              provider: "square",
+              provider_environment: "sandbox",
+              status: "active",
+              provider_merchant_id: "merchant-1",
+              provider_location_id: null,
+              encrypted_access_token: encrypted.encryptedToken,
+              token_cipher_version: encrypted.cipherVersion,
+              token_cipher_key_id: encrypted.keyId,
+            },
+          ]).client,
+        },
+      ),
+    (error) =>
+      error instanceof TenantPaymentProviderConnectionError &&
+      error.code === "TENANT_SQUARE_LOCATION_MISSING",
+  );
+});
+
+test("resolveTenantPaymentProviderConnection cannot use another business's connection id", async () => {
+  const encrypted = encryptPaymentProviderToken("tenant-square-token");
+  const mock = createMockSupabase([
+    {
+      id: CONNECTION_ID,
+      business_id: "22222222-2222-4222-8222-222222222222",
+      provider: "square",
+      provider_environment: "sandbox",
+      status: "active",
+      provider_merchant_id: "merchant-other",
+      provider_location_id: "other-location",
+      encrypted_access_token: encrypted.encryptedToken,
+      token_cipher_version: encrypted.cipherVersion,
+      token_cipher_key_id: encrypted.keyId,
+    },
+  ]);
+
+  await assert.rejects(
+    () =>
+      resolveTenantPaymentProviderConnection(
+        { businessId: BUSINESS_ID, provider: "square", paymentProviderConnectionId: CONNECTION_ID },
+        { supabase: mock.client },
+      ),
+    (error) =>
+      error instanceof TenantPaymentProviderConnectionError &&
+      error.code === "TENANT_PAYMENT_PROVIDER_CONNECTION_MISMATCH",
   );
 });
 
@@ -316,7 +482,7 @@ test("getSquareCheckoutConfigurationForBusiness returns only browser-safe Square
 
   const config = await getSquareCheckoutConfigurationForBusiness(
     { businessId: BUSINESS_ID },
-    { supabase: mock.client, getTenantById: async () => null },
+    { supabase: mock.client },
   );
 
   assert.deepEqual(config, {
@@ -352,7 +518,7 @@ test("getSquareCheckoutConfigurationForBusiness does not use legacy app IDs for 
 
   const config = await getSquareCheckoutConfigurationForBusiness(
     { businessId: BUSINESS_ID },
-    { supabase: mock.client, getTenantById: async () => null },
+    { supabase: mock.client },
   );
 
   assert.deepEqual(config, {
@@ -362,31 +528,19 @@ test("getSquareCheckoutConfigurationForBusiness does not use legacy app IDs for 
   });
 });
 
-test("getSquareCheckoutConfigurationForBusiness keeps legacy public app IDs for Tan Can Man fallback", async () => {
+test("getSquareCheckoutConfigurationForBusiness returns unavailable when policy is disabled", async () => {
   delete process.env.SQUARE_OAUTH_APPLICATION_ID;
   delete process.env.SQUARE_APPLICATION_ID;
   process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID = "legacy-public-square-application-id";
 
-  const missingTable = { code: "42P01", message: "relation does not exist" };
   const config = await getSquareCheckoutConfigurationForBusiness(
     { businessId: BUSINESS_ID },
-    {
-      supabase: createMockSupabase([], missingTable).client,
-      getTenantById: async () => ({
-        id: BUSINESS_ID,
-        slug: "tan-can-man",
-        status: "active",
-        created_at: "2026-01-01T00:00:00.000Z",
-        updated_at: "2026-01-01T00:00:00.000Z",
-      }),
-    },
+    { supabase: createMockSupabase([], null, [paymentSetting("disabled")]).client },
   );
 
   assert.deepEqual(config, {
-    configured: true,
+    configured: false,
     provider: "square",
-    environment: "sandbox",
-    applicationId: "legacy-public-square-application-id",
-    locationId: "legacy-location",
+    reason: "Online card payment is unavailable right now.",
   });
 });

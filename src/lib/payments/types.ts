@@ -2,9 +2,7 @@ export type PaymentProvider = "square";
 
 export type PaymentProviderEnvironment = "sandbox" | "production";
 
-export type PaymentProviderConnectionMode =
-  | "tenant_connection"
-  | "legacy_tan_can_man_fallback";
+export type PaymentProviderConnectionMode = "tenant_connection";
 
 export type PaymentProviderConnectionContext = {
   id: string | null;

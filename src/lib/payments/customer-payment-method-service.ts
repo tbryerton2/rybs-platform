@@ -131,31 +131,6 @@ function normalizeConsentAcceptedAt(value: string | Date | undefined) {
   return iso;
 }
 
-function getConfiguredSquareEnvironment() {
-  const raw = (process.env.SQUARE_ENVIRONMENT || "sandbox").trim().toLowerCase();
-  if (raw === "sandbox" || raw === "production") return raw;
-
-  throw new SaveCustomerPaymentMethodError(
-    "SQUARE_ENVIRONMENT must be either sandbox or production.",
-    "PROVIDER_CONFIGURATION_ERROR",
-  );
-}
-
-function assertProviderEnvironmentMatchesRuntime(
-  provider: PaymentProvider,
-  providerEnvironment: PaymentProviderEnvironment,
-) {
-  if (provider !== "square") return;
-
-  const configuredEnvironment = getConfiguredSquareEnvironment();
-  if (configuredEnvironment !== providerEnvironment) {
-    throw new SaveCustomerPaymentMethodError(
-      "providerEnvironment does not match the configured Square environment.",
-      "PROVIDER_ENVIRONMENT_MISMATCH",
-    );
-  }
-}
-
 function splitName(name: string | null) {
   if (!name) {
     return {
@@ -248,7 +223,6 @@ export async function saveCustomerPaymentMethod(
 
     assertUuid(businessId, "businessId");
     assertUuid(customerId, "customerId");
-    assertProviderEnvironmentMatchesRuntime(provider, providerEnvironment);
 
     switch (provider) {
       case "square": {
@@ -274,6 +248,7 @@ export async function saveCustomerPaymentMethod(
             businessId,
             provider,
             providerEnvironment,
+            paymentProviderConnectionId: input.paymentProviderConnectionId,
           });
           connectionResolved = true;
 

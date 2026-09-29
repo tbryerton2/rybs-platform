@@ -1,6 +1,7 @@
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
+  CreditCardIcon,
   EnvelopeIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
@@ -32,9 +33,19 @@ import {
   removeDomainAction,
   saveEmailIdentityAction,
   updateImplementationTypeAction,
+  updatePaymentModeAction,
 } from "@/app/platform-admin/(protected)/businesses/actions";
 import { getPlatformDomainIntegrationStatus } from "@/lib/platform-admin/domains";
 import { getPlatformEmailIdentityIntegrationStatus } from "@/lib/platform-admin/email-identities";
+import {
+  getPlatformTenantPaymentSetting,
+  listPlatformTenantPaymentConnections,
+  listPlatformTenantPaymentSettingEvents,
+  type PlatformTenantPaymentConnectionSummary,
+  type PlatformTenantPaymentMode,
+  type PlatformTenantPaymentSetting,
+  type PlatformTenantPaymentSettingEvent,
+} from "@/lib/platform-admin/payment-settings";
 import { CURRENT_SITE_DEACTIVATION_CONFIRMATION } from "@/lib/platform-admin/tenant-validation";
 import { getPlatformTenantDetail, type PlatformTenantDomain } from "@/lib/platform-admin/tenants";
 import { getRybManagedEmailSenderConfig } from "@/lib/email/tenant-sender";
@@ -229,6 +240,8 @@ function pageStatusMessage(status?: string, error?: string) {
       return { tone: "success" as const, text: "Email sender identity was removed." };
     case "implementation-updated":
       return { tone: "success" as const, text: "Implementation type was updated." };
+    case "payment-mode-updated":
+      return { tone: "success" as const, text: "Payment mode was updated." };
     case "admin-assigned":
       return { tone: "success" as const, text: "Business admin access was assigned." };
     default:
@@ -1396,6 +1409,250 @@ function EmailSendingSection({
   );
 }
 
+const PAYMENT_MODE_OPTIONS: Array<{
+  value: PlatformTenantPaymentMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "disabled",
+    label: "Disabled",
+    description: "No Square environment is approved for this business.",
+  },
+  {
+    value: "sandbox",
+    label: "Sandbox",
+    description: "Use Square test data without creating real charges.",
+  },
+  {
+    value: "production",
+    label: "Live",
+    description: "Allow real charges through this business's production Square account.",
+  },
+];
+
+function paymentModeLabel(mode: PlatformTenantPaymentMode) {
+  return mode === "production"
+    ? "Live"
+    : mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+function PaymentModeBadge({ mode }: { mode: PlatformTenantPaymentMode }) {
+  const className = mode === "production"
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+    : mode === "sandbox"
+      ? "bg-amber-50 text-amber-700 ring-amber-200"
+      : "bg-slate-100 text-slate-600 ring-slate-200";
+
+  return (
+    <span className={joinClasses("inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset", className)}>
+      {paymentModeLabel(mode)}
+    </span>
+  );
+}
+
+function connectionStatusLabel(connection: PlatformTenantPaymentConnectionSummary | null) {
+  if (!connection) return "Not connected";
+  if (connection.status === "active" && connection.locationId) return "Ready";
+  return connection.status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function latestConnection(
+  connections: PlatformTenantPaymentConnectionSummary[],
+  environment: "sandbox" | "production",
+) {
+  return connections
+    .filter((connection) => connection.environment === environment)
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0] ?? null;
+}
+
+function PaymentConnectionRow({
+  label,
+  connection,
+}: {
+  label: string;
+  connection: PlatformTenantPaymentConnectionSummary | null;
+}) {
+  const ready = connection?.status === "active" && Boolean(connection.locationId);
+
+  return (
+    <div className="grid gap-3 border-t border-slate-100 py-4 first:border-t-0 first:pt-0 sm:grid-cols-[120px_minmax(0,1fr)_auto] sm:items-center">
+      <div className="text-sm font-semibold text-slate-900">{label}</div>
+      <div className="min-w-0 text-sm text-slate-600">
+        {connection ? (
+          <>
+            <div className="truncate">{connection.locationName ?? "No location selected"}</div>
+            <div className="mt-1 truncate font-mono text-xs text-slate-500">
+              {connection.merchantId ?? "Merchant ID not recorded"}
+            </div>
+          </>
+        ) : (
+          "No Square connection recorded"
+        )}
+      </div>
+      <span
+        className={joinClasses(
+          "inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+          ready
+            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+            : "bg-slate-100 text-slate-600 ring-slate-200",
+        )}
+      >
+        {connectionStatusLabel(connection)}
+      </span>
+    </div>
+  );
+}
+
+function PaymentsSection({
+  tenant,
+  setting,
+  connections,
+  events,
+}: {
+  tenant: PlatformTenantSummary;
+  setting: PlatformTenantPaymentSetting;
+  connections: PlatformTenantPaymentConnectionSummary[];
+  events: PlatformTenantPaymentSettingEvent[];
+}) {
+  const sandboxConnection = latestConnection(connections, "sandbox");
+  const productionConnection = latestConnection(connections, "production");
+  const liveReady = productionConnection?.status === "active" && Boolean(productionConnection.locationId);
+
+  return (
+    <section id="payments" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-slate-100 text-slate-600">
+            <CreditCardIcon className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Payments</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              RYBS controls which Square environment this business is approved to use.
+            </p>
+          </div>
+        </div>
+        <PaymentModeBadge mode={setting.mode} />
+      </div>
+
+      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
+        <div>
+          <Alert tone="warning">
+            This policy is stored securely, but checkout still uses the existing Square configuration until payment enforcement is deployed.
+          </Alert>
+
+          {setting.mode === "production" && !liveReady ? (
+            <div className="mt-3">
+              <Alert tone="error">
+                Live is selected, but this business does not have an active production Square connection with a location.
+              </Alert>
+            </div>
+          ) : null}
+
+          <form action={updatePaymentModeAction} className="mt-5 space-y-4">
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <fieldset>
+              <legend className="text-sm font-semibold text-slate-700">Payment mode</legend>
+              <div className="mt-2 grid overflow-hidden rounded-[8px] border border-slate-300 sm:grid-cols-3">
+                {PAYMENT_MODE_OPTIONS.map((option, index) => {
+                  const liveUnavailable = option.value === "production" && !liveReady;
+                  return (
+                    <label
+                      key={option.value}
+                      className={joinClasses(
+                        "relative border-slate-300 p-3 sm:border-l",
+                        index === 0 && "sm:border-l-0",
+                        index > 0 && "border-t sm:border-t-0",
+                        liveUnavailable ? "cursor-not-allowed bg-slate-50 text-slate-400" : "cursor-pointer bg-white",
+                      )}
+                    >
+                      <input
+                        className="peer sr-only"
+                        type="radio"
+                        name="paymentMode"
+                        value={option.value}
+                        defaultChecked={setting.mode === option.value}
+                        disabled={liveUnavailable}
+                      />
+                      <span className="block text-sm font-semibold peer-checked:text-sky-700">
+                        {option.label}
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        {option.description}
+                      </span>
+                      <span className="pointer-events-none absolute inset-0 hidden ring-2 ring-inset ring-sky-500 peer-checked:block" />
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div>
+              <label htmlFor="liveConfirmation" className="text-sm font-semibold text-slate-700">
+                Live confirmation
+              </label>
+              <input
+                id="liveConfirmation"
+                name="liveConfirmation"
+                type="text"
+                autoComplete="off"
+                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100"
+                placeholder="Type LIVE only when activating real payments"
+                disabled={!liveReady}
+              />
+            </div>
+
+            {!liveReady ? (
+              <p className="text-xs leading-5 text-slate-500">
+                Live remains unavailable until the business connects an active production Square account and selects a location.
+              </p>
+            ) : null}
+
+            <FormSubmitButton loadingLabel="Saving payment mode...">
+              <CreditCardIcon className="h-4 w-4" />
+              Save payment mode
+            </FormSubmitButton>
+          </form>
+        </div>
+
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Square connections</h3>
+            <div className="mt-3">
+              <PaymentConnectionRow label="Sandbox" connection={sandboxConnection} />
+              <PaymentConnectionRow label="Live" connection={productionConnection} />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent changes</h3>
+            {events.length ? (
+              <ol className="mt-3 space-y-3">
+                {events.slice(0, 5).map((event) => (
+                  <li key={event.id} className="text-sm leading-5 text-slate-600">
+                    <div>
+                      <span className="font-semibold text-slate-900">{paymentModeLabel(event.previousMode)}</span>
+                      {" to "}
+                      <span className="font-semibold text-slate-900">{paymentModeLabel(event.newMode)}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">{formatDateTime(event.createdAt)}</div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">No payment mode changes recorded.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary }) {
   return (
     <section id="business-admin-access" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -1546,6 +1803,11 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
   }
 
   const { tenant, domains, emailIdentity } = detail;
+  const [paymentSetting, paymentConnections, paymentEvents] = await Promise.all([
+    getPlatformTenantPaymentSetting(tenant.id, "square"),
+    listPlatformTenantPaymentConnections(tenant.id, "square"),
+    listPlatformTenantPaymentSettingEvents(tenant.id, "square"),
+  ]);
   const message = pageStatusMessage(search.status, search.error);
   const configuredLocalTenantSlug = getConfiguredLocalTenantSlug();
   const isCurrentSiteTenant = tenant.slug === configuredLocalTenantSlug;
@@ -1625,6 +1887,13 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
       <LifecycleSection tenant={tenant} isCurrentSiteTenant={isCurrentSiteTenant} />
 
       <BusinessAdminAccessSection tenant={tenant} />
+
+      <PaymentsSection
+        tenant={tenant}
+        setting={paymentSetting}
+        connections={paymentConnections}
+        events={paymentEvents}
+      />
 
       <DomainIntegrationStatusSection />
 

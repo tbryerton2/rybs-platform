@@ -32,18 +32,27 @@ test("production data tables enable RLS and remove direct public role access", (
   ];
 
   for (const table of protectedTables) {
-    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
-    assert.match(
-      migration,
-      new RegExp(`revoke all privileges on table public\\.${table} from anon, authenticated`),
-    );
+    assert.match(migration, new RegExp(`'${table}'`));
   }
+
+  assert.match(migration, /foreach relation_name in array/);
+  assert.match(migration, /if relation_kind in \('r', 'p'\) then/);
+  assert.match(
+    migration,
+    /'alter table public\.%I enable row level security'/,
+  );
+  assert.match(migration, /if relation_kind is not null then/);
+  assert.match(
+    migration,
+    /'revoke all privileges on table public\.%I from anon, authenticated'/,
+  );
 
   assert.match(migration, /alter view public\.customer_rollups set \(security_invoker = true\)/);
   assert.match(
     migration,
     /revoke all privileges on table public\.customer_rollups from anon, authenticated/,
   );
+  assert.match(migration, /if to_regclass\('public\.customer_rollups'\) is not null then/);
 });
 
 test("server-owned security definer functions are service-role only", () => {

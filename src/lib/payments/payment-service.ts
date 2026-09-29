@@ -42,6 +42,8 @@ type BookingPaymentRow = {
   updated_at: string;
 };
 
+export type PaymentServiceSupabaseClient = Pick<typeof supabaseAdmin, "from">;
+
 export class PaymentServiceError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
@@ -143,6 +145,7 @@ function toCheckoutPaymentResult(payment: StoredCheckoutPayment): CheckoutPaymen
 }
 
 async function insertPendingPayment(input: {
+  supabase: PaymentServiceSupabaseClient;
   businessId: string;
   bookingHoldId: string;
   provider: PaymentProvider;
@@ -172,7 +175,7 @@ async function insertPendingPayment(input: {
     insertValues.provider_merchant_id = input.providerMerchantId;
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await input.supabase
     .from("booking_payments")
     .insert(insertValues)
     .select(BOOKING_PAYMENT_SELECT)
@@ -180,7 +183,7 @@ async function insertPendingPayment(input: {
 
   if (error || !data) {
     if (error && "code" in error && error.code === "23505") {
-      const existing = await supabaseAdmin
+      const existing = await input.supabase
         .from("booking_payments")
         .select(BOOKING_PAYMENT_SELECT)
         .eq("idempotency_key", input.idempotencyKey)
@@ -221,6 +224,7 @@ function terminalFailureStatus(status: PaymentStatus) {
 }
 
 async function updatePaymentFromProviderResult(
+  supabase: PaymentServiceSupabaseClient,
   paymentId: string,
   providerResult: PaymentProviderChargeResult,
 ) {
@@ -248,7 +252,7 @@ async function updatePaymentFromProviderResult(
     update.provider_merchant_id = providerResult.providerMerchantId;
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from("booking_payments")
     .update(update)
     .eq("id", paymentId)
@@ -263,13 +267,14 @@ async function updatePaymentFromProviderResult(
 }
 
 async function markPaymentFailed(input: {
+  supabase: PaymentServiceSupabaseClient;
   paymentId: string;
   status?: PaymentStatus;
   failureCode: string;
   failureMessage: string;
   rawProviderResponse?: unknown;
 }) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await input.supabase
     .from("booking_payments")
     .update({
       status: terminalFailureStatus(input.status ?? "failed"),
@@ -291,7 +296,7 @@ async function markPaymentFailed(input: {
 
 export async function createCheckoutPayment(
   input: CreateCheckoutPaymentInput,
-  options?: { adapter?: PaymentProviderAdapter },
+  options?: { adapter?: PaymentProviderAdapter; supabase?: PaymentServiceSupabaseClient },
 ): Promise<CheckoutPaymentResult> {
   assertUuid(input.businessId, "businessId");
   assertUuid(input.bookingHoldId, "bookingHoldId");
@@ -301,6 +306,7 @@ export async function createCheckoutPayment(
   const paymentProvider = input.paymentProvider ?? DEFAULT_PAYMENT_PROVIDER;
   const paymentMethodToken = input.paymentMethodToken.trim();
   const idempotencyKey = normalizeIdempotencyKey(input.idempotencyKey);
+  const supabase = options?.supabase ?? supabaseAdmin;
 
   if (!paymentMethodToken) {
     throw new PaymentServiceError("paymentMethodToken is required.");
@@ -311,7 +317,7 @@ export async function createCheckoutPayment(
     (await getPaymentProviderAdapterForBusiness({
       provider: paymentProvider,
       businessId: input.businessId,
-    }));
+    }, { supabase }));
 
   if (adapter.provider !== paymentProvider) {
     throw new PaymentServiceError(
@@ -320,6 +326,7 @@ export async function createCheckoutPayment(
   }
 
   const pendingPayment = await insertPendingPayment({
+    supabase,
     businessId: input.businessId,
     bookingHoldId: input.bookingHoldId,
     provider: paymentProvider,
@@ -353,6 +360,7 @@ export async function createCheckoutPayment(
     });
   } catch (error) {
     const failedPayment = await markPaymentFailed({
+      supabase,
       paymentId: pendingPayment.id,
       failureCode: "PROVIDER_EXCEPTION",
       failureMessage: error instanceof Error ? error.message : "Payment provider failed.",
@@ -366,7 +374,7 @@ export async function createCheckoutPayment(
     };
   }
 
-  const updatedPayment = await updatePaymentFromProviderResult(pendingPayment.id, providerResult);
+  const updatedPayment = await updatePaymentFromProviderResult(supabase, pendingPayment.id, providerResult);
   return {
     ...toCheckoutPaymentResult(updatedPayment),
     paymentProviderConnectionId: adapter.paymentProviderConnectionId,

@@ -27,6 +27,7 @@ import { formatEnumLabel } from "@/lib/admin/enum-label";
 import { formatUsdFromCents } from "@/lib/money";
 import { formatShortDateET } from "@/lib/time";
 import { validateUsableSavedPaymentMethod } from "@/lib/payments/saved-card-validation";
+import { getTenantPaymentPolicyForBusiness } from "@/lib/platform-admin/payment-settings";
 import { buildPickupPlanningModel } from "@/lib/pickup-planning";
 import {
   ACCESS_ISSUES,
@@ -1576,7 +1577,11 @@ export default async function AdminBookingDetailPage({
   const customerPaymentMethods = isBookingSchemaError(customerPaymentMethodsResult.error)
     ? []
     : ((customerPaymentMethodsResult.data ?? []) as CustomerPaymentMethodSummary[]);
-  const currentProviderEnvironment = process.env.SQUARE_ENVIRONMENT === "production" ? "production" : "sandbox";
+  const paymentPolicy = await getTenantPaymentPolicyForBusiness(businessId, "square", {
+    supabase: supabaseAdmin,
+  });
+  const currentProviderEnvironment =
+    paymentPolicy.mode === "sandbox" || paymentPolicy.mode === "production" ? paymentPolicy.mode : null;
   const latestChargePaymentByChargeId = new Map<string, BookingPaymentSummary>();
   for (const payment of bookingChargePayments) {
     if (payment.booking_charge_id && !latestChargePaymentByChargeId.has(payment.booking_charge_id)) {
@@ -1610,16 +1615,18 @@ export default async function AdminBookingDetailPage({
   const auditHistoryCount = primaryAuditEntries.length + linkedCustomerHistory.length;
   const savedPaymentMethod = getSavedPaymentMethod(customerPaymentMethods);
   const usableSavedPaymentMethod =
-    customerPaymentMethods.find((method) => {
-      const validation = validateUsableSavedPaymentMethod(method, {
-        businessId,
-        customerId: booking.customer_id,
-        provider: "square",
-        providerEnvironment: currentProviderEnvironment,
-      });
+    currentProviderEnvironment
+      ? (customerPaymentMethods.find((method) => {
+          const validation = validateUsableSavedPaymentMethod(method, {
+            businessId,
+            customerId: booking.customer_id,
+            provider: "square",
+            providerEnvironment: currentProviderEnvironment,
+          });
 
-      return validation.ok;
-    }) ?? null;
+          return validation.ok;
+        }) ?? null)
+      : null;
   const displayedSavedPaymentMethod = usableSavedPaymentMethod ?? savedPaymentMethod;
   const squarePaymentId =
     booking.payment_provider_payment_id ??

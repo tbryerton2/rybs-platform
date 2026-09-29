@@ -18,28 +18,16 @@ import type {
   PaymentStatus,
 } from "../types";
 
-function resolveSquareEnvironment(): PaymentProviderEnvironment {
-  const raw = (process.env.SQUARE_ENVIRONMENT || "sandbox").trim().toLowerCase();
-
-  if (raw === "production") return "production";
-  if (raw === "sandbox") return "sandbox";
-
-  throw new Error("SQUARE_ENVIRONMENT must be either 'sandbox' or 'production'.");
-}
-
 function resolveSquareBaseUrl(environment: PaymentProviderEnvironment) {
   return environment === "production" ? SquareEnvironment.Production : SquareEnvironment.Sandbox;
 }
 
-function getSquareAccessToken(accessToken?: string | null) {
-  const connectionToken = clean(accessToken);
-  if (connectionToken) return connectionToken;
-
-  const token = process.env.SQUARE_ACCESS_TOKEN?.trim();
-  if (!token) {
-    throw new Error("SQUARE_ACCESS_TOKEN is required for Square checkout payments.");
+function requireConnectionValue(value: string | null | undefined, fieldName: string) {
+  const cleaned = clean(value);
+  if (!cleaned) {
+    throw new Error(`${fieldName} is required for tenant Square payments.`);
   }
-  return token;
+  return cleaned;
 }
 
 export class SquarePaymentProviderOperationError extends Error {
@@ -64,34 +52,25 @@ export class SquarePaymentProviderOperationError extends Error {
   }
 }
 
-function getSquareLocationId(locationId?: string | null) {
-  const connectionLocationId = clean(locationId);
-  if (connectionLocationId) return connectionLocationId;
-
-  const configuredLocationId = process.env.SQUARE_LOCATION_ID?.trim();
-  if (!configuredLocationId) {
-    throw new Error("SQUARE_LOCATION_ID is required for Square checkout payments. Add it to .env.local.");
-  }
-  return configuredLocationId;
-}
-
-function createSquareClient(environment: PaymentProviderEnvironment, accessToken?: string | null) {
+function createSquareClient(environment: PaymentProviderEnvironment, accessToken: string) {
   return new SquareClient({
     environment: resolveSquareBaseUrl(environment),
-    token: getSquareAccessToken(accessToken),
+    token: accessToken,
   });
 }
 
 function resolveSquareRuntime(connection?: PaymentProviderConnectionContext) {
-  const environment = connection?.providerEnvironment ?? resolveSquareEnvironment();
+  if (!connection || connection.mode !== "tenant_connection") {
+    throw new Error("Tenant Square connection is required for payment execution.");
+  }
 
   return {
-    environment,
-    accessToken: connection?.accessToken ?? null,
-    providerLocationId: connection?.providerLocationId ?? null,
-    paymentProviderConnectionId: connection?.id ?? null,
-    providerMerchantId: connection?.providerMerchantId ?? null,
-    connectionMode: connection?.mode ?? "legacy_tan_can_man_fallback",
+    environment: connection.providerEnvironment,
+    accessToken: requireConnectionValue(connection.accessToken, "Square access token"),
+    providerLocationId: requireConnectionValue(connection.providerLocationId, "Square location ID"),
+    paymentProviderConnectionId: requireConnectionValue(connection.id, "Square connection ID"),
+    providerMerchantId: connection.providerMerchantId ?? null,
+    connectionMode: connection.mode,
   };
 }
 
@@ -517,7 +496,7 @@ export function createSquarePaymentAdapter(
       return verifySquareSavedCard({ ...input, connection });
     },
     async charge(input: PaymentProviderChargeInput): Promise<PaymentProviderChargeResult> {
-      const locationId = getSquareLocationId(runtime.providerLocationId);
+      const locationId = runtime.providerLocationId;
       const client = createSquareClient(runtime.environment, runtime.accessToken);
       const sourceId = requireSquareId(
         input.paymentSourceId ?? input.paymentMethodToken,

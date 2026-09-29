@@ -25,11 +25,13 @@ export function getPaymentProviderAdapter(
 export async function getPaymentProviderAdapterForBusiness(input: {
   provider: PaymentProvider;
   businessId: string;
-}) {
+  paymentProviderConnectionId?: string | null;
+}, options: Parameters<typeof resolveTenantPaymentProviderConnection>[1] = {}) {
   const connection = await resolveTenantPaymentProviderConnection({
     businessId: input.businessId,
     provider: input.provider,
-  });
+    paymentProviderConnectionId: input.paymentProviderConnectionId,
+  }, options);
 
   return getPaymentProviderAdapter(input.provider, { connection });
 }
