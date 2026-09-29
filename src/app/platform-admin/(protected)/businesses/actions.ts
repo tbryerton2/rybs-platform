@@ -29,6 +29,10 @@ import {
   updatePlatformTenantImplementation,
   updatePlatformTenantLifecycleStatus,
 } from "@/lib/platform-admin/tenants";
+import {
+  PlatformTenantPaymentSettingError,
+  updatePlatformTenantPaymentMode,
+} from "@/lib/platform-admin/payment-settings";
 import type { PlatformBusinessFormState, PlatformBusinessFormValues } from "./form-state";
 
 function formString(formData: FormData, key: string) {
@@ -83,6 +87,13 @@ function redirectEmailIdentityMutationError(
   error: PlatformEmailIdentityMutationError,
 ): never {
   redirect(`/platform-admin/businesses/${tenantId}?error=${encodeURIComponent(error.message)}#email-sending`);
+}
+
+function redirectPaymentSettingMutationError(
+  tenantId: string,
+  error: PlatformTenantPaymentSettingError,
+): never {
+  redirect(`/platform-admin/businesses/${tenantId}?error=${encodeURIComponent(error.message)}#payments`);
 }
 
 export async function createBusinessAction(
@@ -175,6 +186,28 @@ export async function updateImplementationTypeAction(formData: FormData) {
   } catch (error) {
     if (error instanceof PlatformTenantMutationError) {
       redirect(`/platform-admin/businesses/${tenantId}?error=${encodeURIComponent(error.message)}`);
+    }
+
+    throw error;
+  }
+}
+
+export async function updatePaymentModeAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+
+  try {
+    const result = await updatePlatformTenantPaymentMode({
+      businessId: tenantId,
+      provider: "square",
+      mode: formString(formData, "paymentMode"),
+      liveConfirmation: formString(formData, "liveConfirmation"),
+    });
+
+    revalidatePlatformBusiness(result.businessId);
+    redirect(`/platform-admin/businesses/${result.businessId}?status=payment-mode-updated#payments`);
+  } catch (error) {
+    if (error instanceof PlatformTenantPaymentSettingError) {
+      redirectPaymentSettingMutationError(tenantId, error);
     }
 
     throw error;

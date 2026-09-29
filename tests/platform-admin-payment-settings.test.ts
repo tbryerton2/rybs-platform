@@ -5,6 +5,7 @@ import {
   PlatformTenantPaymentSettingError,
   getPlatformTenantPaymentSetting,
   getTenantPaymentPolicyForBusiness,
+  listPlatformTenantPaymentConnections,
   listPlatformTenantPaymentSettingEvents,
   normalizePlatformPaymentProvider,
   normalizePlatformTenantPaymentMode,
@@ -37,6 +38,19 @@ type PaymentSettingEventRow = {
   created_at: string;
 };
 
+type PaymentConnectionRow = {
+  id: string;
+  business_id: string;
+  provider: PlatformPaymentProvider;
+  provider_environment: "sandbox" | "production";
+  status: string;
+  provider_merchant_id: string | null;
+  provider_location_id: string | null;
+  provider_location_name: string | null;
+  connected_at: string | null;
+  updated_at: string;
+};
+
 type Filter = { column: string; value: unknown };
 
 function platformSession(userId = ACTOR_USER_ID) {
@@ -66,6 +80,22 @@ function setting(overrides: Partial<PaymentSettingRow> = {}): PaymentSettingRow 
   };
 }
 
+function connection(overrides: Partial<PaymentConnectionRow> = {}): PaymentConnectionRow {
+  return {
+    id: "77777777-7777-4777-8777-777777777777",
+    business_id: BUSINESS_ID,
+    provider: "square",
+    provider_environment: "production",
+    status: "active",
+    provider_merchant_id: "merchant-1",
+    provider_location_id: "location-1",
+    provider_location_name: "Main location",
+    connected_at: "2026-09-29T00:00:00.000Z",
+    updated_at: "2026-09-29T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function matches(row: Record<string, unknown>, filters: Filter[]) {
   return filters.every((filter) => row[filter.column] === filter.value);
 }
@@ -74,10 +104,12 @@ function createMockSupabase(input: {
   businesses?: string[];
   settings?: PaymentSettingRow[];
   events?: PaymentSettingEventRow[];
+  connections?: PaymentConnectionRow[];
 } = {}) {
   const businesses = new Set(input.businesses ?? [BUSINESS_ID, OTHER_BUSINESS_ID]);
   const settings = [...(input.settings ?? [])];
   const events = [...(input.events ?? [])];
+  const connections = [...(input.connections ?? [])];
   const rpcCalls: Array<{ functionName: string; args: Record<string, unknown> }> = [];
 
   function runPaymentModeRpc(args: Record<string, unknown>) {
@@ -151,8 +183,19 @@ function createMockSupabase(input: {
           return query;
         },
         order(column: string, options?: { ascending?: boolean }) {
-          void column;
-          void options;
+          if (table === "tenant_payment_provider_connections") {
+            const direction = options?.ascending === false ? -1 : 1;
+            return Promise.resolve({
+              data: connections
+                .filter((row) => matches(row, filters))
+                .toSorted((left, right) =>
+                  String(left[column as keyof PaymentConnectionRow]).localeCompare(
+                    String(right[column as keyof PaymentConnectionRow]),
+                  ) * direction),
+              error: null,
+            });
+          }
+
           if (table !== "tenant_payment_setting_events") {
             return Promise.resolve({ data: null, error: { message: `Unexpected order on ${table}` } });
           }
@@ -287,6 +330,7 @@ test("payment setting mutation sends business, provider, mode, and acting user t
 test("audit event is written when the mode changes and skipped for no-op updates", async () => {
   const mock = createMockSupabase({
     settings: [setting({ mode: "sandbox" })],
+    connections: [connection()],
   });
 
   const noOp = await updatePlatformTenantPaymentMode(
@@ -300,7 +344,12 @@ test("audit event is written when the mode changes and skipped for no-op updates
   assert.equal(mock.events.length, 0);
 
   const changed = await updatePlatformTenantPaymentMode(
-    { businessId: BUSINESS_ID, provider: "square", mode: "production" },
+    {
+      businessId: BUSINESS_ID,
+      provider: "square",
+      mode: "production",
+      liveConfirmation: "LIVE",
+    },
     {
       supabase: mock.client,
       requirePlatformAdminSession: async () => platformSession(),
@@ -326,6 +375,82 @@ test("audit event is written when the mode changes and skipped for no-op updates
   assert.equal(listedEvents.length, 1);
   assert.equal(listedEvents[0].previousMode, "sandbox");
   assert.equal(listedEvents[0].newMode, "production");
+});
+
+test("platform payment connection summaries exclude token material", async () => {
+  const mock = createMockSupabase({ connections: [connection()] });
+
+  const summaries = await listPlatformTenantPaymentConnections(BUSINESS_ID, "square", {
+    supabase: mock.client,
+    requirePlatformAdminSession: async () => platformSession(),
+  });
+
+  assert.deepEqual(summaries, [
+    {
+      id: "77777777-7777-4777-8777-777777777777",
+      businessId: BUSINESS_ID,
+      provider: "square",
+      environment: "production",
+      status: "active",
+      merchantId: "merchant-1",
+      locationId: "location-1",
+      locationName: "Main location",
+      connectedAt: "2026-09-29T00:00:00.000Z",
+      updatedAt: "2026-09-29T00:00:00.000Z",
+    },
+  ]);
+  assert.equal("encrypted_access_token" in summaries[0], false);
+});
+
+test("Live mode requires confirmation and a ready production Square connection", async () => {
+  const noConnection = createMockSupabase();
+  const options = {
+    supabase: noConnection.client,
+    requirePlatformAdminSession: async () => platformSession(),
+  };
+
+  await assert.rejects(
+    updatePlatformTenantPaymentMode(
+      { businessId: BUSINESS_ID, provider: "square", mode: "production" },
+      options,
+    ),
+    (error: unknown) =>
+      error instanceof PlatformTenantPaymentSettingError &&
+      error.code === "live_confirmation_required",
+  );
+
+  await assert.rejects(
+    updatePlatformTenantPaymentMode(
+      {
+        businessId: BUSINESS_ID,
+        provider: "square",
+        mode: "production",
+        liveConfirmation: "LIVE",
+      },
+      options,
+    ),
+    (error: unknown) =>
+      error instanceof PlatformTenantPaymentSettingError &&
+      error.code === "live_connection_required",
+  );
+  assert.equal(noConnection.rpcCalls.length, 0);
+
+  const readyConnection = createMockSupabase({ connections: [connection()] });
+  const result = await updatePlatformTenantPaymentMode(
+    {
+      businessId: BUSINESS_ID,
+      provider: "square",
+      mode: "production",
+      liveConfirmation: "LIVE",
+    },
+    {
+      supabase: readyConnection.client,
+      requirePlatformAdminSession: async () => platformSession(),
+    },
+  );
+
+  assert.equal(result.mode, "production");
+  assert.equal(readyConnection.rpcCalls.length, 1);
 });
 
 test("invalid business ids, providers, and modes are rejected before RPC invocation", async () => {

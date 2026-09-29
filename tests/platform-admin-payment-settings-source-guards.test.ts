@@ -18,6 +18,11 @@ test("platform-admin payment settings service is server-only and protects mutati
   assert.match(source, /const session = await requireSession\(options\);/);
   assert.match(source, /platform_admin_set_tenant_payment_mode/);
   assert.match(source, /p_actor_auth_user_id: session\.user\.id/);
+  assert.match(source, /export async function listPlatformTenantPaymentConnections/);
+  assert.match(source, /connection\.provider_environment === "production"/);
+  assert.match(source, /connection\.status === "active"/);
+  assert.match(source, /Boolean\(connection\.provider_location_id\)/);
+  assert.doesNotMatch(source, /CONNECTION_SUMMARY_SELECT[\s\S]*encrypted_access_token/);
   assert.doesNotMatch(source, /user_metadata/);
   assert.doesNotMatch(source, /SQUARE_ENVIRONMENT/);
 });

@@ -32,6 +32,19 @@ export type PlatformTenantPaymentSettingEvent = {
   createdAt: string;
 };
 
+export type PlatformTenantPaymentConnectionSummary = {
+  id: string;
+  businessId: string;
+  provider: PlatformPaymentProvider;
+  environment: Exclude<PlatformTenantPaymentMode, "disabled">;
+  status: string;
+  merchantId: string | null;
+  locationId: string | null;
+  locationName: string | null;
+  connectedAt: string | null;
+  updatedAt: string;
+};
+
 export type PlatformTenantPaymentPolicy = {
   businessId: string;
   provider: PlatformPaymentProvider;
@@ -42,11 +55,14 @@ export type UpdatePlatformTenantPaymentModeInput = {
   businessId: unknown;
   provider: unknown;
   mode: unknown;
+  liveConfirmation?: unknown;
 };
 
 export type PlatformTenantPaymentSettingErrorCode =
   | "invalid_input"
   | "not_found"
+  | "live_confirmation_required"
+  | "live_connection_required"
   | "settings_rpc_missing"
   | "database_error";
 
@@ -91,6 +107,19 @@ type SettingEventRow = {
   created_at: string;
 };
 
+type ConnectionSummaryRow = {
+  id: string;
+  business_id: string;
+  provider: string;
+  provider_environment: string;
+  status: string;
+  provider_merchant_id: string | null;
+  provider_location_id: string | null;
+  provider_location_name: string | null;
+  connected_at: string | null;
+  updated_at: string;
+};
+
 type QueryResult<T> = Promise<{ data: T | null; error: SupabaseDbError | null }>;
 
 type PlatformPaymentSettingsSupabaseClient = {
@@ -112,6 +141,8 @@ type PlatformPaymentSettingsOptions = {
 const SETTING_SELECT = "id, business_id, provider, mode, updated_by, created_at, updated_at";
 const EVENT_SELECT =
   "id, business_id, provider, previous_mode, new_mode, actor_platform_admin_user_id, created_at";
+const CONNECTION_SUMMARY_SELECT =
+  "id, business_id, provider, provider_environment, status, provider_merchant_id, provider_location_id, provider_location_name, connected_at, updated_at";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -198,6 +229,29 @@ function mapEventRow(row: SettingEventRow): PlatformTenantPaymentSettingEvent {
   };
 }
 
+function mapConnectionSummaryRow(row: ConnectionSummaryRow): PlatformTenantPaymentConnectionSummary {
+  const environment = assertPlatformTenantPaymentMode(row.provider_environment);
+  if (environment === "disabled") {
+    throw new PlatformTenantPaymentSettingError(
+      "database_error",
+      "We could not load the Square connection status.",
+    );
+  }
+
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    provider: assertPlatformPaymentProvider(row.provider),
+    environment,
+    status: row.status,
+    merchantId: row.provider_merchant_id,
+    locationId: row.provider_location_id,
+    locationName: row.provider_location_name,
+    connectedAt: row.connected_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function defaultDisabledSetting(
   businessId: string,
   provider: PlatformPaymentProvider,
@@ -279,6 +333,45 @@ async function getSettingRow(
   return asMaybeSingleQuery<SettingRow>(providerQuery);
 }
 
+async function getConnectionRows(
+  businessId: string,
+  provider: PlatformPaymentProvider,
+  options?: PlatformPaymentSettingsOptions,
+) {
+  const client = getClient(options);
+  const query = (client.from("tenant_payment_provider_connections") as {
+    select(columns: string): {
+      eq(column: string, value: string): unknown;
+    };
+  })
+    .select(CONNECTION_SUMMARY_SELECT)
+    .eq("business_id", businessId);
+  const providerQuery = (query as {
+    eq(column: string, value: string): {
+      order(column: string, options?: { ascending?: boolean }): QueryResult<ConnectionSummaryRow[]>;
+    };
+  }).eq("provider", provider);
+
+  return providerQuery.order("provider_environment", { ascending: true });
+}
+
+export async function listPlatformTenantPaymentConnections(
+  businessIdInput: unknown,
+  providerInput: unknown,
+  options?: PlatformPaymentSettingsOptions,
+): Promise<PlatformTenantPaymentConnectionSummary[]> {
+  await requireSession(options);
+  const businessId = normalizeUuid(businessIdInput);
+  const provider = normalizePlatformPaymentProvider(providerInput);
+  const { data, error } = await getConnectionRows(businessId, provider, options);
+
+  if (error) {
+    mapDatabaseError(error, "connection_summary_lookup_database_error");
+  }
+
+  return (data ?? []).map(mapConnectionSummaryRow);
+}
+
 export async function getPlatformTenantPaymentSetting(
   businessIdInput: unknown,
   providerInput: unknown,
@@ -309,6 +402,40 @@ export async function updatePlatformTenantPaymentMode(
   const provider = normalizePlatformPaymentProvider(input.provider);
   const mode = normalizePlatformTenantPaymentMode(input.mode);
   const client = getClient(options);
+
+  if (mode === "production") {
+    const confirmation = typeof input.liveConfirmation === "string"
+      ? input.liveConfirmation.trim()
+      : "";
+    if (confirmation !== "LIVE") {
+      throw new PlatformTenantPaymentSettingError(
+        "live_confirmation_required",
+        "Type LIVE to activate live payments.",
+      );
+    }
+
+    const { data: connections, error: connectionError } = await getConnectionRows(
+      businessId,
+      provider,
+      options,
+    );
+    if (connectionError) {
+      mapDatabaseError(connectionError, "live_connection_lookup_database_error");
+    }
+
+    const activeProductionConnection = (connections ?? []).some(
+      (connection) =>
+        connection.provider_environment === "production" &&
+        connection.status === "active" &&
+        Boolean(connection.provider_location_id),
+    );
+    if (!activeProductionConnection) {
+      throw new PlatformTenantPaymentSettingError(
+        "live_connection_required",
+        "Connect an active production Square account and select its location before activating Live payments.",
+      );
+    }
+  }
 
   const query = client.rpc("platform_admin_set_tenant_payment_mode", {
     p_business_id: businessId,
