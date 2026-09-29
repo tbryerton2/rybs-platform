@@ -1,33 +1,58 @@
 begin;
 
-alter table public.entity_history enable row level security;
-alter table public.customers_legacy_derived enable row level security;
-alter table public.pricing_defaults enable row level security;
-alter table public.tenants enable row level security;
-alter table public.tenant_content_entries enable row level security;
-alter table public.booking_messages enable row level security;
-alter table public.booking_holds enable row level security;
-alter table public.dumpsters enable row level security;
-alter table public.dumpster_product_settings enable row level security;
-alter table public.bookings enable row level security;
-alter table public.pricing_settings enable row level security;
-alter table public.booking_events enable row level security;
+do $$
+declare
+  relation_name text;
+  relation_kind "char";
+begin
+  foreach relation_name in array array[
+    'entity_history',
+    'customers_legacy_derived',
+    'pricing_defaults',
+    'tenants',
+    'tenant_content_entries',
+    'booking_messages',
+    'booking_holds',
+    'dumpsters',
+    'dumpster_product_settings',
+    'bookings',
+    'pricing_settings',
+    'booking_events'
+  ] loop
+    relation_kind := null;
 
-revoke all privileges on table public.entity_history from anon, authenticated;
-revoke all privileges on table public.customers_legacy_derived from anon, authenticated;
-revoke all privileges on table public.pricing_defaults from anon, authenticated;
-revoke all privileges on table public.tenants from anon, authenticated;
-revoke all privileges on table public.tenant_content_entries from anon, authenticated;
-revoke all privileges on table public.booking_messages from anon, authenticated;
-revoke all privileges on table public.booking_holds from anon, authenticated;
-revoke all privileges on table public.dumpsters from anon, authenticated;
-revoke all privileges on table public.dumpster_product_settings from anon, authenticated;
-revoke all privileges on table public.bookings from anon, authenticated;
-revoke all privileges on table public.pricing_settings from anon, authenticated;
-revoke all privileges on table public.booking_events from anon, authenticated;
+    select c.relkind
+      into relation_kind
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = relation_name;
 
-alter view public.customer_rollups set (security_invoker = true);
-revoke all privileges on table public.customer_rollups from anon, authenticated;
+    if relation_kind in ('r', 'p') then
+      execute format(
+        'alter table public.%I enable row level security',
+        relation_name
+      );
+    end if;
+
+    if relation_kind is not null then
+      execute format(
+        'revoke all privileges on table public.%I from anon, authenticated',
+        relation_name
+      );
+    end if;
+  end loop;
+end
+$$;
+
+do $$
+begin
+  if to_regclass('public.customer_rollups') is not null then
+    execute 'alter view public.customer_rollups set (security_invoker = true)';
+    execute 'revoke all privileges on table public.customer_rollups from anon, authenticated';
+  end if;
+end
+$$;
 
 revoke all on function public.expire_active_holds_for_client(text)
   from public, anon, authenticated;
