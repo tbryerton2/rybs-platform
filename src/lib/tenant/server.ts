@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { CMS_PREVIEW_COOKIE } from "@/lib/admin/cms-preview";
 import {
   assertResolvedLocalTenant,
   createDomainDisabledError,
@@ -327,7 +328,7 @@ export async function getTenantContent(key: string, options?: TenantContentReadO
   }
 
   const jar = await cookies();
-  const previewEnabled = jar.get("cms_preview")?.value === "1";
+  const previewEnabled = jar.get(CMS_PREVIEW_COOKIE)?.value === "1";
 
   if (previewEnabled) {
     const draftValue = await getTenantContentByStatusForTenant(tenantId, key, "draft");

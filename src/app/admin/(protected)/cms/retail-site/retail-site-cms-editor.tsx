@@ -62,6 +62,7 @@ type CmsSourceLabel = "Using default" | "Draft" | "Published";
 
 type RetailSiteCmsEditorProps = {
   cms: RetailSiteCmsState;
+  publicBaseUrl: string | null;
 };
 
 function clone<T>(value: T): T {
@@ -225,7 +226,7 @@ function SourceBadge({ label, compact = false }: { label: CmsSourceLabel; compac
   );
 }
 
-export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
+export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCmsEditorProps) {
   const initialValuesByKey = useMemo(
     () => ({
       [HOME_HERO_KEY]: clone(cms.home.hero.value),
@@ -314,6 +315,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
   const [statusByKey, setStatusByKey] = useState<Record<string, CmsEntryStatus>>(initialStatusByKey);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "publishing">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [heroImageUploading, setHeroImageUploading] = useState(false);
   const [heroImageUploadError, setHeroImageUploadError] = useState<string | null>(null);
   const [heroImageUploadSuccess, setHeroImageUploadSuccess] = useState<string | null>(null);
@@ -644,6 +646,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
 
   async function persistPage(action: "save_draft" | "publish") {
     setError(null);
+    setNotice(null);
     setSaveState(action === "publish" ? "publishing" : "saving");
 
     const entries = currentPageKeys.map((key) => ({
@@ -661,6 +664,7 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
 
     if (!response.ok || !json?.ok) {
       setError(json?.error || "CMS save failed.");
+      setNotice(null);
       setSaveState("idle");
       return false;
     }
@@ -692,10 +696,16 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
     });
 
     setSaveState("saved");
+    setNotice(action === "publish" ? "Page published to the live retail site." : "Draft saved.");
     return true;
   }
 
   async function handlePreview() {
+    if (!publicBaseUrl) {
+      setError("Add and activate a public domain before previewing the retail site.");
+      return;
+    }
+
     const ok = await persistPage("save_draft");
     if (!ok) return;
 
@@ -1407,6 +1417,11 @@ export default function RetailSiteCmsEditor({ cms }: RetailSiteCmsEditorProps) {
       {error ? (
         <div className="rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           {error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="rounded-[14px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {notice}
         </div>
       ) : null}
 

@@ -60,7 +60,7 @@ export default async function PricingPage({
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3 text-sm text-amber-900">
             <span>Preview mode is on. You are viewing draft retail-site content.</span>
             <a
-              href={`/admin/cms/preview?mode=exit&redirect=${encodeURIComponent(zipValid ? `/pricing?zip=${zip}` : "/pricing")}`}
+              href={`/cms-preview?mode=exit&redirect=${encodeURIComponent(zipValid ? `/pricing?zip=${zip}` : "/pricing")}`}
               className="font-semibold underline decoration-amber-400 underline-offset-4"
             >
               Exit Preview
