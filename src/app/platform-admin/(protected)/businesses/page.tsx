@@ -3,7 +3,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   PauseCircleIcon,
-  PencilSquareIcon,
   PlusIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
@@ -114,17 +113,9 @@ function BusinessRow({ tenant }: { tenant: PlatformTenantSummary }) {
         <div className="flex justify-end gap-2">
           <Link
             href={`/platform-admin/businesses/${tenant.id}`}
-            className="admin-btn admin-btn-secondary admin-btn-sm"
+            className="admin-btn admin-btn-primary admin-btn-sm min-w-[4.75rem] shadow-sm"
           >
             View
-          </Link>
-          <Link
-            href={`/platform-admin/businesses/${tenant.id}/edit`}
-            className="admin-btn admin-btn-secondary admin-btn-sm"
-            aria-label={`Edit ${tenant.displayName}`}
-          >
-            <PencilSquareIcon className="h-4 w-4" />
-            Edit
           </Link>
         </div>
       </td>
@@ -138,9 +129,7 @@ export default async function PlatformBusinessesPage() {
   return (
     <AdminPage width="wide" className="space-y-6 pt-2">
       <AdminPageHeader
-        eyebrow="Platform"
         title="Businesses"
-        description="Create businesses, inspect setup status, and manage basic lifecycle state."
         actions={
           <Link href="/platform-admin/businesses/new" className="admin-btn admin-btn-primary">
             <PlusIcon className="h-4 w-4" />
@@ -181,13 +170,6 @@ export default async function PlatformBusinessesPage() {
       </div>
 
       <section className="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
-          <h2 className="text-sm font-semibold text-slate-900">Business list</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Rows link to exact tenant UUID detail pages. Keep setup incomplete businesses inactive until they are ready.
-          </p>
-        </div>
-
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100">
             <thead className="bg-slate-50">
@@ -196,7 +178,7 @@ export default async function PlatformBusinessesPage() {
                   Business
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Slug
+                  URL name
                 </th>
                 <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Status
@@ -211,7 +193,7 @@ export default async function PlatformBusinessesPage() {
                   Created
                 </th>
                 <th className="py-3 pl-3 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pr-5">
-                  Action
+                  <span className="sr-only">View business</span>
                 </th>
               </tr>
             </thead>

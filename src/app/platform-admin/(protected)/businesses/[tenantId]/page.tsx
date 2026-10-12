@@ -1,6 +1,7 @@
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
+  ClipboardDocumentListIcon,
   CreditCardIcon,
   EnvelopeIcon,
   ExclamationTriangleIcon,
@@ -11,12 +12,11 @@ import {
   PlusIcon,
   StarIcon,
   TrashIcon,
-  UserPlusIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
-import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 import {
   activateBusinessAction,
   activateDomainAction,
@@ -40,11 +40,9 @@ import { getPlatformEmailIdentityIntegrationStatus } from "@/lib/platform-admin/
 import {
   getPlatformTenantPaymentSetting,
   listPlatformTenantPaymentConnections,
-  listPlatformTenantPaymentSettingEvents,
   type PlatformTenantPaymentConnectionSummary,
   type PlatformTenantPaymentMode,
   type PlatformTenantPaymentSetting,
-  type PlatformTenantPaymentSettingEvent,
 } from "@/lib/platform-admin/payment-settings";
 import { CURRENT_SITE_DEACTIVATION_CONFIRMATION } from "@/lib/platform-admin/tenant-validation";
 import { getPlatformTenantDetail, type PlatformTenantDomain } from "@/lib/platform-admin/tenants";
@@ -139,19 +137,8 @@ function readinessBadgeClassName(status: PlatformTenantSummary["setup"]["readine
   }
 }
 
-function launchReadinessSuccessMessage(
-  status: PlatformTenantSummary["setup"]["readinessStatus"],
-) {
-  switch (status) {
-    case "ready_to_launch":
-      return "Required setup is complete. This business is ready to launch.";
-    case "active":
-      return "Required setup is complete and this business is active.";
-    case "not_started":
-    case "in_progress":
-    case "active_setup_incomplete":
-      return null;
-  }
+function launchReadinessIsComplete(status: PlatformTenantSummary["setup"]["readinessStatus"]) {
+  return status === "ready_to_launch" || status === "active";
 }
 
 const IMPLEMENTATION_OPTIONS: Array<{
@@ -663,7 +650,7 @@ function TenantDomainsSection({
     <section id="public-domains" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Public domains</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Public domains</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Hostnames that can resolve this business on the public site.
           </p>
@@ -847,13 +834,22 @@ function TenantDomainsSection({
 
 function LaunchReadinessSection({ tenant }: { tenant: PlatformTenantSummary }) {
   const missingAreas = tenant.setup.missingRequiredAreas;
-  const successMessage = launchReadinessSuccessMessage(tenant.setup.readinessStatus);
+  const readinessComplete = launchReadinessIsComplete(tenant.setup.readinessStatus);
+  const hasReadinessWarnings = !tenant.setup.implementationTypeConfigured || missingAreas.length > 0;
 
   return (
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Launch readiness</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">Launch readiness</h2>
+            {readinessComplete ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                <CheckCircleIcon className="h-3.5 w-3.5" />
+                Completed
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Required complete: {tenant.setup.requiredCompleteCount} / {tenant.setup.requiredAreaCount}
           </p>
@@ -874,32 +870,32 @@ function LaunchReadinessSection({ tenant }: { tenant: PlatformTenantSummary }) {
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3">
-        {!tenant.setup.implementationTypeConfigured ? (
-          <Alert tone="warning">
-            Select an implementation type before treating this business as ready to launch.
-          </Alert>
-        ) : null}
-        {missingAreas.length ? (
-          <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <div className="font-semibold">Missing required setup</div>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {missingAreas.map((area) => (
-                <li key={area.key}>
-                  <a
-                    href={`#${getSetupAreaElementId(area.key)}`}
-                    className="font-semibold text-amber-900 underline-offset-4 hover:text-amber-950 hover:underline focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  >
-                    {area.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : successMessage ? (
-          <Alert tone="success">{successMessage}</Alert>
-        ) : null}
-      </div>
+      {hasReadinessWarnings ? (
+        <div className="mt-4 grid gap-3">
+          {!tenant.setup.implementationTypeConfigured ? (
+            <Alert tone="warning">
+              Select an implementation type before treating this business as ready to launch.
+            </Alert>
+          ) : null}
+          {missingAreas.length ? (
+            <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="font-semibold">Missing required setup</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {missingAreas.map((area) => (
+                  <li key={area.key}>
+                    <a
+                      href={`#${getSetupAreaElementId(area.key)}`}
+                      className="font-semibold text-amber-900 underline-offset-4 hover:text-amber-950 hover:underline focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    >
+                      {area.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -909,7 +905,7 @@ function ImplementationTypeSection({ tenant }: { tenant: PlatformTenantSummary }
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Implementation type</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Implementation type</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Current selection: {implementationLabel(tenant.setup.implementationType)}
           </p>
@@ -966,7 +962,7 @@ function DomainIntegrationStatusSection() {
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Domain integration</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Domain integration</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Vercel domain integration: {status.configured ? "Configured" : "Needs configuration"}
           </p>
@@ -1207,7 +1203,7 @@ function EmailSendingSection({
     <section id="email-sending" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Email sending</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Email sending</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Tenant-branded sender identity metadata and SES verification state.
           </p>
@@ -1409,28 +1405,6 @@ function EmailSendingSection({
   );
 }
 
-const PAYMENT_MODE_OPTIONS: Array<{
-  value: PlatformTenantPaymentMode;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "disabled",
-    label: "Disabled",
-    description: "No Square environment is approved for this business.",
-  },
-  {
-    value: "sandbox",
-    label: "Sandbox",
-    description: "Use Square test data without creating real charges.",
-  },
-  {
-    value: "production",
-    label: "Live",
-    description: "Allow real charges through this business's production Square account.",
-  },
-];
-
 function paymentModeLabel(mode: PlatformTenantPaymentMode) {
   return mode === "production"
     ? "Live"
@@ -1451,15 +1425,6 @@ function PaymentModeBadge({ mode }: { mode: PlatformTenantPaymentMode }) {
   );
 }
 
-function connectionStatusLabel(connection: PlatformTenantPaymentConnectionSummary | null) {
-  if (!connection) return "Not connected";
-  if (connection.status === "active" && connection.locationId) return "Ready";
-  return connection.status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function latestConnection(
   connections: PlatformTenantPaymentConnectionSummary[],
   environment: "sandbox" | "production",
@@ -1469,58 +1434,48 @@ function latestConnection(
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0] ?? null;
 }
 
-function PaymentConnectionRow({
-  label,
-  connection,
-}: {
-  label: string;
-  connection: PlatformTenantPaymentConnectionSummary | null;
-}) {
-  const ready = connection?.status === "active" && Boolean(connection.locationId);
-
-  return (
-    <div className="grid gap-3 border-t border-slate-100 py-4 first:border-t-0 first:pt-0 sm:grid-cols-[120px_minmax(0,1fr)_auto] sm:items-center">
-      <div className="text-sm font-semibold text-slate-900">{label}</div>
-      <div className="min-w-0 text-sm text-slate-600">
-        {connection ? (
-          <>
-            <div className="truncate">{connection.locationName ?? "No location selected"}</div>
-            <div className="mt-1 truncate font-mono text-xs text-slate-500">
-              {connection.merchantId ?? "Merchant ID not recorded"}
-            </div>
-          </>
-        ) : (
-          "No Square connection recorded"
-        )}
-      </div>
-      <span
-        className={joinClasses(
-          "inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-          ready
-            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-            : "bg-slate-100 text-slate-600 ring-slate-200",
-        )}
-      >
-        {connectionStatusLabel(connection)}
-      </span>
-    </div>
-  );
-}
-
 function PaymentsSection({
-  tenant,
+  tenantId,
   setting,
   connections,
-  events,
 }: {
-  tenant: PlatformTenantSummary;
+  tenantId: string;
   setting: PlatformTenantPaymentSetting;
   connections: PlatformTenantPaymentConnectionSummary[];
-  events: PlatformTenantPaymentSettingEvent[];
 }) {
   const sandboxConnection = latestConnection(connections, "sandbox");
   const productionConnection = latestConnection(connections, "production");
+  const sandboxReady = sandboxConnection?.status === "active" && Boolean(sandboxConnection.locationId);
   const liveReady = productionConnection?.status === "active" && Boolean(productionConnection.locationId);
+  const paymentModeRows: Array<{
+    value: PlatformTenantPaymentMode;
+    label: string;
+    description: string;
+    connection?: PlatformTenantPaymentConnectionSummary | null;
+    ready: boolean | null | undefined;
+  }> = [
+    {
+      value: "disabled" as const,
+      label: "Disabled",
+      description: "No Square environment is approved.",
+      connection: null,
+      ready: null,
+    },
+    {
+      value: "sandbox" as const,
+      label: "Sandbox",
+      description: "Use Square test data without creating real charges.",
+      connection: sandboxConnection,
+      ready: sandboxReady,
+    },
+    {
+      value: "production" as const,
+      label: "Production",
+      description: "Allow real charges through Square.",
+      connection: productionConnection,
+      ready: liveReady,
+    },
+  ];
 
   return (
     <section id="payments" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -1530,125 +1485,114 @@ function PaymentsSection({
             <CreditCardIcon className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Payments</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              RYBS controls which Square environment this business is approved to use.
-            </p>
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">Payments</h2>
           </div>
         </div>
         <PaymentModeBadge mode={setting.mode} />
       </div>
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
-        <div>
-          <Alert tone="warning">
-            This policy is stored securely, but checkout still uses the existing Square configuration until payment enforcement is deployed.
+      <form action={updatePaymentModeAction} className="mt-5 space-y-4">
+        <input type="hidden" name="tenantId" value={tenantId} />
+
+        {setting.mode === "production" && !liveReady ? (
+          <Alert tone="error">
+            Production is selected, but this business does not have an active production Square connection with a location.
           </Alert>
+        ) : null}
 
-          {setting.mode === "production" && !liveReady ? (
-            <div className="mt-3">
-              <Alert tone="error">
-                Live is selected, but this business does not have an active production Square connection with a location.
-              </Alert>
-            </div>
-          ) : null}
+        <fieldset>
+          <legend className="sr-only">Payment mode</legend>
+          <div className="grid gap-3 rounded-[10px] border border-slate-200 bg-slate-50 p-3">
+            {paymentModeRows.map((option) => {
+              const productionUnavailable = option.value === "production" && !liveReady;
+              const disabled = productionUnavailable && setting.mode !== "production";
+              const selected = setting.mode === option.value;
+              const statusLabel = option.ready === null
+                ? null
+                : option.ready
+                  ? "Ready"
+                  : "Not ready";
 
-          <form action={updatePaymentModeAction} className="mt-5 space-y-4">
-            <input type="hidden" name="tenantId" value={tenant.id} />
-            <fieldset>
-              <legend className="text-sm font-semibold text-slate-700">Payment mode</legend>
-              <div className="mt-2 grid overflow-hidden rounded-[8px] border border-slate-300 sm:grid-cols-3">
-                {PAYMENT_MODE_OPTIONS.map((option, index) => {
-                  const liveUnavailable = option.value === "production" && !liveReady;
-                  return (
-                    <label
-                      key={option.value}
-                      className={joinClasses(
-                        "relative border-slate-300 p-3 sm:border-l",
-                        index === 0 && "sm:border-l-0",
-                        index > 0 && "border-t sm:border-t-0",
-                        liveUnavailable ? "cursor-not-allowed bg-slate-50 text-slate-400" : "cursor-pointer bg-white",
-                      )}
-                    >
-                      <input
-                        className="peer sr-only"
-                        type="radio"
-                        name="paymentMode"
-                        value={option.value}
-                        defaultChecked={setting.mode === option.value}
-                        disabled={liveUnavailable}
-                      />
-                      <span className="block text-sm font-semibold peer-checked:text-sky-700">
-                        {option.label}
-                      </span>
-                      <span className="mt-1 block text-xs leading-5 text-slate-500">
-                        {option.description}
-                      </span>
-                      <span className="pointer-events-none absolute inset-0 hidden ring-2 ring-inset ring-sky-500 peer-checked:block" />
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div>
-              <label htmlFor="liveConfirmation" className="text-sm font-semibold text-slate-700">
-                Live confirmation
-              </label>
-              <input
-                id="liveConfirmation"
-                name="liveConfirmation"
-                type="text"
-                autoComplete="off"
-                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100"
-                placeholder="Type LIVE only when activating real payments"
-                disabled={!liveReady}
-              />
-            </div>
-
-            {!liveReady ? (
-              <p className="text-xs leading-5 text-slate-500">
-                Live remains unavailable until the business connects an active production Square account and selects a location.
-              </p>
-            ) : null}
-
-            <FormSubmitButton loadingLabel="Saving payment mode...">
-              <CreditCardIcon className="h-4 w-4" />
-              Save payment mode
-            </FormSubmitButton>
-          </form>
-        </div>
-
-        <div className="space-y-5">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Square connections</h3>
-            <div className="mt-3">
-              <PaymentConnectionRow label="Sandbox" connection={sandboxConnection} />
-              <PaymentConnectionRow label="Live" connection={productionConnection} />
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent changes</h3>
-            {events.length ? (
-              <ol className="mt-3 space-y-3">
-                {events.slice(0, 5).map((event) => (
-                  <li key={event.id} className="text-sm leading-5 text-slate-600">
-                    <div>
-                      <span className="font-semibold text-slate-900">{paymentModeLabel(event.previousMode)}</span>
-                      {" to "}
-                      <span className="font-semibold text-slate-900">{paymentModeLabel(event.newMode)}</span>
+              return (
+                <label
+                  key={option.value}
+                  className={joinClasses(
+                    "grid gap-3 rounded-[8px] border p-4 shadow-sm transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+                    selected
+                      ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
+                      : disabled
+                        ? "border-slate-200 bg-slate-100 text-slate-400 shadow-none"
+                        : "cursor-pointer border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-slate-900">{option.label}</span>
+                      {statusLabel ? (
+                        <span
+                          className={joinClasses(
+                            "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+                            option.ready
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                              : "bg-slate-100 text-slate-600 ring-slate-200",
+                          )}
+                        >
+                          {option.ready ? (
+                            <CheckCircleIcon className="h-3.5 w-3.5" />
+                          ) : (
+                            <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                          )}
+                          {statusLabel}
+                        </span>
+                      ) : null}
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">{formatDateTime(event.createdAt)}</div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-3 text-sm text-slate-500">No payment mode changes recorded.</p>
-            )}
+                    {option.connection ? (
+                      <p className="mt-2 font-mono text-xs text-slate-500">
+                        Merchant ID: {option.connection.merchantId ?? "Not recorded"}
+                      </p>
+                    ) : option.value === "production" ? (
+                      <p className="mt-2 text-xs text-slate-500">Merchant ID: —</p>
+                    ) : null}
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{option.description}</p>
+                  </div>
+                  <input
+                    className="h-5 w-5 justify-self-start border-slate-300 text-sky-600 focus:ring-sky-500 sm:justify-self-end"
+                    type="radio"
+                    name="paymentMode"
+                    value={option.value}
+                    defaultChecked={setting.mode === option.value}
+                    disabled={disabled}
+                  />
+                </label>
+              );
+            })}
           </div>
-        </div>
-      </div>
+        </fieldset>
+
+        {liveReady ? (
+          <div className="max-w-xl">
+            <label htmlFor="liveConfirmation" className="text-sm font-semibold text-slate-700">
+              Production confirmation
+            </label>
+            <input
+              id="liveConfirmation"
+              name="liveConfirmation"
+              type="text"
+              autoComplete="off"
+              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              placeholder="Type LIVE only when activating real payments"
+            />
+          </div>
+        ) : (
+          <p className="text-xs leading-5 text-slate-500">
+            Production remains unavailable until the business connects an active production Square account and selects a location.
+          </p>
+        )}
+
+        <FormSubmitButton loadingLabel="Saving payment mode...">
+          Save payment mode
+        </FormSubmitButton>
+      </form>
     </section>
   );
 }
@@ -1658,9 +1602,9 @@ function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary 
     <section id="business-admin-access" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Business admin access</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Business admin access</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Assign an existing Supabase Auth user as owner for this exact business.
+            Give an existing user admin access to this business.
           </p>
         </div>
         <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
@@ -1668,9 +1612,9 @@ function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary 
         </span>
       </div>
 
-      <form action={assignBusinessAdminAction} className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+      <form action={assignBusinessAdminAction} className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
         <input type="hidden" name="tenantId" value={tenant.id} />
-        <div>
+        <div className="w-full sm:w-1/2">
           <label htmlFor="admin-email" className="text-sm font-semibold text-slate-700">
             Existing auth user email
           </label>
@@ -1683,8 +1627,7 @@ function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary 
             required
           />
         </div>
-        <FormSubmitButton loadingLabel="Assigning...">
-          <UserPlusIcon className="h-4 w-4" />
+        <FormSubmitButton className="admin-btn admin-btn-primary h-11 min-w-[9rem] px-5" loadingLabel="Assigning...">
           Add admin
         </FormSubmitButton>
       </form>
@@ -1706,9 +1649,9 @@ function LifecycleSection({
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Lifecycle</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Business status</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Activation controls whether this tenant can be resolved as an active business.
+            Controls whether this business is active.
           </p>
         </div>
         <TenantStatusBadge tenant={tenant} />
@@ -1717,24 +1660,29 @@ function LifecycleSection({
       {active ? (
         <form action={deactivateBusinessAction} className="mt-5 space-y-4">
           <input type="hidden" name="tenantId" value={tenant.id} />
-          <Alert tone="warning">
-            Deactivation does not delete settings, content, users, bookings, customers, or operational records.
-          </Alert>
-          <div>
-            <label htmlFor="confirmationSlug" className="text-sm font-semibold text-slate-700">
-              Type the slug to deactivate
-            </label>
-            <input
-              id="confirmationSlug"
-              name="confirmationSlug"
-              type="text"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
-              placeholder={tenant.slug}
-              required
-            />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="w-full sm:w-1/2">
+              <label htmlFor="confirmationSlug" className="sr-only">
+                Enter the URL name to deactivate
+              </label>
+              <input
+                id="confirmationSlug"
+                name="confirmationSlug"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                placeholder="Enter the URL name to deactivate"
+                required
+              />
+            </div>
+            <FormSubmitButton
+              className="admin-btn h-11 min-w-[9rem] !border-red-600 !bg-red-600 px-5 !text-white shadow-sm hover:!border-red-700 hover:!bg-red-700 hover:!text-white"
+              loadingLabel="Deactivating..."
+            >
+              Deactivate
+            </FormSubmitButton>
           </div>
           {isCurrentSiteTenant ? (
             <div>
@@ -1750,17 +1698,17 @@ function LifecycleSection({
                 required
               />
               <p className="mt-2 text-xs text-slate-500">
-                This extra confirmation is required because this slug is the configured local tenant.
+                This extra confirmation is required because this URL name is the configured local tenant.
               </p>
             </div>
           ) : null}
-          <FormSubmitButton
-            className="admin-btn admin-btn-destructive"
-            loadingLabel="Deactivating..."
-          >
-            <PauseCircleIcon className="h-4 w-4" />
-            Deactivate business
-          </FormSubmitButton>
+          <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
+            <InformationCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+            <span>
+              Deactivating this business will make it inactive, but it will not delete settings,
+              content, users, bookings, customers, or records.
+            </span>
+          </p>
         </form>
       ) : (
         <form action={activateBusinessAction} className="mt-5 space-y-4">
@@ -1803,10 +1751,9 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
   }
 
   const { tenant, domains, emailIdentity } = detail;
-  const [paymentSetting, paymentConnections, paymentEvents] = await Promise.all([
+  const [paymentSetting, paymentConnections] = await Promise.all([
     getPlatformTenantPaymentSetting(tenant.id, "square"),
     listPlatformTenantPaymentConnections(tenant.id, "square"),
-    listPlatformTenantPaymentSettingEvents(tenant.id, "square"),
   ]);
   const message = pageStatusMessage(search.status, search.error);
   const configuredLocalTenantSlug = getConfiguredLocalTenantSlug();
@@ -1814,7 +1761,7 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
   return (
     <AdminPage width="wide" className="space-y-6 pt-2">
-      <div>
+      <div className="space-y-3">
         <Link
           href="/platform-admin/businesses"
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
@@ -1822,14 +1769,14 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
           <ArrowLeftIcon className="h-4 w-4" />
           Back to Businesses
         </Link>
-      </div>
 
-      <AdminPageHeader
-        eyebrow="Business"
-        title={tenant.displayName}
-        description={tenant.slug}
-        actions={
-          <>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+              {tenant.displayName}
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <TenantStatusBadge tenant={tenant} />
             <Link
               href={`/platform-admin/businesses/${tenant.id}/edit`}
@@ -1838,9 +1785,16 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
               <PencilSquareIcon className="h-4 w-4" />
               Edit business
             </Link>
-          </>
-        }
-      />
+            <Link
+              href={`/platform-admin/businesses/${tenant.id}/audit`}
+              className="admin-btn admin-btn-secondary"
+            >
+              <ClipboardDocumentListIcon className="h-4 w-4" />
+              View audit log
+            </Link>
+          </div>
+        </div>
+      </div>
 
       {message ? <Alert tone={message.tone}>{message.text}</Alert> : null}
 
@@ -1858,14 +1812,14 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Basic tenant information</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Basic tenant information</h2>
           <dl className="mt-4 space-y-4">
             <div>
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant UUID</dt>
               <dd className="mt-1 break-all text-sm text-slate-900">{tenant.id}</dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Slug</dt>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">URL name</dt>
               <dd className="mt-1 text-sm text-slate-900">{tenant.slug}</dd>
             </div>
             <div>
@@ -1889,10 +1843,9 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
       <BusinessAdminAccessSection tenant={tenant} />
 
       <PaymentsSection
-        tenant={tenant}
+        tenantId={tenant.id}
         setting={paymentSetting}
         connections={paymentConnections}
-        events={paymentEvents}
       />
 
       <DomainIntegrationStatusSection />
