@@ -53,7 +53,7 @@ test("platform business detail exposes email identity management and effective s
 
   assert.match(detailPage, /function EmailSendingSection/);
   assert.match(detailPage, /saveEmailIdentityAction/);
-  assert.match(detailPage, /provisionEmailIdentityAction/);
+  assert.doesNotMatch(detailPage, /Provision on SES/);
   assert.match(detailPage, /checkEmailIdentityAction/);
   assert.match(detailPage, /Derived From address/);
   assert.match(detailPage, /Using verified tenant sender/);
@@ -63,7 +63,8 @@ test("platform business detail exposes email identity management and effective s
   assert.match(actions, /savePlatformTenantEmailIdentity/);
   assert.match(actions, /provisionPlatformTenantEmailIdentity/);
   assert.match(actions, /checkPlatformTenantEmailIdentity/);
-  assert.doesNotMatch(actions, /sendEmail\(/);
+  assert.match(actions, /sendTestEmailAction/);
+  assert.match(actions, /sendEmail\(/);
   assert.match(emailSender, /SES_FROM_EMAIL/);
   assert.match(emailSender, /SES_REPLY_TO_EMAIL/);
 });

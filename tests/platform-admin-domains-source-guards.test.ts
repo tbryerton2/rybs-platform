@@ -175,7 +175,8 @@ test("platform admin domain UI exposes compact management actions and warnings",
   assert.match(detailPage, /active business has no active production public domain/);
   assert.match(detailPage, /custom domain is pending/);
   assert.match(detailPage, /primary domain is not active/);
-  assert.match(detailPage, /Vercel domain integration/);
+  assert.match(detailPage, /Retail website address configuration/);
+  assert.match(detailPage, /Other domains/);
   assert.match(newPage, /Platform subdomain/);
   assert.match(newPage, /Customer-owned domain/);
   assert.match(newPage, /Dedicated booking hostname/);

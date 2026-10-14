@@ -28,7 +28,6 @@ import {
   disableEmailIdentityAction,
   disableDomainAction,
   makePrimaryDomainAction,
-  provisionEmailIdentityAction,
   provisionDomainAction,
   removeEmailIdentityAction,
   removeDomainAction,
@@ -651,6 +650,19 @@ function TenantDomainsSection({
   const hasInactivePrimary = domains.some(
     (domain) => domain.isPrimary && domain.status !== "active",
   );
+  const primaryDomain = domains.find((domain) => domain.isPrimary) ?? null;
+  const otherDomains = primaryDomain
+    ? domains.filter((domain) => domain.id !== primaryDomain.id)
+    : domains;
+  const otherDomainsNeedAttention = otherDomains.some(
+    (domain) =>
+      domain.status !== "disabled" &&
+      (domain.status !== "active" ||
+        domain.providerStatus === "not_provisioned" ||
+        domain.providerStatus === "error" ||
+        domain.providerStatus === "awaiting_dns" ||
+        domain.verificationStatus === "verification_required"),
+  );
 
   return (
     <section id="public-domains" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -695,144 +707,47 @@ function TenantDomainsSection({
 
       {domains.length ? (
         <div className="mt-4 grid gap-3">
-          {domains.map((domain) => {
-            const isOnlyActiveDomain = domain.status === "active" && activeDomains.length <= 1;
-
-            return (
-              <article
-                key={domain.id}
-                id={`domain-${domain.id}`}
-                className="scroll-mt-6 rounded-[8px] border border-slate-200 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="break-all font-mono text-sm font-semibold text-slate-900">
-                      {domain.hostname}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                      <span>{formatDomainType(domain.domainType)}</span>
-                      <DomainStatusBadge status={domain.status} />
-                      <ProviderStatusBadge domain={domain} />
-                      {domain.verificationStatus === "verification_required" ? (
-                        <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
-                          Ownership TXT required
-                        </span>
-                      ) : null}
-                      {domain.isPrimary ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 ring-1 ring-inset ring-sky-200">
-                          <StarIcon className="h-3.5 w-3.5" />
-                          Primary
-                        </span>
-                      ) : null}
-                      <span>Created {formatDateTime(domain.createdAt)}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <Link
-                      href={`/platform-admin/businesses/${tenant.id}/domains/${domain.id}`}
-                      className="admin-btn admin-btn-secondary"
-                    >
-                      <PencilSquareIcon className="h-4 w-4" />
-                      Edit
-                    </Link>
-                    {domain.providerStatus === "not_provisioned" || domain.providerStatus === "error" ? (
-                      <form action={provisionDomainAction}>
-                        <input type="hidden" name="tenantId" value={tenant.id} />
-                        <input type="hidden" name="domainId" value={domain.id} />
-                        <button type="submit" className="admin-btn admin-btn-secondary">
-                          <PlayCircleIcon className="h-4 w-4" />
-                          Provision on Vercel
-                        </button>
-                      </form>
-                    ) : null}
-                    {domain.providerStatus !== "not_provisioned" ? (
-                      <form action={checkDomainAction}>
-                        <input type="hidden" name="tenantId" value={tenant.id} />
-                        <input type="hidden" name="domainId" value={domain.id} />
-                        <button type="submit" className="admin-btn admin-btn-secondary">
-                          <CheckCircleIcon className="h-4 w-4" />
-                          Check domain
-                        </button>
-                      </form>
-                    ) : null}
-                    {domainCanActivate(domain) ? (
-                      <form action={activateDomainAction}>
-                        <input type="hidden" name="tenantId" value={tenant.id} />
-                        <input type="hidden" name="domainId" value={domain.id} />
-                        <button type="submit" className="admin-btn admin-btn-secondary">
-                          <PlayCircleIcon className="h-4 w-4" />
-                          Activate
-                        </button>
-                      </form>
-                    ) : null}
-                    {domain.status !== "disabled" ? (
-                      <form action={disableDomainAction}>
-                        <input type="hidden" name="tenantId" value={tenant.id} />
-                        <input type="hidden" name="domainId" value={domain.id} />
-                        <button type="submit" className="admin-btn admin-btn-secondary">
-                          <PauseCircleIcon className="h-4 w-4" />
-                          Disable
-                        </button>
-                      </form>
-                    ) : null}
-                    {domain.status === "active" && !domain.isPrimary ? (
-                      <form action={makePrimaryDomainAction}>
-                        <input type="hidden" name="tenantId" value={tenant.id} />
-                        <input type="hidden" name="domainId" value={domain.id} />
-                        <button type="submit" className="admin-btn admin-btn-secondary">
-                          <StarIcon className="h-4 w-4" />
-                          Make primary
-                        </button>
-                      </form>
-                    ) : null}
-                  </div>
-                </div>
-
-                {checkedDomainId === domain.id ? (
-                  <div className="mt-4">
-                    <Alert tone="success">Domain configuration was re-checked.</Alert>
-                  </div>
-                ) : null}
-
-                <DomainDnsInstructions domain={domain} />
-
-                <form action={removeDomainAction} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                  <input type="hidden" name="tenantId" value={tenant.id} />
-                  <input type="hidden" name="domainId" value={domain.id} />
-                  <div>
-                    <label htmlFor={`remove-${domain.id}`} className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Remove confirmation
-                    </label>
-                    <input
-                      id={`remove-${domain.id}`}
-                      name="confirmation"
-                      type="text"
-                      placeholder={domain.hostname}
-                      className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                    />
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">
-                      {domain.isPrimary ? (
-                        <label className="inline-flex items-center gap-2">
-                          <input name="clearPrimary" type="checkbox" className="h-4 w-4 rounded border-slate-300" />
-                          Clear primary state
-                        </label>
-                      ) : null}
-                      {isOnlyActiveDomain ? (
-                        <label className="inline-flex items-center gap-2">
-                          <input name="acknowledgeLastActive" type="checkbox" className="h-4 w-4 rounded border-slate-300" />
-                          Remove only active domain
-                        </label>
-                      ) : null}
-                    </div>
-                  </div>
-                  <button type="submit" className="admin-btn admin-btn-destructive">
-                    <TrashIcon className="h-4 w-4" />
-                    Remove
-                  </button>
-                </form>
-              </article>
-            );
-          })}
+          {primaryDomain ? (
+            <TenantDomainCard
+              tenantId={tenant.id}
+              domain={primaryDomain}
+              activeDomainCount={activeDomains.length}
+              checkedDomainId={checkedDomainId}
+            />
+          ) : null}
+          {otherDomains.length ? (
+            <details className="group rounded-[8px] border border-slate-200 bg-white">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+                <span className="inline-flex items-center gap-2">
+                  <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+                  Other domains
+                </span>
+                <span
+                  className={joinClasses(
+                    "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+                    otherDomainsNeedAttention
+                      ? "bg-amber-50 text-amber-700 ring-amber-200"
+                      : "bg-slate-100 text-slate-600 ring-slate-200",
+                  )}
+                >
+                  {otherDomainsNeedAttention
+                    ? "Needs attention"
+                    : `${otherDomains.length} saved`}
+                </span>
+              </summary>
+              <div className="grid gap-3 border-t border-slate-100 p-3">
+                {otherDomains.map((domain) => (
+                  <TenantDomainCard
+                    key={domain.id}
+                    tenantId={tenant.id}
+                    domain={domain}
+                    activeDomainCount={activeDomains.length}
+                    checkedDomainId={checkedDomainId}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : (
         <div className="mt-4 rounded-[8px] border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-600">
@@ -840,6 +755,154 @@ function TenantDomainsSection({
         </div>
       )}
     </section>
+  );
+}
+
+function TenantDomainCard({
+  tenantId,
+  domain,
+  activeDomainCount,
+  checkedDomainId,
+}: {
+  tenantId: string;
+  domain: PlatformTenantDomain;
+  activeDomainCount: number;
+  checkedDomainId?: string;
+}) {
+  const isOnlyActiveDomain = domain.status === "active" && activeDomainCount <= 1;
+
+  return (
+    <article
+      id={`domain-${domain.id}`}
+      className="scroll-mt-6 rounded-[8px] border border-slate-200 p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="break-all font-mono text-sm font-semibold text-slate-900">
+            {domain.hostname}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span>{formatDomainType(domain.domainType)}</span>
+            <DomainStatusBadge status={domain.status} />
+            <ProviderStatusBadge domain={domain} />
+            {domain.verificationStatus === "verification_required" ? (
+              <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
+                Ownership TXT required
+              </span>
+            ) : null}
+            {domain.isPrimary ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 ring-1 ring-inset ring-sky-200">
+                <StarIcon className="h-3.5 w-3.5" />
+                Primary
+              </span>
+            ) : null}
+            <span>Created {formatDateTime(domain.createdAt)}</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link
+            href={`/platform-admin/businesses/${tenantId}/domains/${domain.id}`}
+            className="admin-btn admin-btn-secondary"
+          >
+            <PencilSquareIcon className="h-4 w-4" />
+            Edit
+          </Link>
+          {domain.providerStatus === "not_provisioned" || domain.providerStatus === "error" ? (
+            <form action={provisionDomainAction}>
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <input type="hidden" name="domainId" value={domain.id} />
+              <button type="submit" className="admin-btn admin-btn-secondary">
+                <PlayCircleIcon className="h-4 w-4" />
+                Provision on Vercel
+              </button>
+            </form>
+          ) : null}
+          {domain.providerStatus !== "not_provisioned" ? (
+            <form action={checkDomainAction}>
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <input type="hidden" name="domainId" value={domain.id} />
+              <button type="submit" className="admin-btn admin-btn-secondary">
+                <CheckCircleIcon className="h-4 w-4" />
+                Check domain
+              </button>
+            </form>
+          ) : null}
+          {domainCanActivate(domain) ? (
+            <form action={activateDomainAction}>
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <input type="hidden" name="domainId" value={domain.id} />
+              <button type="submit" className="admin-btn admin-btn-secondary">
+                <PlayCircleIcon className="h-4 w-4" />
+                Activate
+              </button>
+            </form>
+          ) : null}
+          {domain.status !== "disabled" ? (
+            <form action={disableDomainAction}>
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <input type="hidden" name="domainId" value={domain.id} />
+              <button type="submit" className="admin-btn admin-btn-secondary">
+                <PauseCircleIcon className="h-4 w-4" />
+                Disable
+              </button>
+            </form>
+          ) : null}
+          {domain.status === "active" && !domain.isPrimary ? (
+            <form action={makePrimaryDomainAction}>
+              <input type="hidden" name="tenantId" value={tenantId} />
+              <input type="hidden" name="domainId" value={domain.id} />
+              <button type="submit" className="admin-btn admin-btn-secondary">
+                <StarIcon className="h-4 w-4" />
+                Make primary
+              </button>
+            </form>
+          ) : null}
+        </div>
+      </div>
+
+      {checkedDomainId === domain.id ? (
+        <div className="mt-4">
+          <Alert tone="success">Domain configuration was re-checked.</Alert>
+        </div>
+      ) : null}
+
+      <DomainDnsInstructions domain={domain} />
+
+      <form action={removeDomainAction} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <input type="hidden" name="tenantId" value={tenantId} />
+        <input type="hidden" name="domainId" value={domain.id} />
+        <div>
+          <label htmlFor={`remove-${domain.id}`} className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Remove confirmation
+          </label>
+          <input
+            id={`remove-${domain.id}`}
+            name="confirmation"
+            type="text"
+            placeholder={domain.hostname}
+            className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+          />
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">
+            {domain.isPrimary ? (
+              <label className="inline-flex items-center gap-2">
+                <input name="clearPrimary" type="checkbox" className="h-4 w-4 rounded border-slate-300" />
+                Clear primary state
+              </label>
+            ) : null}
+            {isOnlyActiveDomain ? (
+              <label className="inline-flex items-center gap-2">
+                <input name="acknowledgeLastActive" type="checkbox" className="h-4 w-4 rounded border-slate-300" />
+                Remove only active domain
+              </label>
+            ) : null}
+          </div>
+        </div>
+        <button type="submit" className="admin-btn admin-btn-destructive">
+          <TrashIcon className="h-4 w-4" />
+          Remove
+        </button>
+      </form>
+    </article>
   );
 }
 
@@ -1135,6 +1198,31 @@ function EmailIdentityStatusBadge({ status }: { status: TenantEmailIdentityStatu
   );
 }
 
+function getEmailIdentityActionRequired(status: TenantEmailIdentityStatus) {
+  if (status === "dns_required" || status === "pending") {
+    return {
+      label: "DNS Required",
+      message: "Email address has not been approved yet in Amazon SES.",
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      label: "Action Required",
+      message: "Amazon SES could not approve this email address.",
+    };
+  }
+
+  if (status === "disabled") {
+    return {
+      label: "Action Required",
+      message: "This email address is disabled.",
+    };
+  }
+
+  return null;
+}
+
 function getEmailDnsInstructionRecords(identity: TenantEmailIdentity) {
   const instructions = identity.dnsInstructions as
     | { records?: Array<{ type?: string; name?: string; value?: string; reason?: string | null }>; notes?: string[] }
@@ -1147,60 +1235,104 @@ function getEmailDnsInstructionRecords(identity: TenantEmailIdentity) {
   };
 }
 
-function EmailDnsInstructions({ identity }: { identity: TenantEmailIdentity }) {
-  const { records, notes } = getEmailDnsInstructionRecords(identity);
+function EmailDnsInstructionCallout({ identity }: { identity: TenantEmailIdentity }) {
+  const isVerified =
+    identity.providerStatus === "verified" && identity.verificationStatus === "verified";
 
-  if (records.length === 0 && notes.length === 0 && !identity.lastError) {
+  return (
+    <div
+      className={joinClasses(
+        "rounded-[8px] border px-4 py-3 text-sm leading-6",
+        isVerified
+          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "border-amber-200 bg-amber-50 text-amber-800",
+      )}
+    >
+      <div className="flex items-start gap-2">
+        {isVerified ? (
+          <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+        ) : (
+          <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+        )}
+        <p>
+          {isVerified
+            ? "These DNS records are active and approved by Amazon SES."
+            : "Add these CNAME records in the domain's DNS provider, then click Check SES to confirm Amazon has approved the sender."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EmailDnsInstructions({ identity }: { identity: TenantEmailIdentity }) {
+  const { records } = getEmailDnsInstructionRecords(identity);
+  const isVerified =
+    identity.providerStatus === "verified" && identity.verificationStatus === "verified";
+  const needsAttention = !isVerified || Boolean(identity.lastError);
+
+  if (records.length === 0 && !identity.lastError) {
     return null;
   }
 
   return (
-    <div className="grid gap-3 border-t border-slate-100 pt-4">
-      {identity.lastError ? (
-        <Alert tone="error">{identity.lastError}</Alert>
-      ) : null}
-      {records.length ? (
-        <div className="overflow-hidden rounded-[8px] border border-slate-200">
-          <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-0 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <div>Type</div>
-            <div>Name</div>
-            <div>Value</div>
+    <details className="group rounded-[8px] border border-slate-200 bg-white" open={needsAttention}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+        <span className="inline-flex items-center gap-2">
+          <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+          Amazon SES DNS records
+        </span>
+        <span
+          className={joinClasses(
+            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+            needsAttention
+              ? "bg-amber-50 text-amber-700 ring-amber-200"
+              : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+          )}
+        >
+          {needsAttention ? "Needs attention" : "Ready"}
+        </span>
+      </summary>
+      <div className="grid gap-3 border-t border-slate-100 p-4">
+        {identity.lastError ? (
+          <Alert tone="error">{identity.lastError}</Alert>
+        ) : null}
+        {records.length ? <EmailDnsInstructionCallout identity={identity} /> : null}
+        {records.length ? (
+          <div className="overflow-hidden rounded-[8px] border border-slate-200">
+            <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-0 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div>Type</div>
+              <div>Name</div>
+              <div>Value</div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {records.map((record, index) => (
+                <div
+                  key={`${record.type}-${record.name}-${index}`}
+                  className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-3 px-3 py-3 text-xs"
+                >
+                  <div className="font-mono font-semibold text-slate-900">{record.type}</div>
+                  <input
+                    readOnly
+                    value={record.name}
+                    className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
+                    aria-label={`${identity.senderDomain} email DNS record name`}
+                  />
+                  <input
+                    readOnly
+                    value={record.value}
+                    className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
+                    aria-label={`${identity.senderDomain} email DNS record value`}
+                  />
+                  {record.reason ? (
+                    <div className="col-span-3 text-slate-500">{record.reason}</div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="divide-y divide-slate-100">
-            {records.map((record, index) => (
-              <div
-                key={`${record.type}-${record.name}-${index}`}
-                className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-3 px-3 py-3 text-xs"
-              >
-                <div className="font-mono font-semibold text-slate-900">{record.type}</div>
-                <input
-                  readOnly
-                  value={record.name}
-                  className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
-                  aria-label={`${identity.senderDomain} email DNS record name`}
-                />
-                <input
-                  readOnly
-                  value={record.value}
-                  className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
-                  aria-label={`${identity.senderDomain} email DNS record value`}
-                />
-                {record.reason ? (
-                  <div className="col-span-3 text-slate-500">{record.reason}</div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {notes.length ? (
-        <div className="grid gap-1 text-xs leading-5 text-slate-600">
-          {notes.map((note) => (
-            <p key={note}>{note}</p>
-          ))}
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -1234,11 +1366,7 @@ function EmailIdentityReadiness({
   rybsManagedSender: ReturnType<typeof getRybManagedEmailSenderConfig>;
 }) {
   if (effectiveStatus === "tenant_verified") {
-    return (
-      <Alert tone="success">
-        Customer emails use the verified tenant sender identity.
-      </Alert>
-    );
+    return null;
   }
 
   if (effectiveStatus === "rybs_managed") {
@@ -1297,8 +1425,6 @@ function EmailSendingSection({
     awsConfigured: integration.configured,
     rybsSenderConfigured: rybsManagedSender.configured,
   });
-  const canProvision = emailIdentity &&
-    (emailIdentity.providerStatus === "pending" || emailIdentity.providerStatus === "failed");
   const canDisable = emailIdentity && emailIdentity.providerStatus !== "disabled";
   const effectiveStatusLabel =
     effectiveStatus === "tenant_verified"
@@ -1312,8 +1438,13 @@ function EmailSendingSection({
       : effectiveStatus === "rybs_managed"
         ? "bg-sky-50 text-sky-700 ring-sky-200"
         : "bg-rose-50 text-rose-700 ring-rose-200";
-  const platformEmailSetupNeedsAttention = !integration.configured || !rybsManagedSender.configured;
+  const rybsManagedSenderNeedsAttention =
+    effectiveStatus !== "tenant_verified" && !rybsManagedSender.configured;
+  const platformEmailSetupNeedsAttention = !integration.configured || rybsManagedSenderNeedsAttention;
   const businessSenderNeedsAttention = Boolean(emailIdentity && emailIdentity.providerStatus !== "verified");
+  const emailIdentityActionRequired = emailIdentity
+    ? getEmailIdentityActionRequired(emailIdentity.providerStatus)
+    : null;
   const editSenderIdentityNeedsAttention = !emailIdentity;
 
   return (
@@ -1346,9 +1477,9 @@ function EmailSendingSection({
             SES identity provisioning needs AWS_REGION or SES_REGION, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.
           </Alert>
         ) : null}
-        {!rybsManagedSender.configured ? (
+        {rybsManagedSenderNeedsAttention ? (
           <Alert tone="warning">
-            RYBS managed sender fallback needs RYBS_MANAGED_SES_FROM_EMAIL.
+            The shared backup email sender is not configured. Businesses without their own verified sender may not be able to send customer emails.
           </Alert>
         ) : null}
       </div>
@@ -1373,20 +1504,20 @@ function EmailSendingSection({
             {platformEmailSetupNeedsAttention ? "Needs attention" : "Completed"}
           </span>
         </summary>
-        <dl className="grid gap-3 border-t border-slate-100 p-4 text-sm sm:grid-cols-4">
-          <div>
+        <dl className="grid border-t border-slate-100 text-sm sm:grid-cols-4 sm:divide-x sm:divide-slate-200">
+          <div className="border-b border-slate-100 p-4 sm:border-b-0">
             <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Region</dt>
             <dd className="mt-1 text-slate-900">{integration.regionConfigured ? "Set" : "Missing"}</dd>
           </div>
-          <div>
+          <div className="border-b border-slate-100 p-4 sm:border-b-0">
             <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Access key</dt>
             <dd className="mt-1 text-slate-900">{integration.accessKeyConfigured ? "Set" : "Missing"}</dd>
           </div>
-          <div>
+          <div className="border-b border-slate-100 p-4 sm:border-b-0">
             <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Secret key</dt>
             <dd className="mt-1 text-slate-900">{integration.secretKeyConfigured ? "Set" : "Missing"}</dd>
           </div>
-          <div>
+          <div className="p-4">
             <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">RYBS sender</dt>
             <dd className="mt-1 break-all text-slate-900">{rybsManagedSender.senderEmail ?? "Missing"}</dd>
           </div>
@@ -1406,40 +1537,50 @@ function EmailSendingSection({
             <EmailIdentityStatusBadge status={emailIdentity.providerStatus} />
           </summary>
           <div className="grid gap-3 border-t border-slate-100 p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="break-all font-mono text-sm font-semibold text-slate-900">
-                  {emailIdentity.fromEmail}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <EmailIdentityStatusBadge status={emailIdentity.providerStatus} />
-                  <span>Display name: {emailIdentity.senderDisplayName ?? "Not set"}</span>
-                  <span>Reply-To: {emailIdentity.replyToEmail ?? "Not set"}</span>
-                  <span>Last checked {formatDateTime(emailIdentity.lastCheckedAt)}</span>
-                </div>
+            <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+              <div className="flex min-w-0 rounded-[8px] border border-slate-200 bg-slate-50 p-4 text-sm">
+                <dl className="grid gap-2 text-slate-700">
+                  <div className="grid gap-1 sm:grid-cols-[112px_minmax(0,1fr)]">
+                    <dt className="font-semibold text-slate-900">Email:</dt>
+                    <dd className="break-all font-mono text-slate-900">{emailIdentity.fromEmail}</dd>
+                  </div>
+                  <div className="grid gap-1 sm:grid-cols-[112px_minmax(0,1fr)]">
+                    <dt className="font-semibold text-slate-900">Display name:</dt>
+                    <dd>{emailIdentity.senderDisplayName ?? "Not set"}</dd>
+                  </div>
+                  <div className="grid gap-1 sm:grid-cols-[112px_minmax(0,1fr)]">
+                    <dt className="font-semibold text-slate-900">Reply-To:</dt>
+                    <dd className="break-all">{emailIdentity.replyToEmail ?? "Not set"}</dd>
+                  </div>
+                  <div className="grid gap-1 sm:grid-cols-[112px_minmax(0,1fr)]">
+                    <dt className="font-semibold text-slate-900">Last checked:</dt>
+                    <dd>{formatDateTime(emailIdentity.lastCheckedAt)}</dd>
+                  </div>
+                  {emailIdentityActionRequired ? (
+                    <div className="grid gap-1 sm:grid-cols-[112px_minmax(0,1fr)]">
+                      <dt className="font-semibold text-amber-700">{emailIdentityActionRequired.label}:</dt>
+                      <dd className="text-amber-700">{emailIdentityActionRequired.message}</dd>
+                    </div>
+                  ) : null}
+                </dl>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {canProvision ? (
-                  <form action={provisionEmailIdentityAction}>
-                    <input type="hidden" name="tenantId" value={tenant.id} />
-                    <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
-                      <PlayCircleIcon className="h-4 w-4" />
-                      Provision on SES
-                    </button>
-                  </form>
-                ) : null}
-                <form action={checkEmailIdentityAction}>
+              <div className="flex w-full flex-col items-stretch justify-between gap-2">
+                <form action={checkEmailIdentityAction} className="w-full">
                   <input type="hidden" name="tenantId" value={tenant.id} />
-                  <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
+                  <button
+                    type="submit"
+                    className="admin-btn h-11 w-full justify-start !border-sky-200 !bg-sky-50 !text-sky-700 hover:!border-sky-300 hover:!bg-sky-100 hover:!text-sky-800"
+                    disabled={!integration.configured}
+                  >
                     <CheckCircleIcon className="h-4 w-4" />
                     Check SES
                   </button>
                 </form>
-                <form action={sendTestEmailAction}>
+                <form action={sendTestEmailAction} className="w-full">
                   <input type="hidden" name="tenantId" value={tenant.id} />
                   <button
                     type="submit"
-                    className="admin-btn admin-btn-secondary"
+                    className="admin-btn h-11 w-full justify-start !border-amber-200 !bg-amber-50 !text-amber-700 hover:!border-amber-300 hover:!bg-amber-100 hover:!text-amber-800"
                     disabled={!emailIdentity.replyToEmail}
                   >
                     <EnvelopeIcon className="h-4 w-4" />
@@ -1447,9 +1588,12 @@ function EmailSendingSection({
                   </button>
                 </form>
                 {canDisable ? (
-                  <form action={disableEmailIdentityAction}>
+                  <form action={disableEmailIdentityAction} className="w-full">
                     <input type="hidden" name="tenantId" value={tenant.id} />
-                    <button type="submit" className="admin-btn admin-btn-secondary">
+                    <button
+                      type="submit"
+                      className="admin-btn h-11 w-full justify-start !border-rose-200 !bg-rose-50 !text-rose-700 hover:!border-rose-300 hover:!bg-rose-100 hover:!text-rose-800"
+                    >
                       <PauseCircleIcon className="h-4 w-4" />
                       Disable
                     </button>
@@ -1468,19 +1612,26 @@ function EmailSendingSection({
               <input type="hidden" name="tenantId" value={tenant.id} />
               <div>
                 <label htmlFor="remove-email-identity" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Remove confirmation
+                  Remove business email sender
                 </label>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  This will cause Demo Dumpster Company to stop sending customers emails from{" "}
+                  <span className="font-mono text-slate-900">{emailIdentity.fromEmail}</span>.
+                </p>
                 <input
                   id="remove-email-identity"
                   name="confirmation"
                   type="text"
-                  placeholder={emailIdentity.senderDomain}
-                  className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                  placeholder={`Enter ${emailIdentity.senderDomain} to remove`}
+                  className="mt-2 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
                 />
               </div>
-              <button type="submit" className="admin-btn admin-btn-destructive">
+              <button
+                type="submit"
+                className="admin-btn h-10 !border-red-600 !bg-red-600 px-5 !text-white shadow-sm hover:!border-red-700 hover:!bg-red-700 hover:!text-white"
+              >
                 <TrashIcon className="h-4 w-4" />
-                Remove
+                Remove sender
               </button>
             </form>
           </div>
@@ -1571,10 +1722,7 @@ function EmailSendingSection({
                 {emailIdentity?.fromEmail ?? "sender-local-part@sender-domain"}
               </span>
             </div>
-            <FormSubmitButton loadingLabel="Saving...">
-              <EnvelopeIcon className="h-4 w-4" />
-              Save sender identity
-            </FormSubmitButton>
+            <FormSubmitButton loadingLabel="Saving...">Save sender identity</FormSubmitButton>
           </div>
         </form>
       </details>
