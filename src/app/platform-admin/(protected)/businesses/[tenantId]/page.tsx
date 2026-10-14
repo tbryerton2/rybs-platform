@@ -1,6 +1,8 @@
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
+  ClipboardDocumentListIcon,
   CreditCardIcon,
   EnvelopeIcon,
   ExclamationTriangleIcon,
@@ -11,12 +13,11 @@ import {
   PlusIcon,
   StarIcon,
   TrashIcon,
-  UserPlusIcon,
 } from "@heroicons/react/24/outline";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
-import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
+import { AdminPage } from "@/app/admin/_components/admin/admin-page";
 import {
   activateBusinessAction,
   activateDomainAction,
@@ -32,6 +33,7 @@ import {
   removeEmailIdentityAction,
   removeDomainAction,
   saveEmailIdentityAction,
+  sendTestEmailAction,
   updateImplementationTypeAction,
   updatePaymentModeAction,
 } from "@/app/platform-admin/(protected)/businesses/actions";
@@ -40,11 +42,9 @@ import { getPlatformEmailIdentityIntegrationStatus } from "@/lib/platform-admin/
 import {
   getPlatformTenantPaymentSetting,
   listPlatformTenantPaymentConnections,
-  listPlatformTenantPaymentSettingEvents,
   type PlatformTenantPaymentConnectionSummary,
   type PlatformTenantPaymentMode,
   type PlatformTenantPaymentSetting,
-  type PlatformTenantPaymentSettingEvent,
 } from "@/lib/platform-admin/payment-settings";
 import { CURRENT_SITE_DEACTIVATION_CONFIRMATION } from "@/lib/platform-admin/tenant-validation";
 import { getPlatformTenantDetail, type PlatformTenantDomain } from "@/lib/platform-admin/tenants";
@@ -139,19 +139,8 @@ function readinessBadgeClassName(status: PlatformTenantSummary["setup"]["readine
   }
 }
 
-function launchReadinessSuccessMessage(
-  status: PlatformTenantSummary["setup"]["readinessStatus"],
-) {
-  switch (status) {
-    case "ready_to_launch":
-      return "Required setup is complete. This business is ready to launch.";
-    case "active":
-      return "Required setup is complete and this business is active.";
-    case "not_started":
-    case "in_progress":
-    case "active_setup_incomplete":
-      return null;
-  }
+function launchReadinessIsComplete(status: PlatformTenantSummary["setup"]["readinessStatus"]) {
+  return status === "ready_to_launch" || status === "active";
 }
 
 const IMPLEMENTATION_OPTIONS: Array<{
@@ -238,6 +227,8 @@ function pageStatusMessage(status?: string, error?: string) {
       return { tone: "success" as const, text: "Email sender identity was disabled." };
     case "email-identity-removed":
       return { tone: "success" as const, text: "Email sender identity was removed." };
+    case "test-email-sent":
+      return { tone: "success" as const, text: "Test email was sent to the saved Reply-To address." };
     case "implementation-updated":
       return { tone: "success" as const, text: "Implementation type was updated." };
     case "payment-mode-updated":
@@ -652,6 +643,8 @@ function TenantDomainsSection({
   checkedDomainId?: string;
 }) {
   const activeDomains = domains.filter((domain) => domain.status === "active");
+  const hasActiveDomainWithoutPrimary = activeDomains.length > 0 &&
+    !domains.some((domain) => domain.isPrimary);
   const hasPendingCustomDomain = domains.some(
     (domain) => domain.domainType === "custom_domain" && domain.status === "pending",
   );
@@ -663,7 +656,7 @@ function TenantDomainsSection({
     <section id="public-domains" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Public domains</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Public domains</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Hostnames that can resolve this business on the public site.
           </p>
@@ -691,6 +684,11 @@ function TenantDomainsSection({
         {hasInactivePrimary ? (
           <Alert tone="warning">
             A primary domain is not active. Edit it, activate it, or choose another primary domain.
+          </Alert>
+        ) : null}
+        {hasActiveDomainWithoutPrimary ? (
+          <Alert tone="warning">
+            This business has active public domains, but no primary domain is selected.
           </Alert>
         ) : null}
       </div>
@@ -847,13 +845,22 @@ function TenantDomainsSection({
 
 function LaunchReadinessSection({ tenant }: { tenant: PlatformTenantSummary }) {
   const missingAreas = tenant.setup.missingRequiredAreas;
-  const successMessage = launchReadinessSuccessMessage(tenant.setup.readinessStatus);
+  const readinessComplete = launchReadinessIsComplete(tenant.setup.readinessStatus);
+  const hasReadinessWarnings = !tenant.setup.implementationTypeConfigured || missingAreas.length > 0;
 
   return (
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Launch readiness</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">Launch readiness</h2>
+            {readinessComplete ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                <CheckCircleIcon className="h-3.5 w-3.5" />
+                Completed
+              </span>
+            ) : null}
+          </div>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Required complete: {tenant.setup.requiredCompleteCount} / {tenant.setup.requiredAreaCount}
           </p>
@@ -874,32 +881,32 @@ function LaunchReadinessSection({ tenant }: { tenant: PlatformTenantSummary }) {
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3">
-        {!tenant.setup.implementationTypeConfigured ? (
-          <Alert tone="warning">
-            Select an implementation type before treating this business as ready to launch.
-          </Alert>
-        ) : null}
-        {missingAreas.length ? (
-          <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <div className="font-semibold">Missing required setup</div>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {missingAreas.map((area) => (
-                <li key={area.key}>
-                  <a
-                    href={`#${getSetupAreaElementId(area.key)}`}
-                    className="font-semibold text-amber-900 underline-offset-4 hover:text-amber-950 hover:underline focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  >
-                    {area.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : successMessage ? (
-          <Alert tone="success">{successMessage}</Alert>
-        ) : null}
-      </div>
+      {hasReadinessWarnings ? (
+        <div className="mt-4 grid gap-3">
+          {!tenant.setup.implementationTypeConfigured ? (
+            <Alert tone="warning">
+              Select an implementation type before treating this business as ready to launch.
+            </Alert>
+          ) : null}
+          {missingAreas.length ? (
+            <div className="rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="font-semibold">Missing required setup</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {missingAreas.map((area) => (
+                  <li key={area.key}>
+                    <a
+                      href={`#${getSetupAreaElementId(area.key)}`}
+                      className="font-semibold text-amber-900 underline-offset-4 hover:text-amber-950 hover:underline focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    >
+                      {area.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -909,7 +916,7 @@ function ImplementationTypeSection({ tenant }: { tenant: PlatformTenantSummary }
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Implementation type</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Implementation type</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Current selection: {implementationLabel(tenant.setup.implementationType)}
           </p>
@@ -959,47 +966,150 @@ function ImplementationTypeSection({ tenant }: { tenant: PlatformTenantSummary }
   );
 }
 
-function DomainIntegrationStatusSection() {
+function formatRetailWebsiteAddressType(domainType: string) {
+  switch (domainType) {
+    case "platform_subdomain":
+      return "RYBS subdomain";
+    case "custom_domain":
+      return "Custom domain";
+    default:
+      return formatDomainType(domainType);
+  }
+}
+
+function DomainIntegrationStatusSection({ domains }: { domains: PlatformTenantDomain[] }) {
   const status = getPlatformDomainIntegrationStatus();
+  const retailWebsiteDomains = domains.filter(
+    (domain) => domain.domainType === "platform_subdomain" || domain.domainType === "custom_domain",
+  );
+  const retailWebsiteAddress = retailWebsiteDomains.find((domain) => domain.isPrimary) ?? null;
+  const hasRetailWebsiteAddresses = retailWebsiteDomains.length > 0;
+  const retailWebsiteAddressReady = retailWebsiteAddress?.status === "active";
+  const configurationNeedsAttention = !retailWebsiteAddressReady || !status.tokenConfigured;
 
   return (
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Domain integration</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">
+            Retail website address configuration
+          </h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Vercel domain integration: {status.configured ? "Configured" : "Needs configuration"}
+            Shows the website address customers use to reach this business&apos;s retail site.
           </p>
         </div>
         <span
           className={joinClasses(
             "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-            status.configured
+            retailWebsiteAddressReady
               ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-              : "bg-amber-50 text-amber-700 ring-amber-200",
+              : retailWebsiteAddress
+                ? "bg-amber-50 text-amber-700 ring-amber-200"
+                : "bg-slate-100 text-slate-600 ring-slate-200",
           )}
         >
-          {status.configured ? "Configured" : "Incomplete"}
+          {retailWebsiteAddressReady ? "Ready" : retailWebsiteAddress ? "Needs attention" : "No primary address"}
         </span>
       </div>
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Access token</dt>
-          <dd className="mt-1 text-slate-900">{status.tokenConfigured ? "Set" : "Missing"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Project ID</dt>
-          <dd className="mt-1 text-slate-900">{status.projectConfigured ? "Set" : "Missing"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Team ID</dt>
-          <dd className="mt-1 text-slate-900">{status.teamConfigured ? "Set" : "Not set"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Platform base domain</dt>
-          <dd className="mt-1 text-slate-900">{status.platformBaseDomainConfigured ? "Set" : "Missing"}</dd>
-        </div>
-      </dl>
+
+      <div className="mt-4 rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
+        {retailWebsiteAddressReady ? (
+          <p className="flex items-center gap-2">
+            <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600" />
+            <span>This business has an active retail website address.</span>
+          </p>
+        ) : retailWebsiteAddress ? (
+          <p>This business has a retail website address, but it is not active yet.</p>
+        ) : hasRetailWebsiteAddresses ? (
+          <p>This business has retail website addresses, but no primary address is selected.</p>
+        ) : (
+          <p>No retail website address has been added for this business yet.</p>
+        )}
+      </div>
+
+      <details
+        className="group mt-4 rounded-[8px] border border-slate-200 bg-white"
+        open={configurationNeedsAttention}
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+          <span className="inline-flex items-center gap-2">
+            <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+            Configuration details
+          </span>
+          <span
+            className={joinClasses(
+              "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+              configurationNeedsAttention
+                ? "bg-amber-50 text-amber-700 ring-amber-200"
+                : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+            )}
+          >
+            {configurationNeedsAttention ? "Needs attention" : "Completed"}
+          </span>
+        </summary>
+        <dl className="grid gap-3 border-t border-slate-100 p-3 text-sm sm:grid-cols-2">
+          <div className="rounded-[8px] border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Retail website address</dt>
+              {retailWebsiteAddress ? (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <span
+                    className={joinClasses(
+                      "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+                      retailWebsiteAddressReady
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                        : "bg-amber-50 text-amber-700 ring-amber-200",
+                    )}
+                  >
+                    {retailWebsiteAddressReady ? "Connected" : "Needs attention"}
+                  </span>
+                  {retailWebsiteAddressReady ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                      <CheckCircleIcon className="h-3.5 w-3.5" />
+                      Completed
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <dd className="mt-1">
+              <span className="break-all text-slate-900">
+                {retailWebsiteAddress?.hostname ?? "No primary address selected"}
+              </span>
+            </dd>
+            <dd className="mt-1 text-xs leading-5 text-slate-500">
+              {retailWebsiteAddress
+                ? retailWebsiteAddressReady
+                  ? `This ${formatRetailWebsiteAddressType(retailWebsiteAddress.domainType).toLowerCase()} opens this business's retail site.`
+                  : `This ${formatRetailWebsiteAddressType(retailWebsiteAddress.domainType).toLowerCase()} is selected, but it is not connected yet.`
+                : hasRetailWebsiteAddresses
+                  ? "Choose the public address customers should use for this business's retail site."
+                  : "Add the public address customers should use for this business's retail site."}
+            </dd>
+          </div>
+          <div className="rounded-[8px] border border-slate-200 bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Access token</dt>
+              <span
+                className={joinClasses(
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+                  status.tokenConfigured
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                    : "bg-amber-50 text-amber-700 ring-amber-200",
+                )}
+              >
+                {status.tokenConfigured ? <CheckCircleIcon className="h-3.5 w-3.5" /> : null}
+                {status.tokenConfigured ? "Completed" : "Missing"}
+              </span>
+            </div>
+            <dd className="mt-1 text-xs leading-5 text-slate-500">
+              RYBS needs permission to manage website addresses, which requires a secure access key to be configured in
+              Vercel and saved in RYBS. Once that key is saved, RYBS is allowed to ask Vercel to add, check, or remove
+              website addresses for retail sites.
+            </dd>
+          </div>
+        </dl>
+      </details>
     </section>
   );
 }
@@ -1202,14 +1312,17 @@ function EmailSendingSection({
       : effectiveStatus === "rybs_managed"
         ? "bg-sky-50 text-sky-700 ring-sky-200"
         : "bg-rose-50 text-rose-700 ring-rose-200";
+  const platformEmailSetupNeedsAttention = !integration.configured || !rybsManagedSender.configured;
+  const businessSenderNeedsAttention = Boolean(emailIdentity && emailIdentity.providerStatus !== "verified");
+  const editSenderIdentityNeedsAttention = !emailIdentity;
 
   return (
     <section id="email-sending" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Email sending</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Email sending</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Tenant-branded sender identity metadata and SES verification state.
+            Shows what email address customers see when this business sends email.
           </p>
         </div>
         <span
@@ -1240,196 +1353,234 @@ function EmailSendingSection({
         ) : null}
       </div>
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Region</dt>
-          <dd className="mt-1 text-slate-900">{integration.regionConfigured ? "Set" : "Missing"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Access key</dt>
-          <dd className="mt-1 text-slate-900">{integration.accessKeyConfigured ? "Set" : "Missing"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Secret key</dt>
-          <dd className="mt-1 text-slate-900">{integration.secretKeyConfigured ? "Set" : "Missing"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">RYBS sender</dt>
-          <dd className="mt-1 break-all text-slate-900">{rybsManagedSender.senderEmail ?? "Missing"}</dd>
-        </div>
-      </dl>
+      <details
+        className="group mt-4 rounded-[8px] border border-slate-200 bg-white"
+        open={platformEmailSetupNeedsAttention}
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+          <span className="inline-flex items-center gap-2">
+            <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+            Platform email setup
+          </span>
+          <span
+            className={joinClasses(
+              "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+              platformEmailSetupNeedsAttention
+                ? "bg-amber-50 text-amber-700 ring-amber-200"
+                : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+            )}
+          >
+            {platformEmailSetupNeedsAttention ? "Needs attention" : "Completed"}
+          </span>
+        </summary>
+        <dl className="grid gap-3 border-t border-slate-100 p-4 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Region</dt>
+            <dd className="mt-1 text-slate-900">{integration.regionConfigured ? "Set" : "Missing"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Access key</dt>
+            <dd className="mt-1 text-slate-900">{integration.accessKeyConfigured ? "Set" : "Missing"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Secret key</dt>
+            <dd className="mt-1 text-slate-900">{integration.secretKeyConfigured ? "Set" : "Missing"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">RYBS sender</dt>
+            <dd className="mt-1 break-all text-slate-900">{rybsManagedSender.senderEmail ?? "Missing"}</dd>
+          </div>
+        </dl>
+      </details>
 
       {emailIdentity ? (
-        <div className="mt-4 grid gap-3 rounded-[8px] border border-slate-200 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="break-all font-mono text-sm font-semibold text-slate-900">
-                {emailIdentity.fromEmail}
+        <details
+          className="group mt-4 rounded-[8px] border border-slate-200 bg-white"
+          open={businessSenderNeedsAttention}
+        >
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <ChevronDownIcon className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+              <span className="break-all">{emailIdentity.fromEmail}</span>
+            </span>
+            <EmailIdentityStatusBadge status={emailIdentity.providerStatus} />
+          </summary>
+          <div className="grid gap-3 border-t border-slate-100 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="break-all font-mono text-sm font-semibold text-slate-900">
+                  {emailIdentity.fromEmail}
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <EmailIdentityStatusBadge status={emailIdentity.providerStatus} />
+                  <span>Display name: {emailIdentity.senderDisplayName ?? "Not set"}</span>
+                  <span>Reply-To: {emailIdentity.replyToEmail ?? "Not set"}</span>
+                  <span>Last checked {formatDateTime(emailIdentity.lastCheckedAt)}</span>
+                </div>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <EmailIdentityStatusBadge status={emailIdentity.providerStatus} />
-                <span>Display name: {emailIdentity.senderDisplayName ?? "Not set"}</span>
-                <span>Reply-To: {emailIdentity.replyToEmail ?? "Not set"}</span>
-                <span>Last checked {formatDateTime(emailIdentity.lastCheckedAt)}</span>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {canProvision ? (
-                <form action={provisionEmailIdentityAction}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {canProvision ? (
+                  <form action={provisionEmailIdentityAction}>
+                    <input type="hidden" name="tenantId" value={tenant.id} />
+                    <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
+                      <PlayCircleIcon className="h-4 w-4" />
+                      Provision on SES
+                    </button>
+                  </form>
+                ) : null}
+                <form action={checkEmailIdentityAction}>
                   <input type="hidden" name="tenantId" value={tenant.id} />
                   <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
-                    <PlayCircleIcon className="h-4 w-4" />
-                    Provision on SES
+                    <CheckCircleIcon className="h-4 w-4" />
+                    Check SES
                   </button>
                 </form>
-              ) : null}
-              <form action={checkEmailIdentityAction}>
-                <input type="hidden" name="tenantId" value={tenant.id} />
-                <button type="submit" className="admin-btn admin-btn-secondary" disabled={!integration.configured}>
-                  <CheckCircleIcon className="h-4 w-4" />
-                  Check SES
-                </button>
-              </form>
-              {canDisable ? (
-                <form action={disableEmailIdentityAction}>
+                <form action={sendTestEmailAction}>
                   <input type="hidden" name="tenantId" value={tenant.id} />
-                  <button type="submit" className="admin-btn admin-btn-secondary">
-                    <PauseCircleIcon className="h-4 w-4" />
-                    Disable
+                  <button
+                    type="submit"
+                    className="admin-btn admin-btn-secondary"
+                    disabled={!emailIdentity.replyToEmail}
+                  >
+                    <EnvelopeIcon className="h-4 w-4" />
+                    Send test email
                   </button>
                 </form>
-              ) : null}
+                {canDisable ? (
+                  <form action={disableEmailIdentityAction}>
+                    <input type="hidden" name="tenantId" value={tenant.id} />
+                    <button type="submit" className="admin-btn admin-btn-secondary">
+                      <PauseCircleIcon className="h-4 w-4" />
+                      Disable
+                    </button>
+                  </form>
+                ) : null}
+              </div>
             </div>
+
+            {checkedEmailIdentity ? (
+              <Alert tone="success">SES email identity verification was re-checked.</Alert>
+            ) : null}
+
+            <EmailDnsInstructions identity={emailIdentity} />
+
+            <form action={removeEmailIdentityAction} className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              <input type="hidden" name="tenantId" value={tenant.id} />
+              <div>
+                <label htmlFor="remove-email-identity" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Remove confirmation
+                </label>
+                <input
+                  id="remove-email-identity"
+                  name="confirmation"
+                  type="text"
+                  placeholder={emailIdentity.senderDomain}
+                  className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                />
+              </div>
+              <button type="submit" className="admin-btn admin-btn-destructive">
+                <TrashIcon className="h-4 w-4" />
+                Remove
+              </button>
+            </form>
           </div>
-
-          {checkedEmailIdentity ? (
-            <Alert tone="success">SES email identity verification was re-checked.</Alert>
-          ) : null}
-
-          <EmailDnsInstructions identity={emailIdentity} />
-
-          <form action={removeEmailIdentityAction} className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-            <input type="hidden" name="tenantId" value={tenant.id} />
-            <div>
-              <label htmlFor="remove-email-identity" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Remove confirmation
-              </label>
-              <input
-                id="remove-email-identity"
-                name="confirmation"
-                type="text"
-                placeholder={emailIdentity.senderDomain}
-                className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
-              />
-            </div>
-            <button type="submit" className="admin-btn admin-btn-destructive">
-              <TrashIcon className="h-4 w-4" />
-              Remove
-            </button>
-          </form>
-        </div>
+        </details>
       ) : null}
 
-      <form action={saveEmailIdentityAction} className="mt-5 grid gap-4 border-t border-slate-100 pt-5">
-        <input type="hidden" name="tenantId" value={tenant.id} />
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label htmlFor="senderDomain" className="text-sm font-semibold text-slate-700">
-              Sender domain
-            </label>
-            <input
-              id="senderDomain"
-              name="senderDomain"
-              type="text"
-              defaultValue={emailIdentity?.senderDomain ?? ""}
-              placeholder="demodumpstercompany.com"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="senderLocalPart" className="text-sm font-semibold text-slate-700">
-              Sender local part
-            </label>
-            <input
-              id="senderLocalPart"
-              name="senderLocalPart"
-              type="text"
-              defaultValue={emailIdentity?.senderLocalPart ?? "bookings"}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="senderDisplayName" className="text-sm font-semibold text-slate-700">
-              Display name
-            </label>
-            <input
-              id="senderDisplayName"
-              name="senderDisplayName"
-              type="text"
-              defaultValue={emailIdentity?.senderDisplayName ?? tenant.displayName}
-              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-            />
-          </div>
-          <div>
-            <label htmlFor="replyToEmail" className="text-sm font-semibold text-slate-700">
-              Reply-To on sender domain
-            </label>
-            <input
-              id="replyToEmail"
-              name="replyToEmail"
-              type="email"
-              defaultValue={emailIdentity?.replyToEmail ?? ""}
-              autoComplete="email"
-              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-slate-600">
-            Derived From address:{" "}
-            <span className="font-mono font-semibold text-slate-900">
-              {emailIdentity?.fromEmail ?? "sender-local-part@sender-domain"}
+      <details
+        className="group mt-4 rounded-[8px] border border-slate-200 bg-white"
+        open={editSenderIdentityNeedsAttention}
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+          <span className="inline-flex items-center gap-2">
+            <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+            Edit sender identity
+          </span>
+          {editSenderIdentityNeedsAttention ? (
+            <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
+              Needs setup
             </span>
+          ) : null}
+        </summary>
+        <form action={saveEmailIdentityAction} className="grid gap-4 border-t border-slate-100 p-4">
+          <input type="hidden" name="tenantId" value={tenant.id} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor="senderDomain" className="text-sm font-semibold text-slate-700">
+                Sender domain
+              </label>
+              <input
+                id="senderDomain"
+                name="senderDomain"
+                type="text"
+                defaultValue={emailIdentity?.senderDomain ?? ""}
+                placeholder="demodumpstercompany.com"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="senderLocalPart" className="text-sm font-semibold text-slate-700">
+                Sender local part
+              </label>
+              <input
+                id="senderLocalPart"
+                name="senderLocalPart"
+                type="text"
+                defaultValue={emailIdentity?.senderLocalPart ?? "bookings"}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="senderDisplayName" className="text-sm font-semibold text-slate-700">
+                Display name
+              </label>
+              <input
+                id="senderDisplayName"
+                name="senderDisplayName"
+                type="text"
+                defaultValue={emailIdentity?.senderDisplayName ?? tenant.displayName}
+                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              />
+            </div>
+            <div>
+              <label htmlFor="replyToEmail" className="text-sm font-semibold text-slate-700">
+                Reply-To on sender domain
+              </label>
+              <input
+                id="replyToEmail"
+                name="replyToEmail"
+                type="email"
+                defaultValue={emailIdentity?.replyToEmail ?? ""}
+                autoComplete="email"
+                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              />
+            </div>
           </div>
-          <FormSubmitButton loadingLabel="Saving...">
-            <EnvelopeIcon className="h-4 w-4" />
-            Save sender identity
-          </FormSubmitButton>
-        </div>
-      </form>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-slate-600">
+              Derived From address:{" "}
+              <span className="font-mono font-semibold text-slate-900">
+                {emailIdentity?.fromEmail ?? "sender-local-part@sender-domain"}
+              </span>
+            </div>
+            <FormSubmitButton loadingLabel="Saving...">
+              <EnvelopeIcon className="h-4 w-4" />
+              Save sender identity
+            </FormSubmitButton>
+          </div>
+        </form>
+      </details>
     </section>
   );
 }
-
-const PAYMENT_MODE_OPTIONS: Array<{
-  value: PlatformTenantPaymentMode;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "disabled",
-    label: "Disabled",
-    description: "No Square environment is approved for this business.",
-  },
-  {
-    value: "sandbox",
-    label: "Sandbox",
-    description: "Use Square test data without creating real charges.",
-  },
-  {
-    value: "production",
-    label: "Live",
-    description: "Allow real charges through this business's production Square account.",
-  },
-];
 
 function paymentModeLabel(mode: PlatformTenantPaymentMode) {
   return mode === "production"
@@ -1451,15 +1602,6 @@ function PaymentModeBadge({ mode }: { mode: PlatformTenantPaymentMode }) {
   );
 }
 
-function connectionStatusLabel(connection: PlatformTenantPaymentConnectionSummary | null) {
-  if (!connection) return "Not connected";
-  if (connection.status === "active" && connection.locationId) return "Ready";
-  return connection.status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function latestConnection(
   connections: PlatformTenantPaymentConnectionSummary[],
   environment: "sandbox" | "production",
@@ -1469,58 +1611,51 @@ function latestConnection(
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0] ?? null;
 }
 
-function PaymentConnectionRow({
-  label,
-  connection,
-}: {
-  label: string;
-  connection: PlatformTenantPaymentConnectionSummary | null;
-}) {
-  const ready = connection?.status === "active" && Boolean(connection.locationId);
-
-  return (
-    <div className="grid gap-3 border-t border-slate-100 py-4 first:border-t-0 first:pt-0 sm:grid-cols-[120px_minmax(0,1fr)_auto] sm:items-center">
-      <div className="text-sm font-semibold text-slate-900">{label}</div>
-      <div className="min-w-0 text-sm text-slate-600">
-        {connection ? (
-          <>
-            <div className="truncate">{connection.locationName ?? "No location selected"}</div>
-            <div className="mt-1 truncate font-mono text-xs text-slate-500">
-              {connection.merchantId ?? "Merchant ID not recorded"}
-            </div>
-          </>
-        ) : (
-          "No Square connection recorded"
-        )}
-      </div>
-      <span
-        className={joinClasses(
-          "inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-          ready
-            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-            : "bg-slate-100 text-slate-600 ring-slate-200",
-        )}
-      >
-        {connectionStatusLabel(connection)}
-      </span>
-    </div>
-  );
-}
-
 function PaymentsSection({
-  tenant,
+  tenantId,
   setting,
   connections,
-  events,
 }: {
-  tenant: PlatformTenantSummary;
+  tenantId: string;
   setting: PlatformTenantPaymentSetting;
   connections: PlatformTenantPaymentConnectionSummary[];
-  events: PlatformTenantPaymentSettingEvent[];
 }) {
   const sandboxConnection = latestConnection(connections, "sandbox");
   const productionConnection = latestConnection(connections, "production");
+  const sandboxReady = sandboxConnection?.status === "active" && Boolean(sandboxConnection.locationId);
   const liveReady = productionConnection?.status === "active" && Boolean(productionConnection.locationId);
+  const selectedModeNeedsAttention =
+    (setting.mode === "sandbox" && !sandboxReady) ||
+    (setting.mode === "production" && !liveReady);
+  const paymentModeRows: Array<{
+    value: PlatformTenantPaymentMode;
+    label: string;
+    description: string;
+    connection?: PlatformTenantPaymentConnectionSummary | null;
+    ready: boolean | null | undefined;
+  }> = [
+    {
+      value: "disabled" as const,
+      label: "Disabled",
+      description: "No Square environment is approved.",
+      connection: null,
+      ready: null,
+    },
+    {
+      value: "sandbox" as const,
+      label: "Sandbox",
+      description: "Use Square test data without creating real charges.",
+      connection: sandboxConnection,
+      ready: sandboxReady,
+    },
+    {
+      value: "production" as const,
+      label: "Production",
+      description: "Allow real charges through Square.",
+      connection: productionConnection,
+      ready: liveReady,
+    },
+  ];
 
   return (
     <section id="payments" className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -1530,125 +1665,130 @@ function PaymentsSection({
             <CreditCardIcon className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Payments</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              RYBS controls which Square environment this business is approved to use.
-            </p>
+            <h2 className="text-base font-semibold tracking-tight text-slate-900">Payments</h2>
           </div>
         </div>
         <PaymentModeBadge mode={setting.mode} />
       </div>
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
-        <div>
-          <Alert tone="warning">
-            This policy is stored securely, but checkout still uses the existing Square configuration until payment enforcement is deployed.
-          </Alert>
+      <details
+        className="group mt-4 rounded-[8px] border border-slate-200 bg-white"
+        open={selectedModeNeedsAttention}
+      >
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+          <span className="inline-flex items-center gap-2">
+            <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+            Change payment mode
+          </span>
+          {selectedModeNeedsAttention ? (
+            <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-200">
+              Needs attention
+            </span>
+          ) : null}
+        </summary>
+        <form action={updatePaymentModeAction} className="space-y-4 border-t border-slate-100 p-4">
+          <input type="hidden" name="tenantId" value={tenantId} />
 
           {setting.mode === "production" && !liveReady ? (
-            <div className="mt-3">
-              <Alert tone="error">
-                Live is selected, but this business does not have an active production Square connection with a location.
-              </Alert>
-            </div>
+            <Alert tone="error">
+              Production is selected, but this business does not have an active production Square connection with a location.
+            </Alert>
           ) : null}
 
-          <form action={updatePaymentModeAction} className="mt-5 space-y-4">
-            <input type="hidden" name="tenantId" value={tenant.id} />
-            <fieldset>
-              <legend className="text-sm font-semibold text-slate-700">Payment mode</legend>
-              <div className="mt-2 grid overflow-hidden rounded-[8px] border border-slate-300 sm:grid-cols-3">
-                {PAYMENT_MODE_OPTIONS.map((option, index) => {
-                  const liveUnavailable = option.value === "production" && !liveReady;
-                  return (
-                    <label
-                      key={option.value}
-                      className={joinClasses(
-                        "relative border-slate-300 p-3 sm:border-l",
-                        index === 0 && "sm:border-l-0",
-                        index > 0 && "border-t sm:border-t-0",
-                        liveUnavailable ? "cursor-not-allowed bg-slate-50 text-slate-400" : "cursor-pointer bg-white",
-                      )}
-                    >
-                      <input
-                        className="peer sr-only"
-                        type="radio"
-                        name="paymentMode"
-                        value={option.value}
-                        defaultChecked={setting.mode === option.value}
-                        disabled={liveUnavailable}
-                      />
-                      <span className="block text-sm font-semibold peer-checked:text-sky-700">
-                        {option.label}
-                      </span>
-                      <span className="mt-1 block text-xs leading-5 text-slate-500">
-                        {option.description}
-                      </span>
-                      <span className="pointer-events-none absolute inset-0 hidden ring-2 ring-inset ring-sky-500 peer-checked:block" />
-                    </label>
-                  );
-                })}
-              </div>
-            </fieldset>
+          <fieldset>
+            <legend className="sr-only">Payment mode</legend>
+            <div className="grid gap-3 rounded-[10px] border border-slate-200 bg-slate-50 p-3">
+              {paymentModeRows.map((option) => {
+                const productionUnavailable = option.value === "production" && !liveReady;
+                const disabled = productionUnavailable && setting.mode !== "production";
+                const selected = setting.mode === option.value;
+                const statusLabel = option.ready === null
+                  ? null
+                  : option.ready
+                    ? "Ready"
+                    : "Not ready";
 
-            <div>
+                return (
+                  <label
+                    key={option.value}
+                    className={joinClasses(
+                      "grid gap-3 rounded-[8px] border p-4 shadow-sm transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+                      selected
+                        ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
+                        : disabled
+                          ? "border-slate-200 bg-slate-100 text-slate-400 shadow-none"
+                          : "cursor-pointer border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-900">{option.label}</span>
+                        {statusLabel ? (
+                          <span
+                            className={joinClasses(
+                              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+                              option.ready
+                                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                : "bg-slate-100 text-slate-600 ring-slate-200",
+                            )}
+                          >
+                            {option.ready ? (
+                              <CheckCircleIcon className="h-3.5 w-3.5" />
+                            ) : (
+                              <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+                            )}
+                            {statusLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                      {option.connection ? (
+                        <p className="mt-2 font-mono text-xs text-slate-500">
+                          Merchant ID: {option.connection.merchantId ?? "Not recorded"}
+                        </p>
+                      ) : option.value === "production" ? (
+                        <p className="mt-2 text-xs text-slate-500">Merchant ID: —</p>
+                      ) : null}
+                      <p className="mt-2 text-sm leading-6 text-slate-600">{option.description}</p>
+                    </div>
+                    <input
+                      className="h-5 w-5 justify-self-start border-slate-300 text-sky-600 focus:ring-sky-500 sm:justify-self-end"
+                      type="radio"
+                      name="paymentMode"
+                      value={option.value}
+                      defaultChecked={setting.mode === option.value}
+                      disabled={disabled}
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          {liveReady ? (
+            <div className="max-w-xl">
               <label htmlFor="liveConfirmation" className="text-sm font-semibold text-slate-700">
-                Live confirmation
+                Production confirmation
               </label>
               <input
                 id="liveConfirmation"
                 name="liveConfirmation"
                 type="text"
                 autoComplete="off"
-                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100"
+                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
                 placeholder="Type LIVE only when activating real payments"
-                disabled={!liveReady}
               />
             </div>
+          ) : (
+            <p className="text-xs leading-5 text-slate-500">
+              Production remains unavailable until the business connects an active production Square account and selects a location.
+            </p>
+          )}
 
-            {!liveReady ? (
-              <p className="text-xs leading-5 text-slate-500">
-                Live remains unavailable until the business connects an active production Square account and selects a location.
-              </p>
-            ) : null}
-
-            <FormSubmitButton loadingLabel="Saving payment mode...">
-              <CreditCardIcon className="h-4 w-4" />
-              Save payment mode
-            </FormSubmitButton>
-          </form>
-        </div>
-
-        <div className="space-y-5">
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Square connections</h3>
-            <div className="mt-3">
-              <PaymentConnectionRow label="Sandbox" connection={sandboxConnection} />
-              <PaymentConnectionRow label="Live" connection={productionConnection} />
-            </div>
-          </div>
-
-          <div className="border-t border-slate-200 pt-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recent changes</h3>
-            {events.length ? (
-              <ol className="mt-3 space-y-3">
-                {events.slice(0, 5).map((event) => (
-                  <li key={event.id} className="text-sm leading-5 text-slate-600">
-                    <div>
-                      <span className="font-semibold text-slate-900">{paymentModeLabel(event.previousMode)}</span>
-                      {" to "}
-                      <span className="font-semibold text-slate-900">{paymentModeLabel(event.newMode)}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">{formatDateTime(event.createdAt)}</div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="mt-3 text-sm text-slate-500">No payment mode changes recorded.</p>
-            )}
-          </div>
-        </div>
-      </div>
+          <FormSubmitButton loadingLabel="Saving payment mode...">
+            Save payment mode
+          </FormSubmitButton>
+        </form>
+      </details>
     </section>
   );
 }
@@ -1658,9 +1798,9 @@ function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary 
     <section id="business-admin-access" className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Business admin access</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Business admin access</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Assign an existing Supabase Auth user as owner for this exact business.
+            Give an existing user admin access to this business.
           </p>
         </div>
         <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
@@ -1668,26 +1808,33 @@ function BusinessAdminAccessSection({ tenant }: { tenant: PlatformTenantSummary 
         </span>
       </div>
 
-      <form action={assignBusinessAdminAction} className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <input type="hidden" name="tenantId" value={tenant.id} />
-        <div>
-          <label htmlFor="admin-email" className="text-sm font-semibold text-slate-700">
-            Existing auth user email
-          </label>
-          <input
-            id="admin-email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-            required
-          />
-        </div>
-        <FormSubmitButton loadingLabel="Assigning...">
-          <UserPlusIcon className="h-4 w-4" />
-          Add admin
-        </FormSubmitButton>
-      </form>
+      <details className="group mt-4 rounded-[8px] border border-slate-200 bg-white">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+          <span className="inline-flex items-center gap-2">
+            <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+            Add business admin
+          </span>
+        </summary>
+        <form action={assignBusinessAdminAction} className="flex flex-col gap-3 border-t border-slate-100 p-4 sm:flex-row sm:items-end">
+          <input type="hidden" name="tenantId" value={tenant.id} />
+          <div className="w-full sm:w-1/2">
+            <label htmlFor="admin-email" className="text-sm font-semibold text-slate-700">
+              Existing auth user email
+            </label>
+            <input
+              id="admin-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+              required
+            />
+          </div>
+          <FormSubmitButton className="admin-btn admin-btn-primary h-11 min-w-[9rem] px-5" loadingLabel="Assigning...">
+            Add admin
+          </FormSubmitButton>
+        </form>
+      </details>
     </section>
   );
 }
@@ -1706,89 +1853,102 @@ function LifecycleSection({
     <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Lifecycle</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Business status</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Activation controls whether this tenant can be resolved as an active business.
+            Controls whether this business is active.
           </p>
         </div>
         <TenantStatusBadge tenant={tenant} />
       </div>
 
-      {active ? (
-        <form action={deactivateBusinessAction} className="mt-5 space-y-4">
-          <input type="hidden" name="tenantId" value={tenant.id} />
-          <Alert tone="warning">
-            Deactivation does not delete settings, content, users, bookings, customers, or operational records.
-          </Alert>
-          <div>
-            <label htmlFor="confirmationSlug" className="text-sm font-semibold text-slate-700">
-              Type the slug to deactivate
-            </label>
-            <input
-              id="confirmationSlug"
-              name="confirmationSlug"
-              type="text"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
-              placeholder={tenant.slug}
-              required
-            />
-          </div>
-          {isCurrentSiteTenant ? (
-            <div>
-              <label htmlFor="currentSiteConfirmation" className="text-sm font-semibold text-slate-700">
-                Current-site confirmation
-              </label>
-              <input
-                id="currentSiteConfirmation"
-                name="currentSiteConfirmation"
-                type="text"
-                className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                placeholder={CURRENT_SITE_DEACTIVATION_CONFIRMATION}
-                required
-              />
-              <p className="mt-2 text-xs text-slate-500">
-                This extra confirmation is required because this slug is the configured local tenant.
-              </p>
+      <details className="group mt-4 rounded-[8px] border border-slate-200 bg-white">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+          <span className="inline-flex items-center gap-2">
+            <ChevronDownIcon className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+            {active ? "Deactivate business" : "Activate business"}
+          </span>
+        </summary>
+        {active ? (
+          <form action={deactivateBusinessAction} className="space-y-4 border-t border-slate-100 p-4">
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="w-full sm:w-1/2">
+                <label htmlFor="confirmationSlug" className="sr-only">
+                  Enter the URL name to deactivate
+                </label>
+                <input
+                  id="confirmationSlug"
+                  name="confirmationSlug"
+                  type="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                  placeholder="Enter the URL name to deactivate"
+                  required
+                />
+              </div>
+              <FormSubmitButton
+                className="admin-btn h-11 min-w-[9rem] !border-red-600 !bg-red-600 px-5 !text-white shadow-sm hover:!border-red-700 hover:!bg-red-700 hover:!text-white"
+                loadingLabel="Deactivating..."
+              >
+                Deactivate
+              </FormSubmitButton>
             </div>
-          ) : null}
-          <FormSubmitButton
-            className="admin-btn admin-btn-destructive"
-            loadingLabel="Deactivating..."
-          >
-            <PauseCircleIcon className="h-4 w-4" />
-            Deactivate business
-          </FormSubmitButton>
-        </form>
-      ) : (
-        <form action={activateBusinessAction} className="mt-5 space-y-4">
-          <input type="hidden" name="tenantId" value={tenant.id} />
-          {setupIncomplete ? (
-            <Alert tone="warning">
-              This business still needs required setup. Activation is allowed only with explicit confirmation.
-            </Alert>
-          ) : null}
-          {setupIncomplete ? (
-            <label className="flex items-start gap-3 rounded-[8px] border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-800">
-              <input
-                name="acknowledgeIncompleteSetup"
-                type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500"
-                required
-              />
+            {isCurrentSiteTenant ? (
+              <div>
+                <label htmlFor="currentSiteConfirmation" className="text-sm font-semibold text-slate-700">
+                  Current-site confirmation
+                </label>
+                <input
+                  id="currentSiteConfirmation"
+                  name="currentSiteConfirmation"
+                  type="text"
+                  className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-sm text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                  placeholder={CURRENT_SITE_DEACTIVATION_CONFIRMATION}
+                  required
+                />
+                <p className="mt-2 text-xs text-slate-500">
+                  This extra confirmation is required because this URL name is the configured local tenant.
+                </p>
+              </div>
+            ) : null}
+            <p className="flex items-start gap-2 text-xs leading-5 text-slate-500">
+              <InformationCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <span>
-                I understand this business is missing required setup and want to activate it anyway.
+                Deactivating this business will make it inactive, but it will not delete settings,
+                content, users, bookings, customers, or records.
               </span>
-            </label>
-          ) : null}
-          <FormSubmitButton loadingLabel="Activating...">
-            <PlayCircleIcon className="h-4 w-4" />
-            Activate business
-          </FormSubmitButton>
-        </form>
-      )}
+            </p>
+          </form>
+        ) : (
+          <form action={activateBusinessAction} className="space-y-4 border-t border-slate-100 p-4">
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            {setupIncomplete ? (
+              <Alert tone="warning">
+                This business still needs required setup. Activation is allowed only with explicit confirmation.
+              </Alert>
+            ) : null}
+            {setupIncomplete ? (
+              <label className="flex items-start gap-3 rounded-[8px] border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-800">
+                <input
+                  name="acknowledgeIncompleteSetup"
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500"
+                  required
+                />
+                <span>
+                  I understand this business is missing required setup and want to activate it anyway.
+                </span>
+              </label>
+            ) : null}
+            <FormSubmitButton loadingLabel="Activating...">
+              <PlayCircleIcon className="h-4 w-4" />
+              Activate business
+            </FormSubmitButton>
+          </form>
+        )}
+      </details>
     </section>
   );
 }
@@ -1803,10 +1963,9 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
   }
 
   const { tenant, domains, emailIdentity } = detail;
-  const [paymentSetting, paymentConnections, paymentEvents] = await Promise.all([
+  const [paymentSetting, paymentConnections] = await Promise.all([
     getPlatformTenantPaymentSetting(tenant.id, "square"),
     listPlatformTenantPaymentConnections(tenant.id, "square"),
-    listPlatformTenantPaymentSettingEvents(tenant.id, "square"),
   ]);
   const message = pageStatusMessage(search.status, search.error);
   const configuredLocalTenantSlug = getConfiguredLocalTenantSlug();
@@ -1814,7 +1973,7 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
   return (
     <AdminPage width="wide" className="space-y-6 pt-2">
-      <div>
+      <div className="space-y-3">
         <Link
           href="/platform-admin/businesses"
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
@@ -1822,14 +1981,14 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
           <ArrowLeftIcon className="h-4 w-4" />
           Back to Businesses
         </Link>
-      </div>
 
-      <AdminPageHeader
-        eyebrow="Business"
-        title={tenant.displayName}
-        description={tenant.slug}
-        actions={
-          <>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+              {tenant.displayName}
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <TenantStatusBadge tenant={tenant} />
             <Link
               href={`/platform-admin/businesses/${tenant.id}/edit`}
@@ -1838,9 +1997,16 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
               <PencilSquareIcon className="h-4 w-4" />
               Edit business
             </Link>
-          </>
-        }
-      />
+            <Link
+              href={`/platform-admin/businesses/${tenant.id}/audit`}
+              className="admin-btn admin-btn-secondary"
+            >
+              <ClipboardDocumentListIcon className="h-4 w-4" />
+              View audit log
+            </Link>
+          </div>
+        </div>
+      </div>
 
       {message ? <Alert tone={message.tone}>{message.text}</Alert> : null}
 
@@ -1858,14 +2024,14 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Basic tenant information</h2>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">Basic tenant information</h2>
           <dl className="mt-4 space-y-4">
             <div>
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant UUID</dt>
               <dd className="mt-1 break-all text-sm text-slate-900">{tenant.id}</dd>
             </div>
             <div>
-              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Slug</dt>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">URL name</dt>
               <dd className="mt-1 text-sm text-slate-900">{tenant.slug}</dd>
             </div>
             <div>
@@ -1889,13 +2055,12 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
       <BusinessAdminAccessSection tenant={tenant} />
 
       <PaymentsSection
-        tenant={tenant}
+        tenantId={tenant.id}
         setting={paymentSetting}
         connections={paymentConnections}
-        events={paymentEvents}
       />
 
-      <DomainIntegrationStatusSection />
+      <DomainIntegrationStatusSection domains={domains} />
 
       <EmailSendingSection
         tenant={tenant}

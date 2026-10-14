@@ -90,6 +90,29 @@ test("saving CMS content uses the authenticated business id, not a submitted ten
   assert.doesNotMatch(route, /body\.tenantId|body\.businessId|searchParams\.get\(["']tenantId["']\)|searchParams\.get\(["']businessId["']\)/);
 });
 
+test("CMS preview hands off from admin app to the selected business public domain", () => {
+  const page = readRepoFile("src/app/admin/(protected)/cms/page.tsx");
+  const adminPreviewRoute = readRepoFile("src/app/admin/(protected)/cms/preview/route.ts");
+  const publicPreviewRoute = readRepoFile("src/app/cms-preview/route.ts");
+  const editor = readRepoFile("src/app/admin/(protected)/cms/retail-site/retail-site-cms-editor.tsx");
+  const home = readRepoFile("src/app/home-page-client.tsx");
+  const pricing = readRepoFile("src/app/pricing/page.tsx");
+
+  assert.match(page, /getTenantPublicBaseUrl\(adminSession\.business\)/);
+  assert.match(editor, /publicBaseUrl: string \| null/);
+  assert.match(editor, /Add and activate a public domain before previewing/);
+  assert.match(adminPreviewRoute, /requireAdminOwnerForApi\(\)/);
+  assert.match(adminPreviewRoute, /new URL\("\/cms-preview", publicBaseUrl\)/);
+  assert.match(adminPreviewRoute, /createCmsPreviewToken/);
+  assert.match(publicPreviewRoute, /verifyCmsPreviewToken/);
+  assert.match(publicPreviewRoute, /resolvePublicTenantFromRequest\(req\)/);
+  assert.match(publicPreviewRoute, /tenant\.id !== payload\.tenantId/);
+  assert.match(home, /href="\/cms-preview\?mode=exit&redirect=\/"/);
+  assert.match(pricing, /href=\{`\/cms-preview\?mode=exit&redirect=/);
+  assert.doesNotMatch(home, /admin\/cms\/preview\?mode=exit/);
+  assert.doesNotMatch(pricing, /admin\/cms\/preview\?mode=exit/);
+});
+
 test("setup completeness treats CMS defaults as conditional launch requirements", () => {
   const setupCompleteness = readRepoFile("src/lib/platform-admin/setup-completeness.ts");
 

@@ -33,6 +33,9 @@ import {
   PlatformTenantPaymentSettingError,
   updatePlatformTenantPaymentMode,
 } from "@/lib/platform-admin/payment-settings";
+import { getTenantEmailIdentityByBusinessId } from "@/lib/email/tenant-email-identity";
+import { resolveTenantEmailSender, tenantSenderSendEmailOptions } from "@/lib/email/tenant-sender";
+import { requirePlatformAdmin } from "@/lib/platform-admin/auth";
 import type { PlatformBusinessFormState, PlatformBusinessFormValues } from "./form-state";
 
 function formString(formData: FormData, key: string) {
@@ -491,6 +494,56 @@ export async function checkEmailIdentityAction(formData: FormData) {
 
     throw error;
   }
+}
+
+export async function sendTestEmailAction(formData: FormData) {
+  const tenantId = formString(formData, "tenantId");
+  await requirePlatformAdmin();
+  const identity = await getTenantEmailIdentityByBusinessId(tenantId);
+  const recipient = identity?.replyToEmail?.trim();
+
+  if (!recipient) {
+    redirect(
+      `/platform-admin/businesses/${tenantId}?error=${encodeURIComponent("Add a Reply-To email before sending a test email.")}#email-sending`,
+    );
+  }
+
+  try {
+    const sender = await resolveTenantEmailSender({
+      businessId: tenantId,
+      allowSupportReplyToFallback: false,
+    });
+    const { sendEmail } = await import("@/lib/email/ses");
+
+    await sendEmail({
+      to: recipient,
+      subject: "RYBS test email",
+      text: [
+        "This is a test email from RYBS.",
+        "",
+        "If you received this, the current email sending setup can send to the saved Reply-To address.",
+      ].join("\n"),
+      html: `
+        <div>
+          <h1>RYBS test email</h1>
+          <p>This is a test email from RYBS.</p>
+          <p>If you received this, the current email sending setup can send to the saved Reply-To address.</p>
+        </div>
+      `,
+      ...tenantSenderSendEmailOptions(sender),
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      redirect(
+        `/platform-admin/businesses/${tenantId}?error=${encodeURIComponent(error.message)}#email-sending`,
+      );
+    }
+
+    throw error;
+  }
+
+  revalidatePlatformBusiness(tenantId);
+  redirect(`/platform-admin/businesses/${tenantId}?status=test-email-sent#email-sending`);
 }
 
 export async function disableEmailIdentityAction(formData: FormData) {
