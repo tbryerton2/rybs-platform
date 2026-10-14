@@ -520,9 +520,6 @@ function DomainStatusBadge({ status }: { status: string }) {
 }
 
 function providerStatusLabel(domain: PlatformTenantDomain) {
-  if (domain.status === "active") return "Active";
-  if (domain.status === "disabled") return "Disabled";
-
   switch (domain.providerStatus) {
     case "not_provisioned":
       return "Pending setup";
@@ -533,18 +530,20 @@ function providerStatusLabel(domain: PlatformTenantDomain) {
     case "awaiting_verification":
       return "Verification required";
     case "ready":
-      return "Ready to activate";
+      return domain.status === "active" ? null : "Ready to activate";
     case "error":
       return "Provider error";
     default:
-      return "Pending setup";
+      return null;
   }
 }
 
 function ProviderStatusBadge({ domain }: { domain: PlatformTenantDomain }) {
   const label = providerStatusLabel(domain);
+  if (!label) return null;
+
   const className =
-    domain.status === "active" || domain.providerStatus === "ready"
+    domain.providerStatus === "ready"
       ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
       : domain.providerStatus === "error"
         ? "bg-red-50 text-red-700 ring-red-200"
@@ -577,53 +576,62 @@ function getDnsInstructionRecords(domain: PlatformTenantDomain) {
 
 function DomainDnsInstructions({ domain }: { domain: PlatformTenantDomain }) {
   const { records, notes } = getDnsInstructionRecords(domain);
+  const guidance = [...new Set([
+    ...records.flatMap((record) => record.reason ? [record.reason] : []),
+    ...notes,
+  ])];
 
   if (records.length === 0 && notes.length === 0 && !domain.lastError) {
     return null;
   }
 
   return (
-    <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4">
+    <div className="-mx-4 mt-6 grid gap-4 border-y border-slate-200 bg-slate-50 px-4 py-5">
+      <h3 className="text-sm font-semibold text-slate-900">DNS setup</h3>
       {domain.lastError ? (
         <Alert tone="error">{domain.lastError}</Alert>
       ) : null}
       {records.length ? (
-        <div className="overflow-hidden rounded-[8px] border border-slate-200">
-          <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-0 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <div>Type</div>
-            <div>Name</div>
-            <div>Value</div>
+        <div className="overflow-hidden rounded-[8px] border border-slate-200 bg-white">
+          <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] divide-x divide-slate-200 border-b border-slate-200 bg-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <div className="px-3 py-2">Type</div>
+            <div className="px-3 py-2">Name</div>
+            <div className="px-3 py-2">Value</div>
           </div>
           <div className="divide-y divide-slate-100">
             {records.map((record, index) => (
               <div
                 key={`${record.type}-${record.name}-${index}`}
-                className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] gap-3 px-3 py-3 text-xs"
+                className="text-xs"
               >
-                <div className="font-mono font-semibold text-slate-900">{record.type}</div>
+                <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1.3fr)] divide-x divide-slate-200">
+                <div className="px-3 py-3 font-mono font-semibold text-slate-900">{record.type}</div>
+                <div className="min-w-0 px-3 py-3">
                 <input
                   readOnly
                   value={record.name}
-                  className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
+                  className="w-full min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
                   aria-label={`${domain.hostname} DNS record name`}
                 />
+                </div>
+                <div className="min-w-0 px-3 py-3">
                 <input
                   readOnly
                   value={record.value}
-                  className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
+                  className="w-full min-w-0 rounded-[8px] border border-slate-200 bg-white px-2 py-1 font-mono text-slate-800"
                   aria-label={`${domain.hostname} DNS record value`}
                 />
-                {record.reason ? (
-                  <div className="col-span-3 text-slate-500">{record.reason}</div>
-                ) : null}
+                </div>
+                </div>
               </div>
             ))}
           </div>
         </div>
       ) : null}
-      {notes.length ? (
-        <div className="grid gap-1 text-xs leading-5 text-slate-600">
-          {notes.map((note) => (
+      {guidance.length ? (
+        <div className="grid gap-1 border-l-2 border-slate-200 pl-3 text-xs leading-5 text-slate-600">
+          <p className="font-semibold text-slate-700">DNS setup notes</p>
+          {guidance.map((note) => (
             <p key={note}>{note}</p>
           ))}
         </div>
@@ -772,17 +780,18 @@ function TenantDomainCard({
   const isOnlyActiveDomain = domain.status === "active" && activeDomainCount <= 1;
 
   return (
-    <article
+    <details
       id={`domain-${domain.id}`}
-      className="scroll-mt-6 rounded-[8px] border border-slate-200 p-4"
+      className="group/domain scroll-mt-6 rounded-[8px] border border-slate-200"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="break-all font-mono text-sm font-semibold text-slate-900">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-2 font-mono text-sm font-semibold text-slate-900">
+            <ChevronDownIcon className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open/domain:rotate-180" />
+            <span className="break-all">
             {domain.hostname}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <span>{formatDomainType(domain.domainType)}</span>
+            </span>
+          </span>
+          <span className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
             <DomainStatusBadge status={domain.status} />
             <ProviderStatusBadge domain={domain} />
             {domain.verificationStatus === "verification_required" ? (
@@ -796,13 +805,18 @@ function TenantDomainCard({
                 Primary
               </span>
             ) : null}
-            <span>Created {formatDateTime(domain.createdAt)}</span>
-          </div>
+          </span>
+      </summary>
+      <div className="border-t border-slate-100 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+          <span>{formatDomainType(domain.domainType)}</span>
+          <span>Created {formatDateTime(domain.createdAt)}</span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
             href={`/platform-admin/businesses/${tenantId}/domains/${domain.id}`}
-            className="admin-btn admin-btn-secondary"
+            className="admin-btn !border-amber-300 !bg-amber-50 !text-amber-700 hover:!border-amber-400 hover:!bg-amber-100"
           >
             <PencilSquareIcon className="h-4 w-4" />
             Edit
@@ -811,7 +825,7 @@ function TenantDomainCard({
             <form action={provisionDomainAction}>
               <input type="hidden" name="tenantId" value={tenantId} />
               <input type="hidden" name="domainId" value={domain.id} />
-              <button type="submit" className="admin-btn admin-btn-secondary">
+              <button type="submit" className="admin-btn !border-violet-300 !bg-violet-50 !text-violet-700 hover:!border-violet-400 hover:!bg-violet-100">
                 <PlayCircleIcon className="h-4 w-4" />
                 Provision on Vercel
               </button>
@@ -821,7 +835,7 @@ function TenantDomainCard({
             <form action={checkDomainAction}>
               <input type="hidden" name="tenantId" value={tenantId} />
               <input type="hidden" name="domainId" value={domain.id} />
-              <button type="submit" className="admin-btn admin-btn-secondary">
+              <button type="submit" className="admin-btn !border-sky-300 !bg-sky-50 !text-sky-700 hover:!border-sky-400 hover:!bg-sky-100">
                 <CheckCircleIcon className="h-4 w-4" />
                 Check domain
               </button>
@@ -831,7 +845,7 @@ function TenantDomainCard({
             <form action={activateDomainAction}>
               <input type="hidden" name="tenantId" value={tenantId} />
               <input type="hidden" name="domainId" value={domain.id} />
-              <button type="submit" className="admin-btn admin-btn-secondary">
+              <button type="submit" className="admin-btn !border-emerald-300 !bg-emerald-50 !text-emerald-700 hover:!border-emerald-400 hover:!bg-emerald-100">
                 <PlayCircleIcon className="h-4 w-4" />
                 Activate
               </button>
@@ -841,7 +855,7 @@ function TenantDomainCard({
             <form action={disableDomainAction}>
               <input type="hidden" name="tenantId" value={tenantId} />
               <input type="hidden" name="domainId" value={domain.id} />
-              <button type="submit" className="admin-btn admin-btn-secondary">
+              <button type="submit" className="admin-btn !border-rose-300 !bg-rose-50 !text-rose-700 hover:!border-rose-400 hover:!bg-rose-100">
                 <PauseCircleIcon className="h-4 w-4" />
                 Disable
               </button>
@@ -851,7 +865,7 @@ function TenantDomainCard({
             <form action={makePrimaryDomainAction}>
               <input type="hidden" name="tenantId" value={tenantId} />
               <input type="hidden" name="domainId" value={domain.id} />
-              <button type="submit" className="admin-btn admin-btn-secondary">
+              <button type="submit" className="admin-btn !border-sky-300 !bg-sky-50 !text-sky-700 hover:!border-sky-400 hover:!bg-sky-100">
                 <StarIcon className="h-4 w-4" />
                 Make primary
               </button>
@@ -868,7 +882,8 @@ function TenantDomainCard({
 
       <DomainDnsInstructions domain={domain} />
 
-      <form action={removeDomainAction} className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+      <form action={removeDomainAction} className="mt-6 grid gap-3 pb-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <h3 className="text-sm font-semibold text-slate-900 md:col-span-2">Remove domain</h3>
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="domainId" value={domain.id} />
         <div>
@@ -879,10 +894,15 @@ function TenantDomainCard({
             id={`remove-${domain.id}`}
             name="confirmation"
             type="text"
-            placeholder={domain.hostname}
+            placeholder={`Enter ${domain.hostname} to remove`}
             className="mt-1 block h-10 w-full rounded-[8px] border border-slate-300 px-3 font-mono text-xs text-slate-900 shadow-sm outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
           />
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">
+        </div>
+        <button type="submit" className="admin-btn !h-10 !border-red-300 !bg-red-50 !text-red-700 hover:!border-red-400 hover:!bg-red-100">
+          <TrashIcon className="h-4 w-4" />
+          Remove
+        </button>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600 md:col-span-2">
             {domain.isPrimary ? (
               <label className="inline-flex items-center gap-2">
                 <input name="clearPrimary" type="checkbox" className="h-4 w-4 rounded border-slate-300" />
@@ -896,13 +916,9 @@ function TenantDomainCard({
               </label>
             ) : null}
           </div>
-        </div>
-        <button type="submit" className="admin-btn admin-btn-destructive">
-          <TrashIcon className="h-4 w-4" />
-          Remove
-        </button>
       </form>
-    </article>
+      </div>
+    </details>
   );
 }
 
@@ -1569,7 +1585,7 @@ function EmailSendingSection({
                   <input type="hidden" name="tenantId" value={tenant.id} />
                   <button
                     type="submit"
-                    className="admin-btn h-11 w-full justify-start !border-sky-200 !bg-sky-50 !text-sky-700 hover:!border-sky-300 hover:!bg-sky-100 hover:!text-sky-800"
+                    className="admin-btn h-11 w-full justify-start !border-sky-300 !bg-sky-50 !text-sky-700 hover:!border-sky-400 hover:!bg-sky-100 hover:!text-sky-800"
                     disabled={!integration.configured}
                   >
                     <CheckCircleIcon className="h-4 w-4" />
@@ -1580,7 +1596,7 @@ function EmailSendingSection({
                   <input type="hidden" name="tenantId" value={tenant.id} />
                   <button
                     type="submit"
-                    className="admin-btn h-11 w-full justify-start !border-amber-200 !bg-amber-50 !text-amber-700 hover:!border-amber-300 hover:!bg-amber-100 hover:!text-amber-800"
+                    className="admin-btn h-11 w-full justify-start !border-amber-300 !bg-amber-50 !text-amber-700 hover:!border-amber-400 hover:!bg-amber-100 hover:!text-amber-800"
                     disabled={!emailIdentity.replyToEmail}
                   >
                     <EnvelopeIcon className="h-4 w-4" />
@@ -1592,7 +1608,7 @@ function EmailSendingSection({
                     <input type="hidden" name="tenantId" value={tenant.id} />
                     <button
                       type="submit"
-                      className="admin-btn h-11 w-full justify-start !border-rose-200 !bg-rose-50 !text-rose-700 hover:!border-rose-300 hover:!bg-rose-100 hover:!text-rose-800"
+                      className="admin-btn h-11 w-full justify-start !border-rose-300 !bg-rose-50 !text-rose-700 hover:!border-rose-400 hover:!bg-rose-100 hover:!text-rose-800"
                     >
                       <PauseCircleIcon className="h-4 w-4" />
                       Disable
