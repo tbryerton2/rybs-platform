@@ -402,11 +402,6 @@ function SetupAreaCard({
   tenant: PlatformTenantSummary;
   area: PlatformTenantSummary["setup"]["areas"][number];
 }) {
-  const Icon = area.status === "needs_attention"
-    ? ExclamationTriangleIcon
-    : area.status === "complete"
-      ? CheckCircleIcon
-      : InformationCircleIcon;
   const workflow = getSetupAreaWorkflow(tenant.id, area.key);
   const action = workflow.action;
   const responsibilityLabel = actionLabelForArea(area);
@@ -418,27 +413,16 @@ function SetupAreaCard({
         : "bg-violet-50 text-violet-700 ring-violet-200";
 
   return (
-    <article
+    <details
       id={getSetupAreaElementId(area.key)}
-      className="scroll-mt-6 rounded-[14px] border border-slate-200 bg-white p-4 shadow-sm"
+      className="group/checklist scroll-mt-6 rounded-[8px] border border-slate-200 bg-white"
     >
-      <div className="flex items-start gap-3">
-        <div
-          className={joinClasses(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] ring-1 ring-inset",
-            area.status === "needs_attention"
-              ? "bg-amber-50 text-amber-700 ring-amber-200"
-              : area.status === "complete"
-                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                : "bg-sky-50 text-sky-700 ring-sky-200",
-          )}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">{area.label}</h3>
-            <div className="flex flex-wrap items-center gap-2">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+            <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900">
+              <ChevronDownIcon className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open/checklist:rotate-180" />
+              {area.label}
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
               <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
                 {area.required ? "Required" : "Optional"}
               </span>
@@ -456,11 +440,16 @@ function SetupAreaCard({
                   responsibilityClassName,
                 )}
               >
-                {responsibilityLabel}
+                {area.status === "complete"
+                  ? responsibilityLabel.replace(" action", " managed")
+                  : responsibilityLabel}
               </span>
-            </div>
-          </div>
-          <div className="mt-3 grid gap-3 text-sm leading-6">
+            </span>
+      </summary>
+      <div className="border-t border-slate-200 p-4">
+          <div className="grid gap-3 text-sm leading-6">
+            {area.status !== "complete" && area.status !== "not_applicable" ? (
+            <>
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Missing</div>
               <p className="mt-1 text-slate-800">{missingText(area)}</p>
@@ -468,14 +457,34 @@ function SetupAreaCard({
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next step</div>
               <p className="mt-1 text-slate-800">
-                {area.status === "complete"
-                  ? "No action needed. Keep this area updated if the business changes."
-                  : area.status === "not_applicable"
-                    ? area.needed
-                  : workflow.nextStep}
+                {workflow.nextStep}
               </p>
             </div>
-            <p className="text-slate-600">{area.detail}</p>
+            </>
+            ) : null}
+            {area.key === "productsInventory" && area.status === "complete" ? (
+              <ul className="list-disc space-y-1 pl-5 text-slate-600">
+                <li>Active dumpsters: {tenant.signals.activeDumpsterCount}</li>
+                <li>Dumpsters eligible for booking: {tenant.signals.bookableDumpsterCount}</li>
+                <li>Product listings marked public: {tenant.signals.publicProductCount}</li>
+              </ul>
+            ) : (
+            <p className="text-slate-600">
+              {area.key === "businessRecord" && area.status === "complete"
+                ? "The business record is set up and ready."
+                : area.key === "brandContactSettings" && area.status === "complete"
+                  ? "The business name, time zone, and file storage are set up. A customer-facing phone number and email address are optional."
+                : area.key === "pricing" && area.status === "complete"
+                  ? "Pricing is set up for this business."
+                : area.key === "publicDomains" && area.status === "complete"
+                  ? "Website addresses are set up for this business."
+                : area.key === "serviceArea" && area.status === "complete"
+                  ? "The service area is set up for this business."
+                : area.key === "websiteContent" && area.status === "complete"
+                  ? "Website content is published for this business."
+                : area.detail}
+            </p>
+            )}
           </div>
           <div className="mt-4">
             {action.kind === "link" ? (
@@ -484,16 +493,17 @@ function SetupAreaCard({
               </Link>
             ) : (
               <div className="grid gap-2">
-                <span className="inline-flex min-h-8 w-fit items-center rounded-[8px] border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600">
+                <p className="text-xs leading-5 text-slate-500">
                   {area.status === "complete" ? "Managed in" : "Complete in"} {action.label}
-                </span>
-                <p className="text-xs leading-5 text-slate-500">{action.nextStep}</p>
+                </p>
+                {area.status !== "complete" && area.status !== "not_applicable" ? (
+                  <p className="text-xs leading-5 text-slate-500">{action.nextStep}</p>
+                ) : null}
               </div>
             )}
           </div>
-        </div>
       </div>
-    </article>
+    </details>
   );
 }
 
@@ -579,15 +589,34 @@ function DomainDnsInstructions({ domain }: { domain: PlatformTenantDomain }) {
   const guidance = [...new Set([
     ...records.flatMap((record) => record.reason ? [record.reason] : []),
     ...notes,
-  ])];
+  ])].filter((note) => !/^Point this (?:Preview )?subdomain at the Vercel project\.$/i.test(note.trim()));
 
-  if (records.length === 0 && notes.length === 0 && !domain.lastError) {
+  if (records.length === 0 && notes.length === 0 && !domain.lastError && domain.providerStatus !== "awaiting_dns") {
     return null;
   }
 
   return (
     <div className="-mx-4 mt-6 grid gap-4 border-y border-slate-200 bg-slate-50 px-4 py-5">
       <h3 className="text-sm font-semibold text-slate-900">DNS setup</h3>
+      {domain.providerStatus === "awaiting_dns" ? (
+        <div className="border-l-4 border-amber-400 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+          <h4 className="font-semibold">Action required: Connect this website address</h4>
+          <p className="mt-2">
+            This status reflects the last saved check. If you already configured DNS, click <strong>Check domain</strong> above before changing any records.
+          </p>
+          <ol className="mt-3 list-decimal space-y-1 pl-5">
+            <li>
+              {domain.hostname === "rybsoftware.com" || domain.hostname.endsWith(".rybsoftware.com")
+                ? "Open Cloudflare's DNS settings for rybsoftware.com."
+                : "Open your domain's DNS settings with your DNS provider."}
+            </li>
+            <li>
+              Find the records matching the names in the table below and compare their types and values. Add any missing records. If an existing record differs, confirm what it is used for before editing it.
+            </li>
+            <li>Once the records match, return here and click <strong>Check domain</strong>. DNS changes may take time to appear.</li>
+          </ol>
+        </div>
+      ) : null}
       {domain.lastError ? (
         <Alert tone="error">{domain.lastError}</Alert>
       ) : null}
@@ -2243,12 +2272,12 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-slate-900">Setup checklist</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Checks are derived from existing tenant, settings, pricing, service area, inventory, product, content, and domain rows.
+              A summary of this business&apos;s setup and anything that still needs attention.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3">
           {tenant.setup.areas.map((area) => (
             <SetupAreaCard key={area.key} tenant={tenant} area={area} />
           ))}
