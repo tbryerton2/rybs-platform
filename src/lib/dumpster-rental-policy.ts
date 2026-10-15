@@ -70,7 +70,8 @@ export async function getDumpsterRentalPolicy(
   }
 
   const standardRentalDays = Number(productSettings?.included_rental_days);
-  const dailyOveragePrice = Number(productSettings?.extra_day_price);
+  // An unset product rate inherits the company default; only an explicit zero is free.
+  const dailyOveragePrice = Number(productSettings?.extra_day_price ?? NaN);
   const basePrice = Number(productSettings?.base_price);
 
   return {

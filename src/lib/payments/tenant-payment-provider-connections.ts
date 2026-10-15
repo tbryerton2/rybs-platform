@@ -12,6 +12,7 @@ import type {
 const DEFAULT_PAYMENT_PROVIDER = "square" satisfies PaymentProvider;
 const TOKEN_CIPHER_VERSION = 1;
 const SQUARE_API_VERSION = "2026-08-19";
+const SQUARE_ACCESS_TOKEN_REFRESH_SKEW_MS = 24 * 60 * 60 * 1000;
 export const SQUARE_OAUTH_CALLBACK_PATH = "/admin/settings/payments/square/callback";
 export const SQUARE_OAUTH_SCOPES = [
   "MERCHANT_PROFILE_READ",
@@ -35,7 +36,7 @@ const SQUARE_OAUTH_APPLICATION_SECRET_ENV_NAMES = [
 ] as const;
 
 const TENANT_PAYMENT_PROVIDER_CONNECTION_SELECT =
-  "id, business_id, provider, provider_environment, status, provider_merchant_id, provider_location_id, encrypted_access_token, token_cipher_version, token_cipher_key_id";
+  "id, business_id, provider, provider_environment, status, provider_merchant_id, provider_location_id, encrypted_access_token, encrypted_refresh_token, token_cipher_version, token_cipher_key_id, access_token_expires_at";
 
 const TENANT_PAYMENT_PROVIDER_CONNECTION_ADMIN_SELECT =
   "id, business_id, provider, provider_environment, status, provider_merchant_id, provider_location_id, provider_location_name, granted_scopes, encrypted_access_token, encrypted_refresh_token, token_cipher_version, token_cipher_key_id, access_token_expires_at, token_refreshed_at, connected_by, connected_at, revoked_at, last_error, created_at, updated_at";
@@ -52,8 +53,10 @@ type TenantPaymentProviderConnectionRow = {
   provider_merchant_id: string | null;
   provider_location_id: string | null;
   encrypted_access_token: string | null;
+  encrypted_refresh_token: string | null;
   token_cipher_version: number | null;
   token_cipher_key_id: string | null;
+  access_token_expires_at: string | null;
 };
 
 type TenantPaymentProviderConnectionAdminRow = TenantPaymentProviderConnectionRow & {
@@ -179,6 +182,8 @@ type SquareFetch = typeof fetch;
 
 type ResolveTenantPaymentProviderConnectionOptions = {
   supabase?: TenantConnectionSupabaseClient;
+  fetch?: SquareFetch;
+  now?: () => Date;
 };
 
 export class TenantPaymentProviderConnectionError extends Error {
@@ -616,6 +621,114 @@ function assertTenantConnectionRow(
   }
 }
 
+function squareAccessTokenExpiresSoon(
+  row: TenantPaymentProviderConnectionRow,
+  now = new Date(),
+) {
+  const expiresAt = clean(row.access_token_expires_at);
+  if (!expiresAt) return false;
+
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) return true;
+
+  return expiresAtMs - now.getTime() <= SQUARE_ACCESS_TOKEN_REFRESH_SKEW_MS;
+}
+
+async function refreshSquareOAuthConnection(
+  row: TenantPaymentProviderConnectionRow,
+  options: Required<Pick<ResolveTenantPaymentProviderConnectionOptions, "supabase" | "fetch" | "now">>,
+) {
+  const refreshToken = clean(row.encrypted_refresh_token)
+    ? decryptPaymentProviderToken(row.encrypted_refresh_token)
+    : null;
+
+  if (!refreshToken) {
+    throw new TenantPaymentProviderConnectionError(
+      "Tenant Square connection is missing an encrypted refresh token.",
+      "TENANT_SQUARE_REFRESH_TOKEN_MISSING",
+    );
+  }
+
+  const applicationId = getSquareOAuthApplicationId();
+  const applicationSecret = getSquareApplicationSecret();
+  if (!applicationId || !applicationSecret) {
+    throw new TenantPaymentProviderConnectionError(
+      "Square OAuth is not configured for token refresh.",
+      "SQUARE_OAUTH_CONFIGURATION_MISSING",
+    );
+  }
+
+  const response = await options.fetch(`${getSquareOauthBaseUrl(row.provider_environment as PaymentProviderEnvironment)}/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Square-Version": SQUARE_API_VERSION,
+    },
+    body: JSON.stringify({
+      client_id: applicationId,
+      client_secret: applicationSecret,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  let tokenResponse: SquareOAuthTokenResponse;
+  try {
+    tokenResponse = await parseSquareJsonResponse<SquareOAuthTokenResponse>(response);
+  } catch (error) {
+    await options.supabase
+      .from("tenant_payment_provider_connections")
+      .update({
+        status: "reauth_required",
+        last_error: error instanceof Error ? error.message : "Square OAuth token refresh failed.",
+      })
+      .eq("id", row.id)
+      .eq("business_id", row.business_id);
+
+    throw error;
+  }
+
+  const accessToken = clean(tokenResponse.access_token);
+  const refreshedToken = clean(tokenResponse.refresh_token) ?? refreshToken;
+  if (!accessToken) {
+    throw new TenantPaymentProviderConnectionError(
+      "Square OAuth refresh response did not include an access token.",
+      "SQUARE_OAUTH_RESPONSE_INVALID",
+    );
+  }
+
+  const encryptedAccessToken = encryptPaymentProviderToken(accessToken);
+  const encryptedRefreshToken = encryptPaymentProviderToken(refreshedToken);
+  const nowIso = options.now().toISOString();
+
+  const { data, error } = await options.supabase
+    .from("tenant_payment_provider_connections")
+    .update({
+      encrypted_access_token: encryptedAccessToken.encryptedToken,
+      encrypted_refresh_token: encryptedRefreshToken.encryptedToken,
+      token_cipher_version: encryptedAccessToken.cipherVersion,
+      token_cipher_key_id: encryptedAccessToken.keyId,
+      access_token_expires_at: clean(tokenResponse.expires_at),
+      token_refreshed_at: nowIso,
+      status: "active",
+      last_error: null,
+    })
+    .eq("id", row.id)
+    .eq("business_id", row.business_id)
+    .select(TENANT_PAYMENT_PROVIDER_CONNECTION_SELECT)
+    .single<TenantPaymentProviderConnectionRow>();
+
+  if (error || !data) {
+    throw new TenantPaymentProviderConnectionError(
+      error?.message ?? "Unable to save refreshed Square connection token.",
+      "TENANT_PAYMENT_PROVIDER_CONNECTION_SAVE_FAILED",
+      error,
+    );
+  }
+
+  return data;
+}
+
 function toConnectionContext(
   row: TenantPaymentProviderConnectionRow,
 ): PaymentProviderConnectionContext {
@@ -1029,6 +1142,8 @@ export async function resolveTenantPaymentProviderConnection(input: {
 
   const provider = normalizeProvider(input.provider);
   const supabase = options.supabase ?? supabaseAdmin;
+  const doFetch = options.fetch ?? fetch;
+  const now = options.now ?? (() => new Date());
   const policy = await getTenantPaymentPolicyForBusiness(businessId, provider, { supabase });
 
   if (policy.mode === "disabled") {
@@ -1046,7 +1161,7 @@ export async function resolveTenantPaymentProviderConnection(input: {
     );
   }
 
-  const tenantConnection = await findActiveTenantConnection({
+  let tenantConnection = await findActiveTenantConnection({
     businessId,
     provider,
     providerEnvironment,
@@ -1081,6 +1196,14 @@ export async function resolveTenantPaymentProviderConnection(input: {
       "This business's Square connection is not active.",
       "TENANT_PAYMENT_PROVIDER_CONNECTION_INACTIVE",
     );
+  }
+
+  if (squareAccessTokenExpiresSoon(tenantConnection, now())) {
+    tenantConnection = await refreshSquareOAuthConnection(tenantConnection, {
+      supabase,
+      fetch: doFetch,
+      now,
+    });
   }
 
   return toConnectionContext(tenantConnection);

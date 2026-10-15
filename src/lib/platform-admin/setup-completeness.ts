@@ -324,8 +324,8 @@ function getProductsInventoryArea(signals: TenantSetupSignals): TenantSetupArea 
     required: true,
     summary: complete ? "Complete" : "Missing required configuration",
     detail: complete
-      ? `${signals.activeDumpsterCount} active dumpster(s), ${signals.bookableDumpsterCount} bookable dumpster(s), and ${signals.publicProductCount} public product setting(s) found.`
-      : "No active dumpsters or public dumpster_product_settings rows exist for this business.",
+      ? `${signals.activeDumpsterCount} active dumpsters, ${signals.bookableDumpsterCount} dumpsters eligible for booking, and ${signals.publicProductCount} public rental options grouped by size.`
+      : "No active dumpsters or public rental options are set up for this business.",
     needed: "Add at least one active/bookable dumpster or public product.",
   };
 }

@@ -93,40 +93,66 @@ function createMockSupabase(
   settingRows: Row[] = [paymentSetting("sandbox")],
 ) {
   const queryLog: QueryLog[] = [];
+  const tables = {
+    tenant_payment_provider_connections: connectionRows.map((row) => ({ ...row })),
+    tenant_payment_settings: settingRows.map((row) => ({ ...row })),
+  };
+
+  class QueryBuilder {
+    filters: Filter[] = [];
+    table: keyof typeof tables;
+    updateValues: Row | null;
+
+    constructor(table: keyof typeof tables, updateValues: Row | null = null) {
+      this.table = table;
+      this.updateValues = updateValues;
+      queryLog.push({ table, filters: this.filters });
+    }
+
+    select(columns: string) {
+      if (this.table === "tenant_payment_provider_connections") {
+        assert.match(columns, /encrypted_access_token/);
+      }
+      return this;
+    }
+
+    eq(column: string, value: string) {
+      this.filters.push({ column, value });
+      return this;
+    }
+
+    order() {
+      return this;
+    }
+
+    limit() {
+      return this;
+    }
+
+    async maybeSingle() {
+      if (this.table === "tenant_payment_provider_connections" && lookupError) {
+        return { data: null, error: lookupError };
+      }
+
+      return {
+        data: tables[this.table].find((row) => matches(row, this.filters)) ?? null,
+        error: null,
+      };
+    }
+
+    async single() {
+      const row = tables[this.table].find((candidate) => matches(candidate, this.filters));
+      if (!row) return { data: null, error: { message: "No row found" } };
+      if (this.updateValues) Object.assign(row, this.updateValues);
+      return { data: { ...row }, error: null };
+    }
+  }
 
   const client = {
     from(table: "tenant_payment_provider_connections" | "tenant_payment_settings") {
-      const filters: Filter[] = [];
-      queryLog.push({ table, filters });
-
       return {
-        select(columns: string) {
-          if (table === "tenant_payment_provider_connections") {
-            assert.match(columns, /encrypted_access_token/);
-          }
-          return this;
-        },
-        eq(column: string, value: string) {
-          filters.push({ column, value });
-          return this;
-        },
-        order() {
-          return this;
-        },
-        limit() {
-          return this;
-        },
-        async maybeSingle() {
-          if (table === "tenant_payment_provider_connections" && lookupError) {
-            return { data: null, error: lookupError };
-          }
-
-          const rows = table === "tenant_payment_provider_connections" ? connectionRows : settingRows;
-          return {
-            data: rows.find((row) => matches(row, filters)) ?? null,
-            error: null,
-          };
-        },
+        select: (columns: string) => new QueryBuilder(table).select(columns),
+        update: (values: Row) => new QueryBuilder(table, values),
       };
     },
   };
@@ -134,6 +160,7 @@ function createMockSupabase(
   return {
     client,
     queryLog,
+    tables,
   };
 }
 
@@ -277,6 +304,65 @@ test("resolveTenantPaymentProviderConnection returns the active tenant Square co
       ["provider_environment", "sandbox"],
     ],
   );
+});
+
+test("resolveTenantPaymentProviderConnection refreshes an expired Square OAuth token", async () => {
+  const encryptedAccessToken = encryptPaymentProviderToken("expired-square-token");
+  const encryptedRefreshToken = encryptPaymentProviderToken("refresh-square-token");
+  const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const mock = createMockSupabase([
+    {
+      id: CONNECTION_ID,
+      business_id: BUSINESS_ID,
+      provider: "square",
+      provider_environment: "sandbox",
+      status: "active",
+      provider_merchant_id: "merchant-1",
+      provider_location_id: "location-1",
+      encrypted_access_token: encryptedAccessToken.encryptedToken,
+      encrypted_refresh_token: encryptedRefreshToken.encryptedToken,
+      token_cipher_version: encryptedAccessToken.cipherVersion,
+      token_cipher_key_id: encryptedAccessToken.keyId,
+      access_token_expires_at: "2026-10-10T17:36:30.000Z",
+    },
+  ]);
+  const fakeFetch = async (url: string | URL | Request, init?: RequestInit) => {
+    requests.push({
+      url: String(url),
+      body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+    });
+    return Response.json({
+      access_token: "fresh-square-token",
+      refresh_token: "refresh-square-token",
+      expires_at: "2026-11-10T17:36:30Z",
+      merchant_id: "merchant-1",
+      scope: "MERCHANT_PROFILE_READ PAYMENTS_WRITE",
+    });
+  };
+
+  const connection = await resolveTenantPaymentProviderConnection(
+    { businessId: BUSINESS_ID, provider: "square" },
+    {
+      supabase: mock.client,
+      fetch: fakeFetch,
+      now: () => new Date("2026-10-14T00:00:00.000Z"),
+    },
+  );
+
+  assert.equal(connection.accessToken, "fresh-square-token");
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, "https://connect.squareupsandbox.com/oauth2/token");
+  assert.equal(requests[0].body.grant_type, "refresh_token");
+  assert.equal(requests[0].body.refresh_token, "refresh-square-token");
+  assert.equal(requests[0].body.client_id, "sandbox-square-oauth-application-id");
+  assert.equal(requests[0].body.client_secret, "square-oauth-application-secret");
+
+  const refreshedRow = mock.tables.tenant_payment_provider_connections[0];
+  assert.equal(decryptPaymentProviderToken(String(refreshedRow.encrypted_access_token)), "fresh-square-token");
+  assert.equal(decryptPaymentProviderToken(String(refreshedRow.encrypted_refresh_token)), "refresh-square-token");
+  assert.equal(refreshedRow.access_token_expires_at, "2026-11-10T17:36:30Z");
+  assert.equal(refreshedRow.token_refreshed_at, "2026-10-14T00:00:00.000Z");
+  assert.equal(refreshedRow.last_error, null);
 });
 
 test("resolveTenantPaymentProviderConnection fails closed when policy is disabled", async () => {

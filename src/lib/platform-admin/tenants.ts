@@ -1,4 +1,5 @@
 import "server-only";
+import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
 
 import {
   getTenantEmailIdentityByBusinessId,
@@ -524,7 +525,7 @@ async function loadTenantSetupSignals(tenantIds: string[]) {
     pricing,
     serviceAreaZips,
     dumpsters,
-    productSettings,
+    publicProductsByTenant,
     tenantDomains,
     contentEntries,
   ] = await Promise.all([
@@ -552,11 +553,10 @@ async function loadTenantSetupSignals(tenantIds: string[]) {
       .from("dumpsters")
       .select("business_id, active, service_status, operational_status")
       .in("business_id", tenantIds),
-    supabaseAdmin
-      .from("dumpster_product_settings")
-      .select("business_id")
-      .in("business_id", tenantIds)
-      .eq("is_public", true),
+    Promise.all(tenantIds.map(async (tenantId) => ({
+      tenantId,
+      products: await getPublicDumpsterProducts(undefined, tenantId),
+    }))),
     supabaseAdmin
       .from("tenant_domains")
       .select("tenant_id, domain_type")
@@ -575,7 +575,6 @@ async function loadTenantSetupSignals(tenantIds: string[]) {
     pricing,
     serviceAreaZips,
     dumpsters,
-    productSettings,
     tenantDomains,
     contentEntries,
   ]) {
@@ -610,8 +609,8 @@ async function loadTenantSetupSignals(tenantIds: string[]) {
     }
   }
 
-  for (const row of (productSettings.data ?? []) as BusinessScopedRow[]) {
-    incrementBusinessCount(signalsByTenantId, row.business_id, "publicProductCount");
+  for (const { tenantId, products } of publicProductsByTenant) {
+    requireSignals(signalsByTenantId, tenantId).publicProductCount = products.length;
   }
 
   for (const row of (tenantDomains.data ?? []) as TenantDomainSignalRow[]) {

@@ -80,6 +80,7 @@ const DUMPSTER_PRODUCT_SETTINGS_SELECT = `
 `;
 
 function asNumber(value: number | string | null | undefined) {
+  if (value == null) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }

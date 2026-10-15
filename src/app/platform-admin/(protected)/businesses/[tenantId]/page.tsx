@@ -466,7 +466,7 @@ function SetupAreaCard({
               <ul className="list-disc space-y-1 pl-5 text-slate-600">
                 <li>Active dumpsters: {tenant.signals.activeDumpsterCount}</li>
                 <li>Dumpsters eligible for booking: {tenant.signals.bookableDumpsterCount}</li>
-                <li>Product listings marked public: {tenant.signals.publicProductCount}</li>
+                <li>Public rental options (grouped by size): {tenant.signals.publicProductCount}</li>
               </ul>
             ) : (
             <p className="text-slate-600">
@@ -957,7 +957,7 @@ function LaunchReadinessSection({ tenant }: { tenant: PlatformTenantSummary }) {
   const hasReadinessWarnings = !tenant.setup.implementationTypeConfigured || missingAreas.length > 0;
 
   return (
-    <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="border-t border-slate-200 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1015,21 +1015,40 @@ function LaunchReadinessSection({ tenant }: { tenant: PlatformTenantSummary }) {
           ) : null}
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 
 function ImplementationTypeSection({ tenant }: { tenant: PlatformTenantSummary }) {
+  const selectedType = tenant.setup.implementationType;
+  const selectedLabel = selectedType === "full_site_platform_subdomain"
+    ? "Subdomain"
+    : selectedType === "full_site_custom_domain"
+      ? "Custom domain"
+      : selectedType === "existing_site_hosted_booking"
+        ? "Hosted booking"
+        : "Not selected";
+
   return (
-    <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold tracking-tight text-slate-900">Implementation type</h2>
+    <details className="group/implementation rounded-[14px] border border-slate-200 bg-white shadow-sm">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
+          <ChevronDownIcon className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open/implementation:rotate-180" />
+          Implementation type
+        </span>
+        <span className={joinClasses(
+          "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+          selectedType
+            ? "bg-sky-50 text-sky-700 ring-sky-200"
+            : "bg-amber-50 text-amber-700 ring-amber-200",
+        )}>
+          {selectedLabel}
+        </span>
+      </summary>
+      <div className="border-t border-slate-200 p-5">
           <p className="mt-1 text-sm leading-6 text-slate-600">
             Current selection: {implementationLabel(tenant.setup.implementationType)}
           </p>
-        </div>
-      </div>
 
       <form action={updateImplementationTypeAction} className="mt-5 space-y-4">
         <input type="hidden" name="tenantId" value={tenant.id} />
@@ -1070,7 +1089,8 @@ function ImplementationTypeSection({ tenant }: { tenant: PlatformTenantSummary }
         </div>
         <FormSubmitButton loadingLabel="Saving...">Save implementation type</FormSubmitButton>
       </form>
-    </section>
+      </div>
+    </details>
   );
 }
 
@@ -2213,35 +2233,34 @@ export default async function PlatformBusinessDetailPage({ params, searchParams 
         </Alert>
       ) : null}
 
-      <LaunchReadinessSection tenant={tenant} />
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <section className="rounded-[14px] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[14px] border border-slate-200 bg-white shadow-sm">
+        <div className="p-5">
           <h2 className="text-base font-semibold tracking-tight text-slate-900">Basic tenant information</h2>
-          <dl className="mt-4 space-y-4">
-            <div>
+          <dl className="mt-4 grid gap-y-4 xl:grid-cols-[max-content_repeat(3,minmax(0,1fr))] xl:gap-y-0">
+            <div className="min-w-0 xl:pr-6">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant UUID</dt>
-              <dd className="mt-1 break-all text-sm text-slate-900">{tenant.id}</dd>
+              <dd className="mt-1 break-all text-sm text-slate-900 xl:whitespace-nowrap xl:break-normal">{tenant.id}</dd>
             </div>
-            <div>
+            <div className="min-w-0 border-t border-slate-200 pt-4 xl:border-l xl:border-t-0 xl:px-6 xl:pt-0">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">URL name</dt>
-              <dd className="mt-1 text-sm text-slate-900">{tenant.slug}</dd>
+              <dd className="mt-1 break-all text-sm text-slate-900">{tenant.slug}</dd>
             </div>
-            <div>
+            <div className="min-w-0 border-t border-slate-200 pt-4 xl:border-l xl:border-t-0 xl:px-6 xl:pt-0">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Created</dt>
               <dd className="mt-1 text-sm text-slate-900">{formatDateTime(tenant.createdAt)}</dd>
             </div>
-            <div>
+            <div className="min-w-0 border-t border-slate-200 pt-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Updated</dt>
               <dd className="mt-1 text-sm text-slate-900">{formatDateTime(tenant.updatedAt)}</dd>
             </div>
           </dl>
 
           {/* Tenant-specific /admin entry is intentionally omitted until business admin uses strict tenant resolution. */}
-        </section>
+        </div>
+        <LaunchReadinessSection tenant={tenant} />
+      </section>
 
-        <ImplementationTypeSection tenant={tenant} />
-      </div>
+      <ImplementationTypeSection tenant={tenant} />
 
       <LifecycleSection tenant={tenant} isCurrentSiteTenant={isCurrentSiteTenant} />
 
