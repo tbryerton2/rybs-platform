@@ -60,16 +60,15 @@ test("tenant admin users service uses selected business context and tenant-aware
 
   assert.match(service, /requireAdminBusinessOwner/);
   assert.match(service, /\.eq\("business_id", session\.business\.id\)/);
-  assert.match(service, /business_admin_grant_membership/);
-  assert.match(service, /business_admin_update_membership/);
-  assert.match(service, /p_business_id: session\.business\.id/);
+  assert.match(service, /business_admin_manage_user/);
+  assert.match(service, /businessId: session\.business\.id/);
   assert.match(service, /generateLink\(\{[\s\S]*type: "invite"/);
   assert.match(service, /generateLink\(\{[\s\S]*type: "magiclink"/);
   assert.match(service, /options:\s*\{[\s\S]*redirectTo/);
   assert.match(service, /data\.properties\.hashed_token/);
   assert.match(service, /buildAdminInviteAcceptanceUrl\(\{/);
   assert.doesNotMatch(service, /actionLink:\s*data\.properties\.action_link/);
-  assert.match(service, /resendBusinessAdminInvitation[\s\S]*!isPendingInvite\(authUser\)/);
+  assert.match(service, /resendBusinessAdminInvitation[\s\S]*member\.accepted_at/);
   assert.match(service, /Only pending invitations can be resent/);
   assert.match(service, /resolveTenantEmailSender/);
   assert.match(service, /tenantSenderSendEmailOptions/);
@@ -89,12 +88,12 @@ test("tenant admin user mutations are bounded and surface clear failures", () =>
 
   assert.match(service, /ADMIN_USER_REQUEST_TIMEOUT_MS/);
   assert.match(service, /withAdminUserRequestTimeout/);
-  assert.match(service, /Removing admin access/);
+  assert.match(service, /action: "deactivate"/);
   assert.match(service, /taking longer than expected/);
-  assert.match(service, /mapDatabaseMutationError\(membershipError\)/);
-  assert.match(actions, /redirectUnexpectedMutationError/);
+  assert.match(service, /mapDatabaseMutationError\(error\)/);
+  assert.match(actions, /error instanceof BusinessAdminUserMutationError/);
   assert.match(actions, /unexpected_mutation_error/);
-  assert.match(actions, /revalidatePath\("\/admin\/settings\/users"\);[\s\S]*redirect\("\/admin\/settings\/users\?status=removed"\)/);
+  assert.match(actions, /revalidatePath\("\/admin\/settings\/users"\)/);
 });
 
 test("tenant users page exposes phase one controls without accepting forged business ids", () => {
@@ -102,13 +101,14 @@ test("tenant users page exposes phase one controls without accepting forged busi
   const actions = readRepoFile("src/app/admin/(protected)/settings/users/actions.ts");
   const nav = readRepoFile("src/app/admin/_components/admin/admin-nav.ts");
 
-  assert.match(page, /Invite User/);
-  assert.match(page, /<option value="admin">Admin<\/option>/);
-  assert.match(page, /<option value="owner">Owner<\/option>/);
-  assert.match(page, /Pending/);
-  assert.match(page, /Resend Invite/);
-  assert.match(page, /Remove/);
-  assert.match(page, /activeOwnerCount <= 1/);
+  const controls = readRepoFile("src/app/admin/(protected)/settings/users/user-controls.tsx");
+  assert.match(controls, /Invite user/);
+  assert.match(controls, /<option value="admin">Admin<\/option>/);
+  assert.match(controls, /<option value="owner">Owner<\/option>/);
+  assert.match(page, /"invited"/);
+  assert.match(controls, /Resend invitation/);
+  assert.match(controls, /Deactivate access/);
+  assert.match(controls, /activeOwnerCount <= 1/);
   assert.match(page, /isCurrentUser/);
   assert.match(page, /lg:hidden/);
   assert.match(actions, /inviteBusinessAdminUser/);

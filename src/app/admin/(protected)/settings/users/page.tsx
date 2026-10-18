@@ -1,446 +1,61 @@
-import {
-  ExclamationTriangleIcon,
-  UserPlusIcon,
-  UsersIcon,
-} from "@heroicons/react/24/outline";
-import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
+import Link from "next/link";
+import { UsersIcon } from "@heroicons/react/24/outline";
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
-import { isAdminBusinessOwner, requireAdminOwner } from "@/lib/admin/auth";
-import { getBusinessAdminUsers, type BusinessAdminUser } from "@/lib/admin/users";
-import {
-  disableBusinessAdminUserAction,
-  inviteBusinessAdminUserAction,
-  resendBusinessAdminInvitationAction,
-  updateBusinessAdminUserRoleAction,
-} from "./actions";
+import { getBusinessAdminUsers, getBusinessAdminUserActivity, BusinessAdminUserMutationError } from "@/lib/admin/users";
+import type { BusinessUserFilter } from "@/lib/admin/user-management-types";
+import { InviteUserButton, UserDetailsPanel, UserStatusBadge } from "./user-controls";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-type SearchParams = Record<string, string | string[] | undefined>;
-
-function readParam(params: SearchParams, key: string) {
-  const value = params[key];
-  return Array.isArray(value) ? value[0] : value;
+const filters: BusinessUserFilter[] = ["active", "invited", "inactive", "all"];
+function param(params: Record<string, string | string[] | undefined>, key: string) {
+  const value = params[key]; return Array.isArray(value) ? value[0] : value;
 }
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "Not recorded";
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-function joinClasses(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
-
-function roleLabel(role: BusinessAdminUser["role"]) {
-  return role === "owner" ? "Owner" : "Admin";
-}
-
-function statusLabel(status: BusinessAdminUser["status"]) {
-  return status === "pending" ? "Pending" : "Active";
-}
-
-function roleBadgeClassName(role: BusinessAdminUser["role"]) {
-  return role === "owner"
-    ? "bg-sky-50 text-sky-700 ring-sky-200"
-    : "bg-slate-100 text-slate-600 ring-slate-200";
-}
-
-function statusBadgeClassName(status: BusinessAdminUser["status"]) {
-  return status === "active"
-    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-    : "bg-amber-50 text-amber-700 ring-amber-200";
-}
-
-function Message({ params }: { params: SearchParams }) {
-  const error = readParam(params, "error");
-  const status = readParam(params, "status");
-  const email = readParam(params, "email");
-
-  if (error) {
-    return (
-      <div className="rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-        {error}
-      </div>
-    );
+export default async function AdminUsersPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = (await searchParams) ?? {};
+  const filterInput = param(params, "filter") as BusinessUserFilter;
+  const filter = filters.includes(filterInput) ? filterInput : "active";
+  let userData: Awaited<ReturnType<typeof getBusinessAdminUsers>>;
+  try {
+    userData = await getBusinessAdminUsers();
+  } catch (error) {
+    if (!(error instanceof BusinessAdminUserMutationError) || error.code !== "membership_rpc_missing") throw error;
+    return <AdminPage width="wide"><AdminPageHeader eyebrow="Settings" title="Users" description="Manage the people who can access this business." /><div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">The new user-management features are ready for the database update. Existing business access is unchanged.</div></AdminPage>;
   }
-
-  if (status === "invited") {
-    return (
-      <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-        Invite sent{email ? ` to ${email}` : ""}.
+  const { users, activeOwnerCount, canManageAccess } = userData;
+  const visibleUsers = users.filter(user => filter === "all" || user.status === filter);
+  const selectedUser = users.find(user => user.membershipId === param(params, "user"));
+  const requestedPage = Number(param(params, "activityPage") ?? 0);
+  const activityPage = Number.isSafeInteger(requestedPage) ? Math.max(0, Math.min(requestedPage, 10000)) : 0;
+  const activity = selectedUser ? await getBusinessAdminUserActivity(selectedUser.membershipId, activityPage) : { events: [], hasMore: false };
+  const events = activity.events.map(event => {
+    const actor = users.find(user => user.authUserId === event.actor_auth_user_id);
+    return { ...event, actor_name: event.actor_name || actor?.name || actor?.email || `Former user (${event.actor_auth_user_id.slice(0, 8)})` };
+  });
+  const returnHref = `/admin/settings/users?filter=${filter}`;
+  const userHref = (id: string) => `${returnHref}&user=${id}`;
+  return <AdminPage width="wide" className="space-y-6 pt-2">
+    <AdminPageHeader eyebrow="Settings" title="Users" description="Manage the people who can access this business." actions={canManageAccess ? <InviteUserButton /> : undefined} />
+    <section className="overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="flex items-center gap-3"><span className="rounded-xl bg-slate-100 p-2 text-slate-500"><UsersIcon className="h-5 w-5" /></span><h2 className="font-semibold text-slate-900">Business users</h2></div>
+        <nav aria-label="Filter users by status" className="flex flex-wrap gap-1">{filters.map(value => <Link key={value} href={`/admin/settings/users?filter=${value}`} aria-current={filter === value ? "page" : undefined} className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize ${filter === value ? "bg-orange-50 text-orange-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}>{value} <span className="ml-1 text-xs">{value === "all" ? users.length : users.filter(user => user.status === value).length}</span></Link>)}</nav>
       </div>
-    );
-  }
-
-  if (status === "granted") {
-    return (
-      <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-        Admin access granted{email ? ` to ${email}` : ""}.
-      </div>
-    );
-  }
-
-  if (status === "resent") {
-    return (
-      <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-        Invite resent{email ? ` to ${email}` : ""}.
-      </div>
-    );
-  }
-
-  if (status === "role-updated") {
-    return (
-      <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-        User role updated.
-      </div>
-    );
-  }
-
-  if (status === "removed") {
-    return (
-      <div className="rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-        User access removed.
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function OwnerRequiredPage() {
-  return (
-    <AdminPage width="standard" className="pt-2">
-      <AdminPageHeader
-        eyebrow="Settings"
-        title="Users"
-        description="Only active Owners can manage business admin users."
-      />
-
-      <section className="rounded-[14px] border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
-        <div className="flex gap-3">
-          <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 shrink-0" />
-          <div>
-            <h2 className="text-sm font-semibold">Owner access required</h2>
-            <p className="mt-1 text-sm leading-6">
-              Admins can use the business admin tools, but only Owners can invite, remove, or change user roles.
-            </p>
-          </div>
-        </div>
-      </section>
-    </AdminPage>
-  );
-}
-
-function AddUserForm() {
-  return (
-    <section className="rounded-[14px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex items-center gap-3">
-        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200">
-          <UserPlusIcon className="h-[18px] w-[18px]" />
-        </span>
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Invite User</h2>
-        </div>
-      </div>
-
-      <form action={inviteBusinessAdminUserAction} className="mt-4 grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_10rem_auto]">
-        <div>
-          <label htmlFor="email" className="text-sm font-semibold text-slate-700">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-            required
-          />
-        </div>
-
-        <div>
-          <label htmlFor="role" className="text-sm font-semibold text-slate-700">
-            Role
-          </label>
-          <select
-            id="role"
-            name="role"
-            defaultValue="admin"
-            className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-          >
-            <option value="admin">Admin</option>
-            <option value="owner">Owner</option>
-          </select>
-        </div>
-
-        <div className="flex items-end">
-          <FormSubmitButton loadingLabel="Sending..." className="admin-btn admin-btn-primary h-11 px-5">
-            Invite User
-          </FormSubmitButton>
-        </div>
-      </form>
+      {visibleUsers.length === 0 ? <div className="px-5 py-12 text-center text-sm text-slate-500">No {filter === "all" ? "" : `${filter} `}users to show.</div> : <>
+        <div className="hidden overflow-x-auto lg:block"><table className="w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr>{["Name", "Email", "Role", "Status", "Added", ""].map((label, index) => <th key={index} scope="col" className="px-5 py-3 font-semibold">{label || <span className="sr-only">Actions</span>}</th>)}</tr></thead>
+          <tbody className="divide-y divide-slate-100">{visibleUsers.map(user => <tr key={user.membershipId} className="hover:bg-slate-50/60">
+            <td className="max-w-xs px-5 py-5"><Link href={userHref(user.membershipId)} scroll={false} className="break-words font-semibold text-slate-900 hover:text-orange-600">{user.name || "Add name"}</Link>{user.isCurrentUser ? <p className="mt-1 text-xs text-slate-500">Current user</p> : null}</td>
+            <td className="max-w-xs break-all px-5 py-5 text-slate-600">{user.email ?? "Not available"}</td>
+            <td className="px-5 py-5 capitalize text-slate-600">{user.role}</td>
+            <td className="px-5 py-5"><UserStatusBadge status={user.status} />{user.status === "invited" && user.inviteDeliveryFailed ? <p className="mt-1 text-xs text-rose-600">Email not sent</p> : null}</td>
+            <td className="whitespace-nowrap px-5 py-5 text-slate-500">{new Intl.DateTimeFormat("en-US", {dateStyle:"medium", timeZone:"America/New_York"}).format(new Date(user.createdAt))}</td>
+            <td className="px-5 py-5 text-right"><Link href={userHref(user.membershipId)} scroll={false} aria-label={`Manage ${user.name || user.email || "user"}`} className="admin-btn admin-btn-secondary admin-btn-sm">Manage</Link></td>
+          </tr>)}</tbody>
+        </table></div>
+        <div className="divide-y divide-slate-100 lg:hidden">{visibleUsers.map(user => <article key={user.membershipId} className="p-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><Link href={userHref(user.membershipId)} scroll={false} className="break-words font-semibold text-slate-900">{user.name || "Add name"}</Link><p className="mt-1 break-all text-sm text-slate-500">{user.email}</p></div><Link href={userHref(user.membershipId)} scroll={false} className="text-sm font-semibold text-orange-600">Manage</Link></div><div className="mt-3 flex items-center gap-3"><span className="text-sm capitalize text-slate-600">{user.role}</span><UserStatusBadge status={user.status} />{user.isCurrentUser ? <span className="text-xs text-slate-500">You</span> : null}</div>{user.status === "invited" && user.inviteDeliveryFailed ? <p className="mt-2 text-xs text-rose-600">Invitation email not sent</p> : null}</article>)}</div>
+      </>}
     </section>
-  );
-}
-
-function UserBadges({ user }: { user: BusinessAdminUser }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <span
-        className={joinClasses(
-          "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-          roleBadgeClassName(user.role),
-        )}
-      >
-        {roleLabel(user.role)}
-      </span>
-      <span
-        className={joinClasses(
-          "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
-          statusBadgeClassName(user.status),
-        )}
-      >
-        {statusLabel(user.status)}
-      </span>
-    </div>
-  );
-}
-
-function RoleForm({
-  user,
-  activeOwnerCount,
-}: {
-  user: BusinessAdminUser;
-  activeOwnerCount: number;
-}) {
-  const isLastActiveOwner =
-    user.role === "owner" && user.status === "active" && activeOwnerCount <= 1;
-  const disabled = user.isCurrentUser || isLastActiveOwner;
-
-  return (
-    <form action={updateBusinessAdminUserRoleAction} className="flex flex-wrap items-center gap-2">
-      <input type="hidden" name="membershipId" value={user.membershipId} />
-      <select
-        name="role"
-        defaultValue={user.role}
-        disabled={disabled}
-        className="h-9 rounded-[8px] border border-slate-300 bg-white px-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
-        aria-label={`Role for ${user.email ?? user.authUserId}`}
-      >
-        <option value="admin">Admin</option>
-        <option value="owner">Owner</option>
-      </select>
-      <FormSubmitButton
-        loadingLabel="Saving..."
-        disabled={disabled}
-        className="admin-btn admin-btn-secondary admin-btn-sm"
-      >
-        Save
-      </FormSubmitButton>
-    </form>
-  );
-}
-
-function ResendInviteForm({ user }: { user: BusinessAdminUser }) {
-  if (user.status !== "pending") return null;
-
-  return (
-    <form action={resendBusinessAdminInvitationAction}>
-      <input type="hidden" name="membershipId" value={user.membershipId} />
-      <FormSubmitButton loadingLabel="Sending..." className="admin-btn admin-btn-secondary admin-btn-sm">
-        Resend Invite
-      </FormSubmitButton>
-    </form>
-  );
-}
-
-function RemoveForm({
-  user,
-  activeOwnerCount,
-}: {
-  user: BusinessAdminUser;
-  activeOwnerCount: number;
-}) {
-  const isLastActiveOwner =
-    user.role === "owner" && user.status === "active" && activeOwnerCount <= 1;
-
-  if (user.isCurrentUser) {
-    return (
-      <div className="text-xs leading-5 text-slate-500">
-        You cannot remove your own access.
-      </div>
-    );
-  }
-
-  if (isLastActiveOwner) {
-    return (
-      <div className="text-xs leading-5 text-slate-500">
-        This is the last active Owner.
-      </div>
-    );
-  }
-
-  return (
-    <form action={disableBusinessAdminUserAction} className="flex flex-wrap justify-end gap-2">
-      <input type="hidden" name="membershipId" value={user.membershipId} />
-      <input
-        name="confirmationEmail"
-        type="email"
-        placeholder={user.email ?? "Confirm email"}
-        aria-label={`Type ${user.email ?? "the user email"} to remove access`}
-        className="h-9 w-52 rounded-[8px] border border-slate-300 px-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
-        required
-      />
-      <FormSubmitButton loadingLabel="Removing..." className="admin-btn admin-btn-secondary admin-btn-sm">
-        Remove
-      </FormSubmitButton>
-    </form>
-  );
-}
-
-function UserRow({
-  user,
-  activeOwnerCount,
-}: {
-  user: BusinessAdminUser;
-  activeOwnerCount: number;
-}) {
-  return (
-    <tr className="border-b border-slate-100 last:border-0">
-      <td className="py-4 pl-4 pr-3 sm:pl-5">
-        <div className="min-w-[12rem]">
-          <div className="font-semibold text-slate-900">{user.name ?? "Not provided"}</div>
-          {user.isCurrentUser ? <div className="mt-1 text-xs text-slate-500">Current user</div> : null}
-        </div>
-      </td>
-      <td className="px-3 py-4 text-sm text-slate-600">{user.email ?? "Not available"}</td>
-      <td className="px-3 py-4">
-        <UserBadges user={user} />
-      </td>
-      <td className="px-3 py-4 text-sm text-slate-600">{formatDate(user.createdAt)}</td>
-      <td className="py-4 pl-3 pr-4 text-right sm:pr-5">
-        <div className="flex min-w-[18rem] flex-col items-end gap-2">
-          <RoleForm user={user} activeOwnerCount={activeOwnerCount} />
-          <div className="flex flex-wrap justify-end gap-2">
-            <ResendInviteForm user={user} />
-            <RemoveForm user={user} activeOwnerCount={activeOwnerCount} />
-          </div>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-function UserCard({
-  user,
-  activeOwnerCount,
-}: {
-  user: BusinessAdminUser;
-  activeOwnerCount: number;
-}) {
-  return (
-    <article className="border-b border-slate-100 p-4 last:border-0">
-      <div className="flex flex-col gap-3">
-        <div>
-          <div className="font-semibold text-slate-900">{user.name ?? "Not provided"}</div>
-          <div className="mt-1 break-all text-sm text-slate-600">{user.email ?? "Not available"}</div>
-          {user.isCurrentUser ? <div className="mt-1 text-xs text-slate-500">Current user</div> : null}
-        </div>
-        <UserBadges user={user} />
-        <div className="text-xs text-slate-500">Added {formatDate(user.createdAt)}</div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <RoleForm user={user} activeOwnerCount={activeOwnerCount} />
-          <ResendInviteForm user={user} />
-          <RemoveForm user={user} activeOwnerCount={activeOwnerCount} />
-        </div>
-      </div>
-    </article>
-  );
-}
-
-export default async function AdminUsersPage({
-  searchParams,
-}: {
-  searchParams?: Promise<SearchParams>;
-}) {
-  const session = await requireAdminOwner();
-
-  if (!isAdminBusinessOwner(session)) {
-    return <OwnerRequiredPage />;
-  }
-
-  const resolvedSearchParams = (await searchParams) ?? {};
-  const { users, activeOwnerCount } = await getBusinessAdminUsers();
-
-  return (
-    <AdminPage width="wide" className="space-y-6 pt-2">
-      <AdminPageHeader
-        eyebrow="Settings"
-        title="Users"
-        description="Manage who can access this business admin."
-      />
-
-      <Message params={resolvedSearchParams} />
-      <AddUserForm />
-
-      <section className="overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
-          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[14px] bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200">
-            <UsersIcon className="h-[18px] w-[18px]" />
-          </span>
-          <h2 className="text-sm font-semibold text-slate-900">Users</h2>
-        </div>
-
-        {users.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-slate-600 sm:px-5">
-            No users found.
-          </div>
-        ) : (
-          <>
-            <div className="hidden overflow-x-auto lg:block">
-              <table className="min-w-full divide-y divide-slate-100">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="py-3 pl-4 pr-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pl-5">
-                      Name
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Email
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Access
-                    </th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Added
-                    </th>
-                    <th className="py-3 pl-3 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 sm:pr-5">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white text-sm">
-                  {users.map((user) => (
-                    <UserRow key={user.membershipId} user={user} activeOwnerCount={activeOwnerCount} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="lg:hidden">
-              {users.map((user) => (
-                <UserCard key={user.membershipId} user={user} activeOwnerCount={activeOwnerCount} />
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-    </AdminPage>
-  );
+    {selectedUser ? <UserDetailsPanel key={selectedUser.membershipId} user={selectedUser} canManageAccess={canManageAccess} activeOwnerCount={activeOwnerCount} events={events} hasMore={activity.hasMore} activityPage={activityPage} initialTab={param(params, "tab") === "activity" ? "activity" : "profile"} returnHref={returnHref} detailHref={userHref(selectedUser.membershipId)} /> : null}
+  </AdminPage>;
 }

@@ -8,7 +8,11 @@ import {
 } from "@/lib/admin/auth";
 import { resolveAdminInviteDestination } from "@/lib/admin/invite-acceptance";
 
+import { acceptBusinessAdminInvitation, BusinessAdminUserMutationError } from "@/lib/admin/users";
+
 type SessionPayload = {
+  firstName?: string;
+  lastName?: string;
   tokenHash?: string;
   type?: string | null;
   accessToken?: string;
@@ -106,8 +110,16 @@ export async function POST(req: Request) {
       return badRequest("Admin callback did not include usable session data.");
     }
 
-    const businessOptions = userId ? await loadActiveAdminBusinessOptionsForUser(userId) : [];
     const intendedBusinessId = body.intendedBusinessId?.trim() || null;
+    if (body.type === "invite" && intendedBusinessId) {
+      try {
+        await acceptBusinessAdminInvitation(userId, intendedBusinessId, body.firstName, body.lastName);
+      } catch (error) {
+        if (error instanceof BusinessAdminUserMutationError) return badRequest(error.message, 403);
+        throw error;
+      }
+    }
+    const businessOptions = userId ? await loadActiveAdminBusinessOptionsForUser(userId) : [];
     const destination = resolveAdminInviteDestination(businessOptions, intendedBusinessId);
 
     if (!destination.ok) {

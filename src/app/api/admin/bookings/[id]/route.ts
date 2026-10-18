@@ -9,7 +9,7 @@ function isUuid(v: string) {
   );
 }
 
-type RouteContext = { params?: Promise<{ id?: string }> | { id?: string } };
+type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: Request, ctx: RouteContext) {
   try {

@@ -91,8 +91,10 @@ export function AdminSummaryCard({
   compact?: boolean;
   stretch?: boolean;
   active?: boolean;
-  layout?: "default" | "pricing";
+  /** The rows layout shares header/value tracks with a parent CSS grid. */
+  layout?: "default" | "pricing" | "rows";
 }) {
+  const sharedRows = layout === "rows" && "row-span-2 grid min-w-0 grid-rows-subgrid";
   const shellClasses = joinClasses(
     adminSummaryCardShell(
       tone,
@@ -100,7 +102,8 @@ export function AdminSummaryCard({
         ? "p-4 transition hover:-translate-y-0.5 hover:shadow-md"
         : "p-5 transition hover:-translate-y-0.5 hover:shadow-md",
     ),
-    stretch && "flex h-full flex-col",
+    sharedRows,
+    stretch && layout !== "rows" && "flex h-full flex-col",
     active && activeToneClasses(tone),
     active && compact && "-translate-y-0.5",
   );
@@ -121,6 +124,32 @@ export function AdminSummaryCard({
             <div className="flex h-12 items-center text-sm font-medium leading-5 text-slate-600">{label}</div>
             <div className="mt-2 text-lg font-semibold tracking-tight text-slate-950">{value}</div>
           </div>
+        </div>
+      </div>
+    ) : layout === "rows" ? (
+      <div className={shellClasses}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 text-sm font-medium text-slate-500">{label}</div>
+          <span
+            className={joinClasses(
+              "inline-flex shrink-0 items-center justify-center rounded-[14px]",
+              compact ? "h-10 w-10" : "h-11 w-11",
+              chipToneClasses(tone),
+            )}
+          >
+            <Icon className={compact ? "h-[18px] w-[18px]" : "h-5 w-5"} />
+          </span>
+        </div>
+        <div className="min-w-0">
+          <div
+            className={joinClasses(
+              "break-words font-semibold tracking-tight text-slate-900",
+              compact ? "text-[1.75rem]" : "text-3xl",
+            )}
+          >
+            {value}
+          </div>
+          {detail ? <div className="mt-2 text-xs text-slate-500">{detail}</div> : null}
         </div>
       </div>
     ) : (
@@ -152,11 +181,11 @@ export function AdminSummaryCard({
     );
 
   return href ? (
-    <div className={joinClasses(stretch && "h-full", "relative")}>
+    <div className={joinClasses(sharedRows, stretch && "h-full", "relative")}>
       <Link
         href={href}
         aria-current={active ? "page" : undefined}
-        className={joinClasses(stretch && "block h-full", "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2 rounded-[14px]")}
+        className={joinClasses(sharedRows, stretch && (layout === "rows" ? "h-full" : "block h-full"), "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2 rounded-[14px]")}
       >
         {content}
       </Link>
@@ -178,7 +207,8 @@ export function AdminSummaryCard({
       onClick={onClick}
       aria-pressed={active}
       className={joinClasses(
-        stretch && "block h-full w-full text-left",
+        sharedRows,
+        stretch && (layout === "rows" ? "h-full w-full text-left" : "block h-full w-full text-left"),
         "cursor-pointer rounded-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
       )}
     >

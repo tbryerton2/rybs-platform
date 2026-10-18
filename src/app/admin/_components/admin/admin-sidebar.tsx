@@ -55,7 +55,7 @@ export function AdminSidebar({
     >
       <div className={["border-b border-slate-200/80", collapsed ? "px-3 pb-3 pt-4" : "px-5 pb-[14px] pt-[18px]"].join(" ")}>
         <div className={["flex items-start", collapsed ? "justify-center" : "justify-between gap-3"].join(" ")}>
-          <div className={collapsed ? "hidden" : "min-w-0 max-w-[12.5rem]"}>
+          <div className={collapsed ? "hidden" : "flex min-w-0 max-w-[12.5rem] flex-col items-start"}>
             <a
               href="/"
               target="_blank"
@@ -64,7 +64,6 @@ export function AdminSidebar({
             >
               {businessName}
             </a>
-            <h1 className="mt-2.5 text-[1.6rem] font-semibold tracking-tight text-slate-900">Admin</h1>
             {canSwitchBusiness ? (
               <Link
                 href="/admin/select-business"

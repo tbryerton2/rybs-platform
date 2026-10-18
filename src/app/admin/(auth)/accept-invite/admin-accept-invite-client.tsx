@@ -25,7 +25,7 @@ function createBrowserAdminAuthClient() {
   );
 }
 
-async function finishAdminSession(session: Session, intendedBusinessId: string | null) {
+async function finishAdminSession(session: Session, intendedBusinessId: string | null, firstName: string, lastName: string) {
   const response = await fetch("/admin/auth/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -34,6 +34,8 @@ async function finishAdminSession(session: Session, intendedBusinessId: string |
       refreshToken: session.refresh_token,
       type: "invite",
       intendedBusinessId,
+      firstName,
+      lastName,
     }),
   });
 
@@ -61,6 +63,8 @@ export function AdminAcceptInviteClient({
   const router = useRouter();
   const authClient = useMemo(() => createBrowserAdminAuthClient(), []);
   const [state, setState] = useState<InviteState>({ status: "checking" });
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -126,6 +130,8 @@ export function AdminAcceptInviteClient({
           throw new Error("This invitation link is missing session data.");
         }
 
+        setFirstName(session.user.user_metadata?.first_name || "");
+        setLastName(session.user.user_metadata?.last_name || "");
         setState({ status: "ready", session });
       } catch (error) {
         setState({
@@ -144,6 +150,11 @@ export function AdminAcceptInviteClient({
 
     if (state.status !== "ready") {
       setSubmitError("Your invitation session is not ready yet.");
+      return;
+    }
+
+    if (!firstName.trim() || firstName.trim().length > 120 || !lastName.trim() || lastName.trim().length > 120) {
+      setSubmitError("Enter first and last names, each between 1 and 120 characters.");
       return;
     }
 
@@ -172,7 +183,7 @@ export function AdminAcceptInviteClient({
         search: window.location.search,
         hash: "",
       });
-      const redirectTo = await finishAdminSession(state.session, invite.intendedBusinessId);
+      const redirectTo = await finishAdminSession(state.session, invite.intendedBusinessId, firstName.trim(), lastName.trim());
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {
@@ -237,6 +248,13 @@ export function AdminAcceptInviteClient({
       ) : null}
 
       <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="admin-invite-firstName" className="text-sm font-medium text-slate-700">First name</label>
+          <input id="admin-invite-firstName" autoComplete="given-name" required maxLength={120} value={firstName}
+            onChange={(event) => setFirstName(event.target.value)}
+            className="mt-2 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-slate-400" /></div><div><label htmlFor="admin-invite-lastName" className="text-sm font-medium text-slate-700">Last name</label>
+          <input id="admin-invite-lastName" autoComplete="family-name" required maxLength={120} value={lastName}
+            onChange={(event) => setLastName(event.target.value)}
+            className="mt-2 w-full rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none focus:border-slate-400" /></div></div>
         <div>
           <label htmlFor="admin-invite-password" className="text-sm font-medium text-slate-700">
             Password

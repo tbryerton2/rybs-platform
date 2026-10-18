@@ -289,13 +289,21 @@ async function loadAdminBusinessTenant(membership: AdminMembership) {
 }
 
 async function loadActiveAdminMembershipsForUser(userId: string) {
-  const membershipLookup = await supabaseAdmin
+  let membershipLookup = await supabaseAdmin
     .from("business_admin_memberships")
     .select("id, business_id, auth_user_id, role, status, created_at, updated_at")
     .eq("auth_user_id", userId)
     .in("role", ["owner", "admin"])
-    .eq("status", "active");
+    .eq("status", "active")
+    .not("accepted_at", "is", null);
 
+  // Allow the existing app to run while the additive lifecycle migration is rolled out.
+  // Once accepted_at exists, all requests must enforce invitation acceptance.
+  if (membershipLookup.error?.code === "42703" && membershipLookup.error.message.includes("accepted_at")) {
+    membershipLookup = await supabaseAdmin.from("business_admin_memberships")
+      .select("id, business_id, auth_user_id, role, status, created_at, updated_at")
+      .eq("auth_user_id", userId).in("role", ["owner", "admin"]).eq("status", "active");
+  }
   if (membershipLookup.error) {
     throw new Error(membershipLookup.error.message);
   }

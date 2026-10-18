@@ -1,5 +1,6 @@
 type AdminUserInviteEmailInput = {
   businessName: string;
+  recipientName?: string;
   inviteUrl: string;
   roleLabel: string;
   supportEmail?: string | null;
@@ -16,6 +17,7 @@ function escapeHtml(value: string) {
 
 export function buildAdminUserInviteEmail({
   businessName,
+  recipientName,
   inviteUrl,
   roleLabel,
   supportEmail,
@@ -32,7 +34,10 @@ export function buildAdminUserInviteEmail({
   const escapedRoleLabel = escapeHtml(roleLabel);
   const escapedSupportLine = escapeHtml(supportLine);
 
+  const greeting = recipientName ? `Hi ${recipientName},` : "Hello,";
   const text = `
+${greeting}
+
 You've been invited to ${businessName} admin as ${roleLabel}.
 
 Accept the invitation:
@@ -46,6 +51,7 @@ ${supportLine}
   const html = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
       <h1 style="margin-bottom: 16px;">You're invited to ${escapedBusinessName} admin</h1>
+      <p>${escapeHtml(greeting)}</p>
       <p>You've been invited as <strong>${escapedRoleLabel}</strong>.</p>
       <p style="margin: 24px 0;">
         <a href="${escapedInviteUrl}" style="display: inline-block; border-radius: 8px; background: #111827; color: #ffffff; padding: 12px 18px; text-decoration: none; font-weight: bold;">

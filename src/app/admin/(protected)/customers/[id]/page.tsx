@@ -295,9 +295,10 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-x-4 gap-y-2 md:grid-cols-2 xl:grid-cols-5">
         <AdminSummaryCard
           label="Most Recent Booking"
+          layout="rows"
           value={mostRecentBookingValue}
           icon={CalendarDaysIcon}
           tone="blue"
@@ -307,6 +308,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         />
         <AdminSummaryCard
           label="Total Bookings"
+          layout="rows"
           value={bookings.length}
           icon={HashtagIcon}
           tone="violet"
@@ -315,6 +317,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         />
         <AdminSummaryCard
           label="Active Bookings"
+          layout="rows"
           value={activeBookings.length}
           icon={SignalIcon}
           tone="slate"
@@ -323,6 +326,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         />
         <AdminSummaryCard
           label="Portal Status"
+          layout="rows"
           value={formatEnumLabel(customer.portal_status ?? "invited")}
           icon={UserCircleIcon}
           tone={portalStatusTone}
@@ -331,6 +335,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
         />
         <AdminSummaryCard
           label="Lifetime Value"
+          layout="rows"
           value={formatUsd(lifetimeValue)}
           icon={CurrencyDollarIcon}
           tone="amber"
@@ -356,16 +361,16 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div>
             {bookings.length === 0 ? (
               <div className="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-4 text-sm text-slate-500">
                 No bookings are linked to this customer yet.
               </div>
             ) : (
-              <>
+              <div className="grid gap-x-4 gap-y-3 lg:grid-cols-[minmax(6rem,auto)_minmax(0,auto)_minmax(0,auto)_minmax(11rem,max-content)_3.5rem]">
                 <div
                   role="row"
-                  className="hidden rounded-[14px] border border-slate-200/90 bg-slate-100 px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px] lg:items-center lg:gap-4"
+                  className="hidden rounded-[14px] border border-slate-200/90 bg-slate-100 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600 lg:col-span-full lg:grid lg:grid-cols-subgrid lg:items-center lg:gap-4"
                 >
                   <div>ID / Status</div>
                   <div>Customer</div>
@@ -375,7 +380,7 @@ export default async function CustomerDetailPage({ params, searchParams }: PageP
                 {visibleLinkedBookings.map((booking) => (
                   <BookingListRow key={booking.id} booking={booking} />
                 ))}
-              </>
+              </div>
             )}
           </div>
 

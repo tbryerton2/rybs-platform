@@ -153,7 +153,7 @@ function MetricTabs({
 export default async function ZipMapPage({
   searchParams,
 }: {
-  searchParams: SearchParams | Promise<SearchParams>;
+  searchParams: Promise<SearchParams>;
 }) {
   const adminSession = await requireAdminOwner();
   const resolvedSearchParams = await Promise.resolve(searchParams);

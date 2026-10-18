@@ -32,7 +32,7 @@ test("admin invite password update success routes directly to the invited tenant
   const client = readRepoFile("src/app/admin/(auth)/accept-invite/admin-accept-invite-client.tsx");
   const sessionRoute = readRepoFile("src/app/admin/(auth)/auth/session/route.ts");
 
-  assert.match(client, /const redirectTo = await finishAdminSession\(state\.session, invite\.intendedBusinessId\)/);
+  assert.match(client, /const redirectTo = await finishAdminSession\(state\.session, invite\.intendedBusinessId, firstName\.trim\(\), lastName\.trim\(\)\)/);
   assert.match(client, /router\.replace\(redirectTo\)/);
   assert.match(sessionRoute, /resolveAdminInviteDestination\(businessOptions, intendedBusinessId\)/);
   assert.match(sessionRoute, /setAdminSelectedBusinessCookie\(response, destination\.selectedBusiness\.id\)/);

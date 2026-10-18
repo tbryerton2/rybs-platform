@@ -1,108 +1,47 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { AdminAccessDeniedError } from "@/lib/admin/auth";
 import {
   BusinessAdminUserMutationError,
-  disableBusinessAdminUser,
-  inviteBusinessAdminUser,
-  resendBusinessAdminInvitation,
-  updateBusinessAdminUserRole,
+  disableBusinessAdminUser, inviteBusinessAdminUser, resendBusinessAdminInvitation,
+  updateBusinessAdminUserRole, updateBusinessAdminUserName, reactivateBusinessAdminUser,
 } from "@/lib/admin/users";
+import type { UserActionState } from "@/lib/admin/user-management-types";
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
 }
-
-function redirectMutationError(error: BusinessAdminUserMutationError): never {
-  redirect(`/admin/settings/users?error=${encodeURIComponent(error.message)}`);
-}
-
-function redirectUnexpectedMutationError(error: unknown): never {
-  console.error("[admin-users-action]", {
-    event: "unexpected_mutation_error",
-    message: error instanceof Error ? error.message : String(error),
-  });
-
-  redirect(
-    `/admin/settings/users?error=${encodeURIComponent("We could not update Users. Try again in a moment.")}`,
-  );
-}
-
-export async function inviteBusinessAdminUserAction(formData: FormData) {
-  let result: Awaited<ReturnType<typeof inviteBusinessAdminUser>>;
-
+async function mutate(action: () => Promise<unknown>, message: string): Promise<UserActionState> {
   try {
-    result = await inviteBusinessAdminUser({
-      email: formString(formData, "email"),
-      role: formString(formData, "role"),
-    });
+    const result = await action();
+    revalidatePath("/admin/settings/users");
+    return { message, ...(typeof result === "object" && result && "membershipId" in result ? { membershipId: String(result.membershipId) } : {}) };
   } catch (error) {
-    if (error instanceof BusinessAdminUserMutationError) {
-      redirectMutationError(error);
-    }
-
-    redirectUnexpectedMutationError(error);
+    // Preserve Next.js navigation (e.g. a session expiring while a dialog is open).
+    if (error && typeof error === "object" && "digest" in error && String(error.digest).startsWith("NEXT_REDIRECT")) throw error;
+    revalidatePath("/admin/settings/users");
+    if (error instanceof BusinessAdminUserMutationError || error instanceof AdminAccessDeniedError) return { error: error.message };
+    console.error("[admin-users-action]", { event: "unexpected_mutation_error", message: error instanceof Error ? error.message : String(error) });
+    return { error: "We could not update this user. Refresh to check the latest state, then try again." };
   }
-
-  revalidatePath("/admin/settings/users");
-  redirect(
-    `/admin/settings/users?status=${result.pending ? "invited" : "granted"}&email=${encodeURIComponent(result.email)}`,
-  );
 }
-
-export async function resendBusinessAdminInvitationAction(formData: FormData) {
-  let result: Awaited<ReturnType<typeof resendBusinessAdminInvitation>>;
-
-  try {
-    result = await resendBusinessAdminInvitation({
-      membershipId: formString(formData, "membershipId"),
-    });
-  } catch (error) {
-    if (error instanceof BusinessAdminUserMutationError) {
-      redirectMutationError(error);
-    }
-
-    redirectUnexpectedMutationError(error);
-  }
-
-  revalidatePath("/admin/settings/users");
-  redirect(`/admin/settings/users?status=resent&email=${encodeURIComponent(result.email)}`);
+export async function inviteBusinessAdminUserAction(_: UserActionState, formData: FormData) {
+  return mutate(() => inviteBusinessAdminUser({ firstName: formString(formData, "firstName"), lastName: formString(formData, "lastName"), email: formString(formData, "email"), role: formString(formData, "role") }), "Invitation sent.");
 }
-
-export async function updateBusinessAdminUserRoleAction(formData: FormData) {
-  try {
-    await updateBusinessAdminUserRole({
-      membershipId: formString(formData, "membershipId"),
-      role: formString(formData, "role"),
-    });
-  } catch (error) {
-    if (error instanceof BusinessAdminUserMutationError) {
-      redirectMutationError(error);
-    }
-
-    redirectUnexpectedMutationError(error);
-  }
-
-  revalidatePath("/admin/settings/users");
-  redirect("/admin/settings/users?status=role-updated");
+export async function resendBusinessAdminInvitationAction(_: UserActionState, formData: FormData) {
+  return mutate(() => resendBusinessAdminInvitation({ membershipId: formString(formData, "membershipId") }), "Invitation resent.");
 }
-
-export async function disableBusinessAdminUserAction(formData: FormData) {
-  try {
-    await disableBusinessAdminUser({
-      membershipId: formString(formData, "membershipId"),
-      confirmationEmail: formString(formData, "confirmationEmail"),
-    });
-  } catch (error) {
-    if (error instanceof BusinessAdminUserMutationError) {
-      redirectMutationError(error);
-    }
-
-    redirectUnexpectedMutationError(error);
-  }
-
-  revalidatePath("/admin/settings/users");
-  redirect("/admin/settings/users?status=removed");
+export async function updateBusinessAdminUserRoleAction(_: UserActionState, formData: FormData) {
+  return mutate(() => updateBusinessAdminUserRole({ membershipId: formString(formData, "membershipId"), role: formString(formData, "role") }), "Role updated.");
+}
+export async function updateBusinessAdminUserNameAction(_: UserActionState, formData: FormData) {
+  return mutate(() => updateBusinessAdminUserName({ membershipId: formString(formData, "membershipId"), firstName: formString(formData, "firstName"), lastName: formString(formData, "lastName") }), "Name saved.");
+}
+export async function disableBusinessAdminUserAction(_: UserActionState, formData: FormData) {
+  return mutate(() => disableBusinessAdminUser({ membershipId: formString(formData, "membershipId"), confirmationEmail: formString(formData, "confirmationEmail") }), "Business access deactivated.");
+}
+export async function reactivateBusinessAdminUserAction(_: UserActionState, formData: FormData) {
+  return mutate(() => reactivateBusinessAdminUser({ membershipId: formString(formData, "membershipId") }), "Business access reactivated.");
 }

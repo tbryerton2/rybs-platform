@@ -82,10 +82,10 @@ export function BookingListRow({ booking }: BookingListRowProps) {
     <Link
       href={`/admin/bookings/${encodeURIComponent(booking.id)}`}
       aria-label={`Open booking ${getCustomerFacingBookingLabel(booking.booking_ref)}`}
-      className="group block rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+      className="group block min-w-0 rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm transition [overflow-wrap:anywhere] hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50/70 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2 lg:col-span-full lg:grid lg:grid-cols-subgrid"
     >
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)_minmax(260px,0.86fr)_minmax(240px,0.95fr)_56px]">
-        <div className="space-y-3">
+      <div className="grid min-w-0 items-start gap-4 lg:col-span-full lg:grid-cols-subgrid">
+        <div className="min-w-0 space-y-3">
           <div className="text-base font-semibold tracking-tight text-slate-900 transition group-hover:text-slate-950 group-focus-visible:text-slate-950">
             {getCustomerFacingBookingLabel(booking.booking_ref)}
           </div>
@@ -96,7 +96,7 @@ export function BookingListRow({ booking }: BookingListRowProps) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <div className="text-sm font-semibold text-slate-900">
             {formatCustomerName(booking.customer_first_name, booking.customer_last_name, "No customer name")}
           </div>
@@ -113,7 +113,7 @@ export function BookingListRow({ booking }: BookingListRowProps) {
           </div>
         </div>
 
-        <dl className="space-y-2 text-sm text-slate-600">
+        <dl className="min-w-0 space-y-2 text-sm text-slate-600">
           <div className="flex items-baseline gap-2">
             <dt className="shrink-0 text-xs font-medium uppercase tracking-[0.08em] text-slate-400">Created:</dt>
             <dd className="min-w-0 font-medium text-slate-900">{formatDateTimeLabel(booking.created_at)}</dd>
