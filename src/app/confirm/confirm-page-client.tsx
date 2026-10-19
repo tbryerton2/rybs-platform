@@ -634,7 +634,6 @@ export default function ConfirmPageClient({ content }: ConfirmPageClientProps) {
                   <SummaryRow
                     label="Delivery date"
                     value={isYMD(deliveryDate) ? formatDateLong(deliveryDate) : "—"}
-                    helper={content.deliveryTimeNote}
                   />
                   <SummaryRow
                     label="Pickup date"

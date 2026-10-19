@@ -4,6 +4,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  HoldCountdownBanner,
+  useBookingHoldCountdown,
+} from "@/components/booking/hold-countdown-banner";
+import {
   priceQuoteMatchesSelection,
   type BookingPriceQuote,
 } from "@/lib/booking-pricing";
@@ -221,7 +225,11 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
   const [error, setError] = useState<string | null>(null);
   const [isPaying, setIsPaying] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const {
+    formattedTime: holdFormattedTime,
+    holdExpired,
+    hasHoldExpiration,
+  } = useBookingHoldCountdown(draft.holdExpiresAt);
   const [hydrated, setHydrated] = useState(false);
   const [squareCard, setSquareCard] = useState<SquareCard | null>(null);
   const [squareConfig, setSquareConfig] = useState<SquareCheckoutConfig | null>(null);
@@ -245,12 +253,6 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     } finally {
       setHydrated(true);
     }
-  }, []);
-
-  // Tick every 1s so we can disable payment instantly when the hold expires
-  useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
@@ -287,8 +289,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
       return;
     }
 
-    const expires = Date.parse(draft.holdExpiresAt);
-    if (!Number.isFinite(expires) || expires <= nowMs) {
+    if (!hasHoldExpiration || holdExpired) {
       router.replace("/book/date");
       return;
     }
@@ -312,7 +313,8 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     draft.pickupDate,
     draft.priceQuote,
     draft.zip,
-    nowMs,
+    hasHoldExpiration,
+    holdExpired,
     router,
   ]);
 
@@ -589,23 +591,6 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
 
     return "—";
   }, [draft.pickupDate, draft.priceQuote?.effectivePickupDate, draft.priceQuote?.standardPickupDate]);
-
-  const holdExpiresAtMs = useMemo(() => {
-    const iso = (draft.holdExpiresAt || "").trim();
-    if (!iso) return null;
-    const ms = Date.parse(iso);
-    return Number.isFinite(ms) ? ms : null;
-  }, [draft.holdExpiresAt]);
-
-  const secondsLeft = useMemo(() => {
-    if (!holdExpiresAtMs) return null;
-    return Math.floor((holdExpiresAtMs - nowMs) / 1000);
-  }, [holdExpiresAtMs, nowMs]);
-
-  const holdExpired = useMemo(() => {
-    if (secondsLeft == null) return false;
-    return secondsLeft <= 0;
-  }, [secondsLeft]);
 
   function getCheckoutSubmissionDetails() {
     const priceQuote = draft.priceQuote;
@@ -902,6 +887,10 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
           </div>
 
           <section className="mt-8 space-y-6">
+            <HoldCountdownBanner
+              formattedTime={holdExpired ? null : holdFormattedTime}
+            />
+
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <div className="text-sm font-semibold text-slate-900">{content.orderSummaryTitle}</div>
 

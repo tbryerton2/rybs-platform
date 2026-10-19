@@ -1325,23 +1325,7 @@ export default function DateStepPageClient({ content }: DateStepPageClientProps)
               {isYmd(normalizedDate) && draftQuote ? (
                 <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
                   <div>
-                    <h3 className="text-lg font-semibold text-slate-900">Rental timing</h3>
-                  </div>
-
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 text-sm">
-                    <div className="flex items-center justify-between gap-4 px-4 py-3">
-                      <span className="text-slate-600">Rental period</span>
-                      <span className="text-right font-semibold text-slate-900">
-                        {standardRentalDays} day{standardRentalDays === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                    <div className="border-t border-slate-200" />
-                    <div className="flex items-center justify-between gap-4 px-4 py-3">
-                      <span className="text-slate-600">Extra day rate</span>
-                      <span className="text-right font-semibold text-slate-900">
-                        {formatUsdFromCents(dailyOveragePriceCents)} / day
-                      </span>
-                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900">Rental options &amp; pricing</h3>
                   </div>
 
                   {pickupCap.state === "loading" ? (

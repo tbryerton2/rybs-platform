@@ -643,7 +643,7 @@ const BOOKING_SUMMARY_FALLBACK: BookingSummaryContent = {
 };
 
 const BOOKING_CONFIRM_FALLBACK: BookingConfirmContent = {
-  title: "Review Your Booking",
+  title: "Review your booking",
   description: "Review your details. We’ll finalize everything on the next step.",
   reorderTitle: "New booking based on a previous rental",
   holdBannerTitle: "{time} left to complete your booking",
@@ -1405,7 +1405,10 @@ export async function getBookingConfirmContent(
       : deliveryTimeNote;
 
   return {
-    title: title === "Confirm Your Booking" ? BOOKING_CONFIRM_FALLBACK.title : title,
+    title:
+      title.trim() === "Confirm Your Booking" || title.trim() === "Review Your Booking"
+        ? BOOKING_CONFIRM_FALLBACK.title
+        : title,
     description: asString(raw.description, BOOKING_CONFIRM_FALLBACK.description),
     reorderTitle: asString(raw.reorderTitle, BOOKING_CONFIRM_FALLBACK.reorderTitle),
     holdBannerTitle: asString(raw.holdBannerTitle, BOOKING_CONFIRM_FALLBACK.holdBannerTitle),
