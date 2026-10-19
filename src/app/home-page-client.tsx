@@ -681,8 +681,8 @@ export default function HomePageClient({
     return query ? `/pricing?${query}` : null;
   }
 
-  const checkAvailability = async () => {
-    if (!zipValid) {
+  const checkAvailability = async (zipValue = zipDigits) => {
+    if (!/^\d{5}$/.test(zipValue)) {
       return;
     }
 
@@ -690,7 +690,7 @@ export default function HomePageClient({
       const res = await fetch("/api/check-zip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ zip: zipDigits }),
+        body: JSON.stringify({ zip: zipValue }),
       });
 
       const data = await parseJsonResponse(res);
@@ -701,7 +701,7 @@ export default function HomePageClient({
         return;
       }
 
-      const nextHref = buildPricingHref(zipDigits);
+      const nextHref = buildPricingHref(zipValue);
       if (!nextHref) {
         nudgeZipUnsupported();
         return;
@@ -720,6 +720,16 @@ export default function HomePageClient({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSelectZip = async (selectedZip: string) => {
+    if (loading) return;
+
+    setZip(selectedZip);
+    setZipUnsupported(false);
+    setServiceAreaOpen(false);
+    setLoading(true);
+    await checkAvailability(selectedZip);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -867,11 +877,16 @@ export default function HomePageClient({
                         {servedZipCodes.length > 0 ? (
                           <ul className="mt-3 grid max-h-[min(50vh,360px)] grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-2 overflow-y-auto pr-1 text-sm text-slate-700">
                             {servedZipCodes.map((servedZip) => (
-                              <li
-                                key={servedZip}
-                                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center font-semibold text-slate-800 shadow-sm"
-                              >
-                                {servedZip}
+                              <li key={servedZip}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectZip(servedZip)}
+                                  disabled={loading}
+                                  aria-label={`Check availability for ZIP ${servedZip}`}
+                                  className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-center font-semibold text-slate-800 shadow-sm transition hover:border-[#F97316] hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#F97316] disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {servedZip}
+                                </button>
                               </li>
                             ))}
                           </ul>

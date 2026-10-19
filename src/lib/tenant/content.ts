@@ -590,7 +590,7 @@ const BOOKING_ADDRESS_FALLBACK: BookingAddressContent = {
 };
 
 const BOOKING_DATE_FALLBACK: BookingDateContent = {
-  title: "Choose a delivery day",
+  title: "Choose a delivery date",
   description: "Availability is visible up front, so the next opening is easy to spot.",
   earliestAvailablePrefix: "Earliest available delivery:",
   holdNoteTemplate: "We'll hold your selected dates for {minutes} minutes while you finish booking.",
@@ -1268,7 +1268,10 @@ export async function getBookingDateContent(
   const footerNote = asString(raw.footerNote, BOOKING_DATE_FALLBACK.footerNote);
 
   return {
-    title: title.trim() === "Choose an open delivery day" ? BOOKING_DATE_FALLBACK.title : title,
+    title:
+      title.trim() === "Choose an open delivery day" || title.trim() === "Choose a delivery day"
+        ? BOOKING_DATE_FALLBACK.title
+        : title,
     description: asString(raw.description, BOOKING_DATE_FALLBACK.description),
     earliestAvailablePrefix:
       earliestAvailablePrefix.trim() === "Earliest available:"
