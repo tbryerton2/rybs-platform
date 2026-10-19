@@ -15,6 +15,7 @@ import {
 import { AdminPage, AdminPageHeader } from "../_components/admin/admin-page";
 import { NeedsAttentionList, type NeedsAttentionRow } from "../_components/NeedsAttentionList";
 import { SnapshotCard } from "../_components/SnapshotCard";
+import { RevenueSnapshotChart } from "../_components/RevenueSnapshotChart";
 import { getDumpsters } from "./equipment/dumpsters/data";
 import {
   getFleetEquipmentInspectionStatusMap,
@@ -304,52 +305,6 @@ function SectionCard({
   );
 }
 
-function MiniRevenueChart({
-  values,
-}: {
-  values: Array<{ label: string; value: number }>;
-}) {
-  const maxValue = Math.max(...values.map((entry) => entry.value), 1);
-  const hasChartData = values.some((entry) => entry.value > 0);
-  const meaningfulPoints = values.filter((entry) => entry.value > 0).length;
-
-  if (!hasChartData || meaningfulPoints < 2) {
-    return (
-      <div className="rounded-[14px] bg-slate-50/60 px-4 py-6 text-center">
-        <div className="text-sm font-semibold text-slate-900">Not enough recent revenue to chart yet</div>
-        <div className="mt-1 text-xs leading-5 text-slate-500">
-          This view will show a trend once multiple recent periods have booked revenue.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-[14px] bg-slate-50/60 px-4 py-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Last 30 Days</div>
-        <div className="text-xs font-medium text-slate-500">Booked revenue by period</div>
-      </div>
-      <div className="flex h-36 items-end gap-3">
-        {values.map((entry) => (
-          <div key={entry.label} className="flex min-w-0 flex-1 flex-col items-center gap-3">
-            <div className="text-[11px] font-semibold text-slate-500">
-              {formatUsd(entry.value, { maximumFractionDigits: 0 })}
-            </div>
-            <div
-              className="w-full rounded-t-2xl bg-gradient-to-t from-[#F97316] via-orange-500 to-orange-300 shadow-[0_8px_18px_rgba(249,115,22,0.18)]"
-              style={{ height: `${Math.max((entry.value / maxValue) * 100, 14)}%` }}
-            />
-            <div className="text-center">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{entry.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function FunnelBarRow({
   label,
   value,
@@ -568,7 +523,7 @@ export default async function AdminDashboardPage() {
   );
   const avgBookingDollars = last30Bookings.length > 0 ? bookedRevenue30Dollars / last30Bookings.length : null;
 
-  const weekLabels = ["Wk 1", "Wk 2", "Wk 3", "Wk 4"];
+  const periodStarts = [0, 8, 15, 23];
   const revenueByWeek = [0, 0, 0, 0];
   const last30StartDate = new Date(last30StartIso);
 
@@ -580,8 +535,12 @@ export default async function AdminDashboardPage() {
     revenueByWeek[bucketIndex] += centsToDollars(booking.total_price_cents) ?? 0;
   }
 
-  const revenueTrend = weekLabels.map((label, index) => ({
-    label,
+  const periodDateLabel = (dayOffset: number) => {
+    const date = new Date(last30StartDate.getTime() + dayOffset * 86400000);
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(date);
+  };
+  const revenueTrend = periodStarts.map((start, index) => ({
+    label: `${periodDateLabel(start)} – ${periodDateLabel((periodStarts[index + 1] ?? 30) - 1)}`,
     value: revenueByWeek[index],
   }));
 
@@ -903,7 +862,7 @@ export default async function AdminDashboardPage() {
           actionHref="/admin/financials"
           actionLabel="Open Financials"
         >
-          <MiniRevenueChart values={revenueTrend} />
+          <RevenueSnapshotChart values={revenueTrend} />
 
           <div className="mt-6 grid gap-x-8 gap-y-6 sm:grid-cols-2">
             {[

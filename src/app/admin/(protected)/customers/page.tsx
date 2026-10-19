@@ -20,7 +20,6 @@ import { ShowCaption } from "@/app/admin/_components/admin/show-caption";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { combineCustomerNameParts } from "@/lib/customer-name";
 import { requireAdminOwner } from "@/lib/admin/auth";
-import { formatEnumLabel } from "@/lib/admin/enum-label";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type CustomerListView = "all" | "new" | "repeat";
@@ -69,7 +68,7 @@ function formatDate(value: string | null) {
     month: "short",
     day: "numeric",
     year: "numeric",
-    timeZone: "America/New_York",
+    timeZone: /^\d{4}-\d{2}-\d{2}$/.test(value) ? "UTC" : "America/New_York",
   }).format(new Date(value));
 }
 
@@ -251,7 +250,7 @@ export default async function AdminCustomersPage({
             href={buildCustomersHref("all")}
           />
           <AdminSummaryCard
-            label="New customers this month"
+            label="Customers added this month"
             value={newCustomersThisMonth}
             icon={UserPlusIcon}
             tone="green"
@@ -358,7 +357,7 @@ export default async function AdminCustomersPage({
                     Customer
                   </th>
                   <th className="px-4 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Portal Status
+                    Customer since
                   </th>
                   <th className="px-4 py-3.5 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Total Bookings
@@ -393,19 +392,8 @@ export default async function AdminCustomersPage({
                       </div>
                     </td>
 
-                    <td className="px-4 py-4 text-center align-top">
-                      <span
-                        className={[
-                          "inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1",
-                          customer.portal_status === "deactivated"
-                            ? "bg-rose-50 text-rose-700 ring-rose-200"
-                            : customer.portal_status === "active"
-                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                              : "bg-slate-100 text-slate-700 ring-slate-200",
-                        ].join(" ")}
-                      >
-                        {formatEnumLabel(customer.portal_status ?? "invited")}
-                      </span>
+                    <td className="whitespace-nowrap px-4 py-4 text-center align-top text-sm text-slate-600">
+                      {formatDate(customer.created_at)}
                     </td>
 
                     <td className="px-4 py-4 text-center align-top text-sm font-medium text-slate-900">
@@ -418,7 +406,7 @@ export default async function AdminCustomersPage({
                           <div className="font-semibold text-slate-900">
                             {getCustomerFacingBookingLabel(customer.latestBooking.booking_ref)}
                           </div>
-                          <div className="mt-1">{formatDate(customer.latestBooking.delivery_date)}</div>
+                          <div className="mt-1">Delivery: {formatDate(customer.latestBooking.delivery_date)}</div>
                           <div className="mt-1 truncate text-slate-500">
                             {customer.latestBooking.customer_street || "Address pending"}
                           </div>
