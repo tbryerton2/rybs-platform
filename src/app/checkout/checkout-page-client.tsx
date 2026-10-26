@@ -746,7 +746,8 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     }
 
     // 🧹 Clear draft now that booking is confirmed
-    completeBookingHistory();
+    const bookingId = confirmJson.bookingId || draft.holdId;
+    completeBookingHistory(window, undefined, String(bookingId));
     try {
       sessionStorage.removeItem(getBookingStorageKey());
     } catch {
@@ -754,7 +755,6 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     }
 
     // 🚀 Redirect to success page
-    const bookingId = confirmJson.bookingId || draft.holdId;
     const bookingRef = String(confirmJson.bookingRef ?? "").trim();
     const bookingEmail = String(confirmJson.customerEmail ?? draft.customerEmail ?? "").trim();
     const nextParams = new URLSearchParams({

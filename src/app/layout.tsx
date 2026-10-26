@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { ArrowRightOnRectangleIcon, EnvelopeIcon, PhoneIcon } from "@heroicons/react/24/outline";
 import { PublicRetailHeaderMenu } from "@/components/PublicRetailHeaderMenu";
+import { BookingEntryListener } from "@/components/booking/booking-entry-listener";
 import {
   getRetailSiteSettings,
   sanitizeRetailSiteSettings,
@@ -256,6 +257,7 @@ export default async function RootLayout({
   return (
     <html lang="en" data-tenant-storage-namespace={runtime.storageNamespace}>
       <body className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}>
+        <BookingEntryListener />
         <div className="min-h-screen bg-[#F8FAFC]">
           {/* Global Header */}
           <header

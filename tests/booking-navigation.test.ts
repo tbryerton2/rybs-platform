@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { completeBookingHistory, enterBookingHistory } from "../src/lib/booking-navigation.ts";
+import { beginBookingHistory, completeBookingHistory, enterBookingHistory } from "../src/lib/booking-navigation.ts";
 
 function createBrowser() {
   const values = new Map<string, string>();
@@ -63,12 +63,21 @@ test("every earlier booking step is rejected after successful completion", () =>
   assert.equal(browser.replacements, replacements, "stale entries must never be reactivated");
 });
 
+test("completed checkout stays closed when its custom history marker is missing", () => {
+  const browser = createBrowser();
+  enterBookingHistory(browser, "missing-marker");
+  browser.history.replaceState({ __NA: true }, "");
+  completeBookingHistory(browser, "missing-marker");
+  assert.equal(enterBookingHistory(browser, "missing-marker"), false);
+});
+
 test("a fresh booking works, while history from the previous booking stays closed", () => {
   const browser = createBrowser();
   enterBookingHistory(browser, "repeat");
   completeBookingHistory(browser, "repeat");
   browser.push({ route: "/success" });
   browser.push({ route: "/" });
+  beginBookingHistory(browser, "repeat");
   browser.push({ route: "/book/address?reorderFrom=previous" });
   assert.equal(enterBookingHistory(browser, "repeat"), true);
   browser.push({ route: "/book/date" });
@@ -127,7 +136,37 @@ test("unavailable session storage does not break successful checkout navigation"
   assert.doesNotThrow(() => completeBookingHistory(unavailable, "unavailable"));
   assert.equal(enterBookingHistory(unavailable, "unavailable"), false);
   browser.push();
+  beginBookingHistory(unavailable, "unavailable");
   assert.equal(enterBookingHistory(unavailable, "unavailable"), true);
+});
+
+test("an old version counter closes unmarked history after upgrading", () => {
+  const browser = createBrowser();
+  browser.sessionStorage.setItem("upgrade", "2");
+  assert.equal(enterBookingHistory(browser, "upgrade"), false);
+  beginBookingHistory(browser, "upgrade");
+  assert.equal(enterBookingHistory(browser, "upgrade"), true);
+});
+
+test("confirmation tracking is idempotent and old receipts cannot close a new booking", () => {
+  const browser = createBrowser();
+  completeBookingHistory(browser, "receipt", "booking-1");
+  const completed = browser.sessionStorage.getItem("receipt");
+  completeBookingHistory(browser, "receipt", "booking-1");
+  assert.equal(browser.sessionStorage.getItem("receipt"), completed);
+  beginBookingHistory(browser, "receipt");
+  completeBookingHistory(browser, "receipt", "booking-1");
+  browser.push();
+  assert.equal(enterBookingHistory(browser, "receipt"), true);
+  completeBookingHistory(browser, "receipt", "booking-2");
+  assert.equal(enterBookingHistory(browser, "receipt"), false);
+});
+
+test("an unmarked fallback ZIP page cannot reopen a completed booking", () => {
+  const browser = createBrowser();
+  completeBookingHistory(browser, "fallback-zip", "booking-1");
+  browser.push({ route: "/book/address" });
+  assert.equal(enterBookingHistory(browser, "fallback-zip"), false);
 });
 
 test("malformed history and storage do not prevent a fresh booking", () => {
@@ -137,4 +176,12 @@ test("malformed history and storage do not prevent a fresh booking", () => {
   assert.equal(enterBookingHistory(browser, "malformed"), true);
   completeBookingHistory(browser, "malformed");
   assert.equal(enterBookingHistory(browser, "malformed"), false);
+});
+
+test("completion remains effective when storage can be read but writes fail", () => {
+  const browser = createBrowser();
+  beginBookingHistory(browser, "quota");
+  browser.sessionStorage.setItem = () => { throw new Error("Quota exceeded"); };
+  completeBookingHistory(browser, "quota", "booking-quota");
+  assert.equal(enterBookingHistory(browser, "quota"), false);
 });

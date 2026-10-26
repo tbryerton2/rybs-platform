@@ -1,23 +1,50 @@
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "./tenant/runtime";
 
 const HISTORY_KEY = "retailBooking";
-
 type BookingHistoryEntry = { storageKey: string; version: number };
 type BookingNavigationBrowser = Pick<Window, "history" | "sessionStorage">;
+type BookingNavigationState = {
+  version: number;
+  completed: boolean;
+  confirmedBookingIds: string[];
+};
 
-// Keep navigation working in the current document when browser storage is unavailable.
-const fallbackVersions = new Map<string, number>();
+// Also protect cached pages in this document if browser storage is unavailable.
+const fallbackStates = new Map<string, BookingNavigationState>();
+const emptyState = (): BookingNavigationState => ({ version: 0, completed: false, confirmedBookingIds: [] });
 
-function readVersion(browser: BookingNavigationBrowser, storageKey: string) {
+function readState(browser: BookingNavigationBrowser, storageKey: string): BookingNavigationState {
+  const fallback = fallbackStates.get(storageKey);
+  if (fallback) return fallback;
   try {
-    const version = Number(browser.sessionStorage.getItem(storageKey));
-    if (Number.isSafeInteger(version) && version >= 0) {
-      return Math.max(version, fallbackVersions.get(storageKey) ?? 0);
+    const raw = browser.sessionStorage.getItem(storageKey);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    // Upgrade the first release's counter: a nonzero version means a booking completed.
+    if (typeof parsed === "number" && Number.isSafeInteger(parsed) && parsed >= 0) {
+      return { version: parsed, completed: parsed > 0, confirmedBookingIds: [] };
+    }
+    if (parsed && typeof parsed === "object") {
+      const state = parsed as Partial<BookingNavigationState>;
+      if (typeof state.version === "number" && Number.isSafeInteger(state.version) && state.version >= 0 &&
+          typeof state.completed === "boolean" && Array.isArray(state.confirmedBookingIds) &&
+          state.confirmedBookingIds.every((id) => typeof id === "string")) {
+        return state as BookingNavigationState;
+      }
     }
   } catch {
     // Some browsers disable session storage.
   }
-  return fallbackVersions.get(storageKey) ?? 0;
+  return emptyState();
+}
+
+function writeState(browser: BookingNavigationBrowser, storageKey: string, state: BookingNavigationState) {
+  try {
+    browser.sessionStorage.setItem(storageKey, JSON.stringify(state));
+    fallbackStates.delete(storageKey);
+  } catch {
+    // The in-memory state still protects cached pages in this document.
+    fallbackStates.set(storageKey, state);
+  }
 }
 
 function readEntry(state: unknown, storageKey: string): BookingHistoryEntry | null {
@@ -32,17 +59,17 @@ function readEntry(state: unknown, storageKey: string): BookingHistoryEntry | nu
     : null;
 }
 
-/** Validate before mounting a booking form, so its missing-draft redirects cannot run. */
+/** Validate before mounting a form or running its missing-draft redirects. */
 export function enterBookingHistory(
   browser: BookingNavigationBrowser = window,
   storageKey = getTenantStorageKey(TENANT_STORAGE_KEYS.bookingHistoryVersion),
 ) {
-  const version = readVersion(browser, storageKey);
+  const { version, completed } = readState(browser, storageKey);
   const entry = readEntry(browser.history.state, storageKey);
-  if (entry && entry.version < version) return false;
+  // Completion is independent of history metadata, which may be missing on older entries.
+  if (completed || (entry && entry.version < version)) return false;
 
   if (!entry) {
-    // Preserve Next.js's history state and do not create an extra Back-button stop.
     browser.history.replaceState({
       ...browser.history.state,
       [HISTORY_KEY]: { storageKey, version },
@@ -51,16 +78,38 @@ export function enterBookingHistory(
   return true;
 }
 
-/** Call only after the booking has been confirmed successfully. */
-export function completeBookingHistory(
+/** Only an intentional new-booking action reopens the flow. */
+export function beginBookingHistory(
   browser: BookingNavigationBrowser = window,
   storageKey = getTenantStorageKey(TENANT_STORAGE_KEYS.bookingHistoryVersion),
 ) {
-  const version = readVersion(browser, storageKey) + 1;
-  fallbackVersions.set(storageKey, version);
-  try {
-    browser.sessionStorage.setItem(storageKey, String(version));
-  } catch {
-    // The in-memory version still protects cached pages in this document.
-  }
+  const state = readState(browser, storageKey);
+  writeState(browser, storageKey, { ...state, completed: false });
+}
+
+/** Successful checkout and its confirmation page may both call this for the same booking. */
+export function completeBookingHistory(
+  browser: BookingNavigationBrowser = window,
+  storageKey = getTenantStorageKey(TENANT_STORAGE_KEYS.bookingHistoryVersion),
+  bookingId?: string,
+) {
+  const state = readState(browser, storageKey);
+  if (bookingId && state.confirmedBookingIds.includes(bookingId)) return;
+  writeState(browser, storageKey, {
+    version: state.version + 1,
+    completed: true,
+    confirmedBookingIds: bookingId ? [...state.confirmedBookingIds, bookingId] : state.confirmedBookingIds,
+  });
+}
+
+export function isBookingStep(pathname: string) {
+  return pathname === "/book" || pathname.startsWith("/book/") ||
+    pathname === "/confirm" || pathname === "/checkout";
+}
+
+export function hasCompletedBooking(
+  browser: BookingNavigationBrowser = window,
+  storageKey = getTenantStorageKey(TENANT_STORAGE_KEYS.bookingHistoryVersion),
+) {
+  return readState(browser, storageKey).completed;
 }

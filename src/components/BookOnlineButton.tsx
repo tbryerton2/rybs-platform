@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LoadingButton } from "@/components/ui/loading-button";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
+import { beginBookingHistory } from "@/lib/booking-navigation";
 
 export default function BookOnlineButton({
   zip,
@@ -59,6 +60,7 @@ export default function BookOnlineButton({
 
     setLoading(true);
     setError(null);
+    beginBookingHistory();
 
     const selectedZip = zip.replace(/\D/g, "").slice(0, 5);
     const selectedDumpsterSize = (dumpsterSize || "").trim();
