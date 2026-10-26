@@ -11,7 +11,14 @@ export function Start() {
   return <><button onClick={() => {beginBookingHistory(); sessionStorage.setItem(draftKey(), "test draft"); router.push("/book/address");}}>Start new booking</button>
     <Link href="/book/address?reorderFrom=fixture">Book again</Link></>;
 }
-export function Address() { return <><h2>Service ZIP</h2><Link href="/checkout">Continue to checkout</Link></>; }
+export function Address() {
+  useEffect(() => {
+    if (!sessionStorage.getItem(draftKey())) {
+      sessionStorage.setItem(draftKey(), JSON.stringify({ bookingOrigin: "book" }));
+    }
+  }, []);
+  return <><h2>Service ZIP</h2><Link href="/checkout">Continue to checkout</Link></>;
+}
 export function Checkout() {
   const router = useRouter();
   useEffect(() => { if (!sessionStorage.getItem(draftKey())) router.replace("/book/address"); }, [router]);
