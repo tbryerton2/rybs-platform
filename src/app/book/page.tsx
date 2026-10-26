@@ -1,4 +1,5 @@
 import BookPageClient from "./book-page-client";
+import { BookingNavigationGuard } from "@/components/booking/booking-navigation-guard";
 import { redirect } from "next/navigation";
 import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
@@ -56,18 +57,20 @@ export default async function BookPage({
   }
 
   return (
-    <BookPageClient
-      zip={zip}
-      zipValid={zipValid}
-      blocked={blocked}
-      entryContent={entryContent}
-      products={products}
-      initialSelectedDumpster={{
-        dumpsterSize: sp?.dumpsterSize,
-        dumpsterProductId: sp?.dumpsterProductId,
-      }}
-      initialOrigin={sp?.origin}
-      isEditingDumpster={isEditingDumpster}
-    />
+    <BookingNavigationGuard>
+      <BookPageClient
+        zip={zip}
+        zipValid={zipValid}
+        blocked={blocked}
+        entryContent={entryContent}
+        products={products}
+        initialSelectedDumpster={{
+          dumpsterSize: sp?.dumpsterSize,
+          dumpsterProductId: sp?.dumpsterProductId,
+        }}
+        initialOrigin={sp?.origin}
+        isEditingDumpster={isEditingDumpster}
+      />
+    </BookingNavigationGuard>
   );
 }

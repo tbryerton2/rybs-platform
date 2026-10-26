@@ -21,6 +21,7 @@ import {
 } from "@/lib/analytics/booking-funnel-client";
 import { formatUsdFromCents } from "@/lib/money";
 import { getTenantStorageKey, TENANT_STORAGE_KEYS } from "@/lib/tenant/runtime";
+import { completeBookingHistory } from "@/lib/booking-navigation";
 
 type SquareTokenizeResult = {
   status: string;
@@ -745,6 +746,7 @@ export default function CheckoutPageClient({ content }: CheckoutPageClientProps)
     }
 
     // 🧹 Clear draft now that booking is confirmed
+    completeBookingHistory();
     try {
       sessionStorage.removeItem(getBookingStorageKey());
     } catch {

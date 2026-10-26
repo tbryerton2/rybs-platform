@@ -2,6 +2,7 @@ export const DEFAULT_TENANT_STORAGE_NAMESPACE = "tenant";
 
 export const TENANT_STORAGE_KEYS = {
   booking: "booking",
+  bookingHistoryVersion: "booking_history_version",
   lastBookingWarning: "last_booking_warning",
   portalAccessToken: "portal_access_token",
   portalRefreshToken: "portal_refresh_token",

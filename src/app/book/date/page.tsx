@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { BookingNavigationGuard } from "@/components/booking/booking-navigation-guard";
 import { getBookingDateContent } from "@/lib/tenant/content";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import DateStepPageClient from "./date-step-page-client";
@@ -9,7 +10,9 @@ export default async function DateStepPage() {
 
   return (
     <Suspense fallback={null}>
-      <DateStepPageClient content={content} />
+      <BookingNavigationGuard>
+        <DateStepPageClient content={content} />
+      </BookingNavigationGuard>
     </Suspense>
   );
 }

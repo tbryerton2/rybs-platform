@@ -1,6 +1,7 @@
 import { getBookingConfirmContent } from "@/lib/tenant/content";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import ConfirmPageClient from "./confirm-page-client";
+import { BookingNavigationGuard } from "@/components/booking/booking-navigation-guard";
 
 export default async function ConfirmPage({
   searchParams,
@@ -14,5 +15,9 @@ export default async function ConfirmPage({
     tenantId: tenant.id,
   });
 
-  return <ConfirmPageClient content={content} />;
+  return (
+    <BookingNavigationGuard>
+      <ConfirmPageClient content={content} />
+    </BookingNavigationGuard>
+  );
 }

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { BookingNavigationGuard } from "@/components/booking/booking-navigation-guard";
 import { getBookingAddressContent } from "@/lib/tenant/content";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import AddressStepPageClient from "./address-step-page-client";
@@ -9,7 +10,9 @@ export default async function AddressStepPage() {
 
   return (
     <Suspense fallback={null}>
-      <AddressStepPageClient content={content} />
+      <BookingNavigationGuard>
+        <AddressStepPageClient content={content} />
+      </BookingNavigationGuard>
     </Suspense>
   );
 }
