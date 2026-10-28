@@ -14,10 +14,11 @@ import { loadCollectionsReport } from "@/lib/financials/collections-server";
 import { COMPLETION_OPTIONS, parseCompletionFilter, type CompletionFilter } from "@/lib/financials/collections";
 import { centsToDollars, formatUsd } from "@/lib/money";
 import { requireAdminOwner } from "@/lib/admin/auth";
+import { resolveFinancialDateRange, type FinancialRangePreset } from "@/lib/financials/date-filters";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type Granularity = "daily" | "weekly" | "monthly" | "annual";
-type RangePreset = "7d" | "30d" | "month" | "all" | "custom";
+type RangePreset = FinancialRangePreset;
 
 type PageProps = {
   searchParams?: Promise<SearchParams>;
@@ -39,57 +40,6 @@ function getTodayISOET() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-}
-
-function addDaysISO(iso: string, delta: number) {
-  const date = new Date(`${iso}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + delta);
-  return date.toISOString().slice(0, 10);
-}
-
-function getMonthStartISO(iso: string) {
-  return `${iso.slice(0, 7)}-01`;
-}
-
-function getMonthEndISO(iso: string) {
-  const [year, month] = iso.split("-").map(Number);
-  const lastDay = new Date(Date.UTC(year, month, 0));
-  return lastDay.toISOString().slice(0, 10);
-}
-
-function isRangePreset(value: string | undefined): value is RangePreset {
-  return (
-    value === "7d" ||
-    value === "30d" ||
-    value === "month" ||
-    value === "all" ||
-    value === "custom"
-  );
-}
-
-function isISODate(value: string | undefined) {
-  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
-}
-
-function getPresetDates(
-  preset: RangePreset,
-  todayISO: string
-): { start?: string; end?: string } {
-  switch (preset) {
-    case "7d":
-      return { start: addDaysISO(todayISO, -6), end: todayISO };
-    case "30d":
-      return { start: addDaysISO(todayISO, -29), end: todayISO };
-    case "month":
-      return {
-        start: getMonthStartISO(todayISO),
-        end: getMonthEndISO(todayISO),
-      };
-    case "all":
-    case "custom":
-    default:
-      return {};
-  }
 }
 
 function buildHref(params: {
@@ -181,7 +131,7 @@ function formatRangeLabel(startDate: string, endDate: string) {
   if (startDate && !endDate) return `${formatRangeDate(startDate)} onward`;
   if (!startDate && endDate) return `Through ${formatRangeDate(endDate)}`;
 
-  return `${formatRangeDate(startDate)} - ${formatRangeDate(endDate)}`;
+  return `${formatRangeDate(startDate)} – ${formatRangeDate(endDate)}`;
 }
 
 function formatRangeDate(isoDate: string) {
@@ -201,34 +151,17 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
 
   const todayISO = getTodayISOET();
-  const presetRanges = [
-    { key: "7d" as const, ...getPresetDates("7d", todayISO) },
-    { key: "30d" as const, ...getPresetDates("30d", todayISO) },
-    { key: "month" as const, ...getPresetDates("month", todayISO) },
-  ];
-
-  const requestedPreset = sp(resolvedSearchParams, "preset");
-  const preset: RangePreset = isRangePreset(requestedPreset) ? requestedPreset : "30d";
-  const formStartDate = isISODate(sp(resolvedSearchParams, "start"))
-    ? sp(resolvedSearchParams, "start")!
-    : "";
-  const formEndDate = isISODate(sp(resolvedSearchParams, "end"))
-    ? sp(resolvedSearchParams, "end")!
-    : "";
+  const { preset: activeRangeKey, start: startDate, end: endDate } = resolveFinancialDateRange(
+    sp(resolvedSearchParams, "preset"),
+    sp(resolvedSearchParams, "start"),
+    sp(resolvedSearchParams, "end"),
+    todayISO,
+  );
+  const formStartDate = activeRangeKey === "custom" ? startDate : "";
+  const formEndDate = activeRangeKey === "custom" ? endDate : "";
   const completion = parseCompletionFilter(sp(resolvedSearchParams, "completion"));
   const completionLabel = COMPLETION_OPTIONS.find(option => option.key === completion)!.label;
   const requestedGranularity = sp(resolvedSearchParams, "granularity");
-
-  const presetDates = formStartDate || formEndDate ? {} : getPresetDates(preset, todayISO);
-  const startDate = formStartDate || presetDates.start || "";
-  const endDate = formEndDate || presetDates.end || "";
-  const matchingPreset = presetRanges.find(
-    (range) => (range.start ?? "") === startDate && (range.end ?? "") === endDate
-  );
-  const activeRangeKey: RangePreset =
-    startDate === "" && endDate === ""
-      ? "all"
-      : matchingPreset?.key ?? "custom";
 
   const report = await loadCollectionsReport(adminSession.business.id, { completion, start: startDate, end: endDate });
   const revenueRows = report.rows;
@@ -398,20 +331,21 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
       )}
 
       <FinancialFiltersCard
+        key={`${completion}:${activeRangeKey}:${startDate}:${endDate}:${currentGranularity}`}
+        summary={`Showing ${completionLabel}, paid ${rangeLabel === "All time" ? "all time" : rangeLabel}`}
+        isDefault={completion === "all" && activeRangeKey === "month"}
+        resetHref={`${buildHref({ preset: "month", completion: "all", granularity: currentGranularity })}#filters`}
         completion={completion}
         completionOptions={COMPLETION_OPTIONS.map(option => ({
           ...option,
           active: completion === option.key,
           href: `${buildHref({ preset: activeRangeKey, start: formStartDate || undefined, end: formEndDate || undefined, granularity: currentGranularity, completion: option.key })}#filters`,
         }))}
-        preset={preset}
-        startDate={formStartDate}
-        endDate={formEndDate}
+        startDate={startDate}
+        endDate={endDate}
         currentGranularity={currentGranularity}
         customActive={activeRangeKey === "custom"}
         exportHref={exportHref}
-        presetRanges={presetRanges}
-        advancedDefaultOpen={activeRangeKey === "custom"}
         quickRanges={[
           {
             key: "7d",
