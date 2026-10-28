@@ -10,7 +10,8 @@ import {
 import { AdminPage, AdminPageHeader } from "@/app/admin/_components/admin/admin-page";
 import { FinancialFiltersCard } from "@/app/admin/(protected)/financials/financial-filters-card";
 import { RevenueReportSection } from "@/app/admin/(protected)/financials/revenue-report-section";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { loadCollectionsReport } from "@/lib/financials/collections-server";
+import { COMPLETION_OPTIONS, parseCompletionFilter, type CompletionFilter } from "@/lib/financials/collections";
 import { centsToDollars, formatUsd } from "@/lib/money";
 import { requireAdminOwner } from "@/lib/admin/auth";
 
@@ -22,22 +23,6 @@ type PageProps = {
   searchParams?: Promise<SearchParams>;
 };
 
-type BookingStatus =
-  | "confirmed"
-  | "scheduled"
-  | "delivered"
-  | "picked_up"
-  | "cancelled";
-
-type BookingRow = {
-  id: string;
-  delivery_date: string | null;
-  status: BookingStatus;
-  total_price_cents: number | null;
-};
-
-const REVENUE_STATUSES: BookingStatus[] = ["delivered", "picked_up"];
-
 function sp(obj: SearchParams, key: string) {
   const value = obj[key];
   return Array.isArray(value) ? value[0] : value;
@@ -45,13 +30,6 @@ function sp(obj: SearchParams, key: string) {
 
 function numberFmt(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
-}
-
-function sumRevenue(rows: Array<{ total_price_cents: number | null }>) {
-  return rows.reduce(
-    (sum, row) => sum + (centsToDollars(row.total_price_cents) ?? 0),
-    0
-  );
 }
 
 function getTodayISOET() {
@@ -64,8 +42,8 @@ function getTodayISOET() {
 }
 
 function addDaysISO(iso: string, delta: number) {
-  const date = new Date(`${iso}T00:00:00`);
-  date.setDate(date.getDate() + delta);
+  const date = new Date(`${iso}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
   return date.toISOString().slice(0, 10);
 }
 
@@ -119,6 +97,7 @@ function buildHref(params: {
   start?: string;
   end?: string;
   granularity?: Granularity;
+  completion?: CompletionFilter;
 }) {
   const qs = new URLSearchParams();
 
@@ -126,13 +105,14 @@ function buildHref(params: {
   if (params.start) qs.set("start", params.start);
   if (params.end) qs.set("end", params.end);
   if (params.granularity) qs.set("granularity", params.granularity);
+  if (params.completion) qs.set("completion", params.completion);
 
   const str = qs.toString();
   return str ? `/admin/financials?${str}` : "/admin/financials";
 }
 
-function buildExportHref(params: { start?: string; end?: string }) {
-  const qs = new URLSearchParams();
+function buildExportHref(params: { start?: string; end?: string; completion: CompletionFilter }) {
+  const qs = new URLSearchParams({ completion: params.completion });
 
   if (params.start) qs.set("start", params.start);
   if (params.end) qs.set("end", params.end);
@@ -174,14 +154,14 @@ function summaryCardIconClasses(tone: "green" | "blue" | "violet" | "amber" | "t
 }
 
 function daysBetween(startIso: string, endIso: string) {
-  const start = new Date(`${startIso}T00:00:00`);
-  const end = new Date(`${endIso}T00:00:00`);
+  const start = new Date(`${startIso}T12:00:00Z`);
+  const end = new Date(`${endIso}T12:00:00Z`);
   const diff = end.getTime() - start.getTime();
   return Number.isNaN(diff) ? 0 : Math.max(Math.round(diff / (1000 * 60 * 60 * 24)) + 1, 0);
 }
 
 function startOfWeekISO(isoDate: string) {
-  const date = new Date(`${isoDate}T00:00:00`);
+  const date = new Date(`${isoDate}T12:00:00Z`);
   const day = date.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
   date.setUTCDate(date.getUTCDate() + diff);
@@ -205,7 +185,7 @@ function formatRangeLabel(startDate: string, endDate: string) {
 }
 
 function formatRangeDate(isoDate: string) {
-  const date = new Date(`${isoDate}T00:00:00`);
+  const date = new Date(`${isoDate}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return isoDate;
 
   return new Intl.DateTimeFormat("en-US", {
@@ -235,6 +215,8 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
   const formEndDate = isISODate(sp(resolvedSearchParams, "end"))
     ? sp(resolvedSearchParams, "end")!
     : "";
+  const completion = parseCompletionFilter(sp(resolvedSearchParams, "completion"));
+  const completionLabel = COMPLETION_OPTIONS.find(option => option.key === completion)!.label;
   const requestedGranularity = sp(resolvedSearchParams, "granularity");
 
   const presetDates = formStartDate || formEndDate ? {} : getPresetDates(preset, todayISO);
@@ -248,30 +230,11 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
       ? "all"
       : matchingPreset?.key ?? "custom";
 
-  let revenueQuery = supabaseAdmin
-    .from("bookings")
-    .select(`
-      id,
-      delivery_date,
-      status,
-      total_price_cents
-    `)
-    .eq("business_id", adminSession.business.id)
-    .in("status", REVENUE_STATUSES)
-    .order("delivery_date", { ascending: true, nullsFirst: false });
-
-  if (startDate) revenueQuery = revenueQuery.gte("delivery_date", startDate);
-  if (endDate) revenueQuery = revenueQuery.lte("delivery_date", endDate);
-
-  const revenueResult = await revenueQuery;
-
-  if (revenueResult.error) throw new Error(revenueResult.error.message);
-
-  const revenueRows = (revenueResult.data ?? []) as BookingRow[];
-  const totalRevenue = sumRevenue(revenueRows);
-  const totalRevenueJobs = revenueRows.length;
-  const averageBookingValue =
-    totalRevenueJobs > 0 ? totalRevenue / totalRevenueJobs : 0;
+  const report = await loadCollectionsReport(adminSession.business.id, { completion, start: startDate, end: endDate });
+  const revenueRows = report.rows;
+  const totalRevenue = report.netCents / 100;
+  const totalRevenueJobs = report.jobCount;
+  const averageBookingValue = report.averagePerJobCents / 100;
   const defaultGranularity: Granularity =
     !startDate || !endDate
       ? "monthly"
@@ -289,21 +252,21 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
       : defaultGranularity;
   const chartBuckets = new Map<
     string,
-    { key: string; label: string; fullLabel: string; value: number; bookings: number }
+    { key: string; label: string; fullLabel: string; value: number; bookings: Set<string> }
   >();
 
   for (const row of revenueRows) {
-    if (!row.delivery_date) continue;
+    if (!row.payment_date) continue;
 
     const bucketKey =
       currentGranularity === "daily"
-        ? row.delivery_date
+        ? row.payment_date
         : currentGranularity === "weekly"
-          ? startOfWeekISO(row.delivery_date)
+          ? startOfWeekISO(row.payment_date)
           : currentGranularity === "monthly"
-            ? startOfMonthISO(row.delivery_date)
-            : startOfYearISO(row.delivery_date);
-    const date = new Date(`${bucketKey}T00:00:00`);
+            ? startOfMonthISO(row.payment_date)
+            : startOfYearISO(row.payment_date);
+    const date = new Date(`${bucketKey}T12:00:00Z`);
     const label =
       currentGranularity === "daily"
         ? new Intl.DateTimeFormat("en-US", {
@@ -357,17 +320,18 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
       label,
       fullLabel,
       value: 0,
-      bookings: 0,
+      bookings: new Set<string>(),
     };
 
-    existing.value += centsToDollars(row.total_price_cents) ?? 0;
-    existing.bookings += 1;
+    existing.value += centsToDollars(row.net_cents) ?? 0;
+    if (row.booking && row.net_cents > 0) existing.bookings.add(row.booking.id);
     chartBuckets.set(bucketKey, existing);
   }
 
-  const chartPoints = [...chartBuckets.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const chartPoints = [...chartBuckets.values()].map(point => ({ ...point, bookings: point.bookings.size })).sort((a, b) => a.key.localeCompare(b.key));
   const rangeLabel = formatRangeLabel(startDate, endDate);
   const exportHref = buildExportHref({
+    completion,
     start: startDate || undefined,
     end: endDate || undefined,
   });
@@ -376,31 +340,31 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
     <AdminPage>
       <AdminPageHeader
         title="Revenue"
-        description="See what you earned in a given period, and export it for your records or taxes."
+        description="Track money collected by payment date and filter by job completion."
       />
 
       <section className="grid gap-4 md:grid-cols-3">
         {[
           {
             tone: "green" as const,
-            label: "Revenue in range",
-            value: formatUsd(totalRevenue, { maximumFractionDigits: 0 }),
+            label: "Money collected",
+            value: formatUsd(totalRevenue, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
             icon: BanknotesIcon,
             detail: rangeLabel,
           },
           {
             tone: "violet" as const,
-            label: "Average booking value",
-            value: formatUsd(averageBookingValue, { maximumFractionDigits: 0 }),
+            label: "Average collected per job",
+            value: formatUsd(averageBookingValue, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
             icon: ScaleIcon,
-            detail: "Completed revenue jobs",
+            detail: "Jobs with collected payments",
           },
           {
             tone: "amber" as const,
-            label: "Revenue-producing jobs",
+            label: "Jobs with money collected",
             value: numberFmt(totalRevenueJobs),
             icon: ChartBarIcon,
-            detail: "Delivered or picked up",
+            detail: completionLabel,
           },
         ].map((card) => (
           <div key={card.label} className={summaryCardShell(card.tone, "h-full p-5")}>
@@ -426,7 +390,20 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
         ))}
       </section>
 
+      {report.incompletePayments > 0 && (
+        <p role="status" className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+          {report.incompletePayments} payment record(s) need a valid payment date, USD amount,
+          or refund amount before they can be included. Report totals are incomplete.
+        </p>
+      )}
+
       <FinancialFiltersCard
+        completion={completion}
+        completionOptions={COMPLETION_OPTIONS.map(option => ({
+          ...option,
+          active: completion === option.key,
+          href: `${buildHref({ preset: activeRangeKey, start: formStartDate || undefined, end: formEndDate || undefined, granularity: currentGranularity, completion: option.key })}#filters`,
+        }))}
         preset={preset}
         startDate={formStartDate}
         endDate={formEndDate}
@@ -442,6 +419,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
             href: `${buildHref({
               preset: "7d",
               granularity: currentGranularity,
+              completion,
             })}#filters`,
             active: activeRangeKey === "7d",
           },
@@ -451,6 +429,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
             href: `${buildHref({
               preset: "30d",
               granularity: currentGranularity,
+              completion,
             })}#filters`,
             active: activeRangeKey === "30d",
           },
@@ -460,6 +439,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
             href: `${buildHref({
               preset: "month",
               granularity: currentGranularity,
+              completion,
             })}#filters`,
             active: activeRangeKey === "month",
           },
@@ -469,6 +449,7 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
             href: `${buildHref({
               preset: "all",
               granularity: currentGranularity,
+              completion,
             })}#filters`,
             active: activeRangeKey === "all",
           },
@@ -491,16 +472,18 @@ export default async function FinancialsPage({ searchParams }: PageProps) {
               start: formStartDate || undefined,
               end: formEndDate || undefined,
               granularity: option.key,
+              completion,
             })}#revenue-report`,
           }))
         }
       />
 
       <div className="mt-6 rounded-[14px] border border-orange-100 bg-orange-50/70 px-5 py-4 text-sm text-slate-700">
-        V1 financials are based on the booking total stored on each job record and
-        use <span className="font-semibold">delivery_date</span> for reporting.
-        This is operational revenue visibility, not finalized accounting or payment
-        reconciliation.
+        Money collected includes recorded booking payments and additional charges, less recorded refunds,
+        grouped by the original payment date in Eastern time. Completed jobs have been picked up;
+        uncompleted jobs are confirmed, scheduled, or delivered. All jobs also includes cancelled jobs
+        and payments awaiting a job. Refunds adjust the original payment period. This report reflects
+        stored payment records, not bank deposits or live payment-provider reconciliation.
       </div>
     </AdminPage>
   );

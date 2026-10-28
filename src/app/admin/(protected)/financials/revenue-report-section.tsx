@@ -35,7 +35,7 @@ export function RevenueReportSection({
       className="mt-6 scroll-mt-24 overflow-hidden rounded-[20px] bg-white shadow-sm ring-1 ring-slate-200/70"
     >
       <div className="flex flex-col gap-3 border-b border-slate-200/80 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Revenue over time</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Money collected over time</h2>
 
         <div className="inline-flex items-center gap-2 sm:justify-end">
           <span className="text-sm font-medium text-slate-500">Group by:</span>
@@ -82,7 +82,7 @@ export function RevenueReportSection({
 
                 <div className="relative flex h-72 items-stretch gap-2 overflow-x-auto pt-2">
                   {chartPoints.map((point) => {
-                    const height = maxValue > 0 ? Math.max((point.value / maxValue) * 100, 3) : 0;
+                    const height = maxValue > 0 && point.value > 0 ? Math.max((point.value / maxValue) * 100, 3) : 0;
 
                     return (
                       <div
@@ -107,7 +107,7 @@ export function RevenueReportSection({
                               {new Intl.NumberFormat("en-US", {
                                 style: "currency",
                                 currency: "USD",
-                                maximumFractionDigits: 0,
+                                minimumFractionDigits: 2, maximumFractionDigits: 2,
                               }).format(point.value)}
                             </div>
                             <div className="text-[11px] text-slate-300">
@@ -131,7 +131,7 @@ export function RevenueReportSection({
         </div>
       ) : (
         <div className="px-6 py-12 text-sm text-slate-500">
-          No revenue-producing jobs match the current date range.
+          No collected payments match the selected date range and job completion filter.
         </div>
       )}
     </section>

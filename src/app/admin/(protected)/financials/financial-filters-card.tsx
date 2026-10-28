@@ -16,6 +16,8 @@ type QuickRange = {
 };
 
 type FinancialFiltersCardProps = {
+  completion: string;
+  completionOptions: QuickRange[];
   preset: string;
   startDate: string;
   endDate: string;
@@ -28,6 +30,8 @@ type FinancialFiltersCardProps = {
 };
 
 export function FinancialFiltersCard({
+  completion,
+  completionOptions,
   preset,
   startDate,
   endDate,
@@ -68,6 +72,15 @@ export function FinancialFiltersCard({
       id="filters"
       className="mt-8 scroll-mt-32 rounded-[20px] bg-white px-6 py-4 shadow-sm ring-1 ring-slate-200/70"
     >
+      <nav aria-label="Job completion" className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+        <span className="mr-2 text-sm font-medium text-slate-600">Job completion</span>
+        {completionOptions.map(option => (
+          <Link key={option.key} href={option.href} aria-current={option.active ? "page" : undefined}
+            className={`inline-flex h-9 items-center rounded-full px-3.5 text-sm font-medium ${option.active ? "bg-[#F97316] text-white" : "border border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"}`}>
+            {option.label}
+          </Link>
+        ))}
+      </nav>
       <div className={expanded ? "flex flex-col gap-5" : ""}>
         {expanded ? (
           <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2.5">
@@ -208,11 +221,12 @@ export function FinancialFiltersCard({
                 className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
               >
                 <input type="hidden" name="preset" value={customActive ? "custom" : preset} />
+                <input type="hidden" name="completion" value={completion} />
                 <input type="hidden" name="granularity" value={currentGranularity} />
 
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                    Start date
+                    Payment start date
                   </span>
                   <input
                     type="date"
@@ -224,7 +238,7 @@ export function FinancialFiltersCard({
 
                 <label className="block">
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                    End date
+                    Payment end date
                   </span>
                   <input
                     type="date"
@@ -243,7 +257,7 @@ export function FinancialFiltersCard({
                   </button>
 
                   <Link
-                    href={`/admin/financials?granularity=${currentGranularity}#filters`}
+                    href={`/admin/financials?granularity=${currentGranularity}&completion=${completion}#filters`}
                     className="admin-btn admin-btn-secondary h-11 px-3.5 font-medium"
                   >
                     Reset
