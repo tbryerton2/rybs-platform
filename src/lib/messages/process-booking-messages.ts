@@ -1,3 +1,6 @@
+import { requireTenantReplyToEmail } from "../email/reply-to.ts";
+import { withPostBookingChargeReplyContact } from "./post-booking-charge-receipt.ts";
+
 type QueuedBookingMessage = {
   id: string;
   business_id: string | null;
@@ -184,14 +187,18 @@ async function sendQueuedMessage(
   }
 
   const sender = await options.resolveTenantEmailSender(message.business_id);
+  const replyTo = requireTenantReplyToEmail(sender.replyToEmail);
+  const outgoingBody = message.template === POST_BOOKING_CHARGE_RECEIPT_TEMPLATE
+    ? withPostBookingChargeReplyContact(body, replyTo)
+    : body;
   const result = await options.sendSesEmail({
     to: toEmail,
     subject,
-    text: body,
-    html: textToHtml(body),
+    text: outgoingBody,
+    html: textToHtml(outgoingBody),
     fromEmail: sender.senderEmail,
     fromDisplayName: sender.senderDisplayName,
-    replyTo: sender.replyToEmail,
+    replyTo,
     region: sender.sesRegion,
     useDefaultReplyTo: false,
   });

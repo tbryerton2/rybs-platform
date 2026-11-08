@@ -1,5 +1,8 @@
 import "server-only";
 
+import { isSuitableTenantReplyToEmail, requireTenantReplyToEmail, resolveTenantReplyToEmail } from "./reply-to";
+export { isSuitableTenantReplyToEmail, resolveTenantReplyToEmail } from "./reply-to";
+
 import {
   getTenantEmailIdentityByBusinessId,
   type TenantEmailIdentity,
@@ -50,67 +53,6 @@ function clean(value: string | null | undefined) {
 function cleanEmail(value: string | null | undefined) {
   const cleaned = clean(value)?.toLowerCase() ?? null;
   return cleaned && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned) ? cleaned : null;
-}
-
-export function isSuitableTenantReplyToEmail(value: string | null | undefined) {
-  const email = cleanEmail(value);
-  if (!email) return null;
-
-  const [localPart, domain] = email.split("@");
-  const reservedDomains = new Set([
-    "example.com",
-    "example.net",
-    "example.org",
-    "test.com",
-  ]);
-
-  if (
-    !localPart ||
-    !domain ||
-    (localPart === "test" && domain === "test.com") ||
-    reservedDomains.has(domain) ||
-    domain.endsWith(".example") ||
-    domain.endsWith(".invalid") ||
-    domain.endsWith(".local") ||
-    domain.endsWith(".test")
-  ) {
-    return null;
-  }
-
-  return email;
-}
-
-function isReplyToOnVerifiedSenderDomain(
-  replyToEmail: string | null | undefined,
-  senderDomain: string,
-) {
-  const email = isSuitableTenantReplyToEmail(replyToEmail);
-  if (!email) return null;
-
-  const domain = email.split("@")[1];
-  return domain === senderDomain || domain?.endsWith(`.${senderDomain}`) ? email : null;
-}
-
-export function resolveTenantReplyToEmail(input: {
-  verifiedIdentityReplyToEmail?: string | null;
-  verifiedIdentitySenderDomain?: string | null;
-  supportEmail?: string | null;
-  rybsManagedSenderEmail?: string | null;
-  senderEmail: string;
-}) {
-  const identityReplyTo = input.verifiedIdentitySenderDomain
-    ? isReplyToOnVerifiedSenderDomain(
-        input.verifiedIdentityReplyToEmail,
-        input.verifiedIdentitySenderDomain,
-      )
-    : null;
-
-  return (
-    identityReplyTo ??
-    isSuitableTenantReplyToEmail(input.supportEmail) ??
-    cleanEmail(input.rybsManagedSenderEmail) ??
-    input.senderEmail
-  );
 }
 
 function assertTrustedBusinessId(input: ResolveTenantEmailSenderInput) {
@@ -213,13 +155,11 @@ export async function resolveTenantEmailSender(
     clean(brand?.name) ??
     tenant.slug;
   const replyToEmail = resolveTenantReplyToEmail({
-    verifiedIdentityReplyToEmail: verifiedIdentity?.replyToEmail,
-    verifiedIdentitySenderDomain: verifiedIdentity?.senderDomain,
+    // Receiving addresses are independent of SES sending-domain readiness.
+    identityReplyToEmail: identity?.businessId === businessId ? identity.replyToEmail : null,
     supportEmail:
       providedSupportEmail ??
       (allowSupportFallback ? isSuitableTenantReplyToEmail(support?.email) : null),
-    rybsManagedSenderEmail: rybsManagedSender.senderEmail,
-    senderEmail,
   });
   const source = verifiedIdentity ? "tenant_verified" : "rybs_managed";
   const sesRegion = verifiedIdentity?.sesRegion ?? rybsManagedSender.sesRegion;
@@ -244,7 +184,7 @@ export function tenantSenderSendEmailOptions(sender: TenantEmailSender) {
   return {
     fromEmail: sender.senderEmail,
     fromDisplayName: sender.senderDisplayName,
-    replyTo: sender.replyToEmail,
+    replyTo: requireTenantReplyToEmail(sender.replyToEmail),
     region: sender.sesRegion ?? undefined,
     useDefaultReplyTo: false,
   };

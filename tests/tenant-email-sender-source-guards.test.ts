@@ -31,7 +31,15 @@ test("booking creation remains successful when tenant email cannot be sent", () 
   assert.match(confirmBooking, /try \{\s+await sendBookingEmails/);
   assert.match(confirmBooking, /bookingEmailWarning/);
   assert.match(confirmBooking, /booking email send failed/);
+  assert.match(confirmBooking, /status: "failed",\s+error: bookingEmailWarning/);
+  assert.match(confirmBooking, /cardOnFileWarning \?\?\s+bookingEmailWarning \?\?/);
   assert.match(confirmBooking, /ok: true/);
+});
+
+test("contact-bearing direct emails render the effective Reply-To", () => {
+  for (const path of ["src/lib/email/booking-emails.ts", "src/app/portal/login/actions.ts", "src/lib/admin/users.ts"]) {
+    assert.match(readRepoFile(path), /supportEmail: senderOptions\.replyTo/);
+  }
 });
 
 test("queued email processing resolves sender by queued business_id", () => {

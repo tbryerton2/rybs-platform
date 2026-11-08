@@ -154,19 +154,14 @@ function normalizeSenderLocalPart(input: unknown) {
   return senderLocalPart;
 }
 
-function normalizeOptionalEmail(input: unknown, senderDomain: string) {
+function normalizeOptionalEmail(input: unknown) {
   const value = typeof input === "string" ? input.trim().toLowerCase() : "";
   if (!value) return null;
 
   const replyToEmail = isSuitableTenantReplyToEmail(value);
-  const replyToDomain = replyToEmail?.split("@")[1];
-
-  if (
-    !replyToEmail ||
-    (replyToDomain !== senderDomain && !replyToDomain?.endsWith(`.${senderDomain}`))
-  ) {
+  if (!replyToEmail) {
     throwValidationError(
-      "Enter a non-placeholder Reply-To address on the verified sender domain.",
+      "Enter a valid customer Reply-To inbox, including an external address such as Gmail.",
       "replyToEmail",
     );
   }
@@ -399,7 +394,7 @@ export async function savePlatformTenantEmailIdentity(input: SavePlatformTenantE
   const senderDomain = normalizeSenderDomain(input.senderDomain);
   const senderLocalPart = normalizeSenderLocalPart(input.senderLocalPart);
   const senderDisplayName = normalizeOptionalDisplayName(input.senderDisplayName);
-  const replyToEmail = normalizeOptionalEmail(input.replyToEmail, senderDomain);
+  const replyToEmail = normalizeOptionalEmail(input.replyToEmail);
   const existing = await getTenantEmailIdentityByBusinessId(tenant.id);
 
   assertDomainCanBeChanged(existing, senderDomain);

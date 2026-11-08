@@ -433,7 +433,7 @@ async function sendTenantAdminInviteEmail(input: {
     recipientName: input.name,
     inviteUrl: input.actionLink,
     roleLabel: roleLabel(input.role),
-    supportEmail: communication.supportEmail,
+    supportEmail: senderOptions.replyTo,
     supportPhone: communication.supportPhone,
   });
   const emailSender = input.sendEmailOverride ?? sendEmail;

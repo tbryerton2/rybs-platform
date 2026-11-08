@@ -1048,6 +1048,7 @@ export async function POST(req: Request) {
           )}.`,
           provider: "ses",
           status: "failed",
+          error: bookingEmailWarning,
         })
         .select("id")
         .single();
@@ -1094,6 +1095,7 @@ export async function POST(req: Request) {
         paymentLinkWarning ??
         consentLinkWarning ??
         cardOnFileWarning ??
+        bookingEmailWarning ??
         (createdBooking.placementPersistenceSkipped
           ? "Placement details were collected but could not be persisted because this database is missing the placement columns."
           : undefined),

@@ -9,6 +9,7 @@ const {
   resolveTenantEmailSender,
   resolveTenantReplyToEmail,
   TenantEmailSenderError,
+  tenantSenderSendEmailOptions,
 } = await import("../src/lib/email/tenant-sender.ts");
 const {
   setTenantEmailIdentitySupabaseClientForTesting,
@@ -217,40 +218,32 @@ test("Reply-To falls back to tenant support email when identity reply-to is empt
   assert.equal(sender.replyToEmail, "support-fallback@tancanman.com");
 });
 
-test("pending identity personal Reply-To is ignored in favor of neutral RYBS fallback", () => {
+test("configured external Reply-To is independent of the sending domain", () => {
   assert.equal(
     resolveTenantReplyToEmail({
-      verifiedIdentityReplyToEmail: undefined,
-      verifiedIdentitySenderDomain: undefined,
+      identityReplyToEmail: " DemoDumpsterCompany@gmail.com ",
       supportEmail: "test@test.com",
-      rybsManagedSenderEmail: "notifications@rybsoftware.com",
-      senderEmail: "notifications@rybsoftware.com",
     }),
-    "notifications@rybsoftware.com",
+    "demodumpstercompany@gmail.com",
   );
 });
 
-test("verified tenant Reply-To must belong to the verified sender domain", () => {
+test("missing contact never falls back to a sending address", () => {
+  process.env.RYBS_MANAGED_SES_FROM_EMAIL = "notifications@rybsoftware.com";
   assert.equal(
     resolveTenantReplyToEmail({
-      verifiedIdentityReplyToEmail: "owner@gmail.com",
-      verifiedIdentitySenderDomain: "demodumpstercompany.com",
+      identityReplyToEmail: null,
       supportEmail: null,
-      rybsManagedSenderEmail: "notifications@rybsoftware.com",
-      senderEmail: "bookings@demodumpstercompany.com",
     }),
-    "notifications@rybsoftware.com",
+    null,
   );
 
   assert.equal(
     resolveTenantReplyToEmail({
-      verifiedIdentityReplyToEmail: "support@demodumpstercompany.com",
-      verifiedIdentitySenderDomain: "demodumpstercompany.com",
-      supportEmail: null,
-      rybsManagedSenderEmail: "notifications@rybsoftware.com",
-      senderEmail: "bookings@demodumpstercompany.com",
+      identityReplyToEmail: "no-reply@demodumpstercompany.com",
+      supportEmail: "owner@gmail.com",
     }),
-    "support@demodumpstercompany.com",
+    "owner@gmail.com",
   );
 });
 
@@ -259,4 +252,67 @@ test("tenant support email is accepted while placeholder addresses are rejected"
   assert.equal(isSuitableTenantReplyToEmail("test@test.com"), null);
   assert.equal(isSuitableTenantReplyToEmail("hello@example.com"), null);
   assert.equal(isSuitableTenantReplyToEmail("hello@demo.local"), null);
+});
+
+test("pending tenant identity keeps external Reply-To with unchanged managed sender", async () => {
+  process.env.RYBS_MANAGED_SES_FROM_EMAIL = "notifications@rybsoftware.com";
+  process.env.RYBS_MANAGED_SES_REGION = "us-west-2";
+  setTenantEmailIdentitySupabaseClientForTesting(createMockSupabase([identityRow({
+    provider_status: "pending", verification_status: "pending", reply_to_email: "owner@gmail.com",
+  })]).client);
+  const sender = await resolveTenantEmailSender({
+    tenant: tenant(TAN_BUSINESS_ID, "tan-can-man"), businessName: "Tan Can Man",
+    supportEmail: "support@tancanman.com",
+  });
+  assert.deepEqual(tenantSenderSendEmailOptions(sender), {
+    fromEmail: "notifications@rybsoftware.com", fromDisplayName: "Tan Can Man",
+    replyTo: "owner@gmail.com", region: "us-west-2", useDefaultReplyTo: false,
+  });
+});
+
+test("verified Demo sender keeps From, name and region with Gmail Reply-To", async () => {
+  setTenantEmailIdentitySupabaseClientForTesting(createMockSupabase([identityRow({
+    business_id: DEMO_BUSINESS_ID, sender_domain: "demo-mail.rybsoftware.com",
+    sender_display_name: "Demo Dumpster Company", reply_to_email: "demodumpstercompany@gmail.com",
+  })]).client);
+  const sender = await resolveTenantEmailSender({
+    tenant: tenant(DEMO_BUSINESS_ID, "demo-dumpster-co"), businessName: "Demo Dumpster Company",
+    supportEmail: "different@gmail.com",
+  });
+  assert.deepEqual(tenantSenderSendEmailOptions(sender), {
+    fromEmail: "bookings@demo-mail.rybsoftware.com", fromDisplayName: "Demo Dumpster Company",
+    replyTo: "demodumpstercompany@gmail.com", region: "us-east-1", useDefaultReplyTo: false,
+  });
+});
+
+test("another tenant's external Reply-To is never used even with a managed sender", async () => {
+  process.env.RYBS_MANAGED_SES_FROM_EMAIL = "notifications@rybsoftware.com";
+  setTenantEmailIdentitySupabaseClientForTesting(createMockSupabase([
+    identityRow({ reply_to_email: "other-company@gmail.com" }),
+  ], { ignoreFilters: true }).client);
+  const sender = await resolveTenantEmailSender({
+    tenant: tenant(DEMO_BUSINESS_ID, "demo-dumpster-co"), businessName: "Demo Dumpster Company",
+    supportEmail: "demo-support@gmail.com",
+  });
+  assert.equal(sender.replyToEmail, "demo-support@gmail.com");
+});
+
+test("missing reply contact blocks email options without changing sender configuration", async () => {
+  setTenantEmailIdentitySupabaseClientForTesting(createMockSupabase([identityRow({ reply_to_email: null })]).client);
+  const sender = await resolveTenantEmailSender({
+    tenant: tenant(TAN_BUSINESS_ID, "tan-can-man"), businessName: "Tan Can Man",
+    allowSupportReplyToFallback: false,
+  });
+  assert.equal(sender.replyToEmail, null);
+  assert.equal(sender.senderEmail, "bookings@tancanman.com");
+  assert.throws(() => tenantSenderSendEmailOptions(sender), /delivery paused/);
+});
+
+test("reply validation rejects no-reply, malformed and header-injection addresses", () => {
+  for (const email of ["noreply@gmail.com", "no_reply@gmail.com", "do-not-reply@gmail.com",
+    "owner@gmail.com\r\nBcc: victim@gmail.com", "owner@gmail.com,other@gmail.com", "bad..name@gmail.com",
+    "<owner@gmail.com>", "owner@-bad.com", "test@test.com"]) {
+    assert.equal(isSuitableTenantReplyToEmail(email), null, email);
+  }
+  assert.equal(isSuitableTenantReplyToEmail("Owner+bookings@Gmail.com"), "owner+bookings@gmail.com");
 });

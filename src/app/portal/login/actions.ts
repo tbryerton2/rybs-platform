@@ -149,18 +149,18 @@ export async function sendPortalLoginLinkAction(formData: FormData) {
     redirect(`/portal/login?error=send-failed&email=${encodeURIComponent(email)}`);
   }
 
-  const portalEmail = buildPortalLoginEmail({
-    businessName: communication.businessName,
-    loginUrl: actionLink,
-    supportEmail: communication.supportEmail,
-    supportPhone: communication.supportPhone,
-  });
-
   try {
     const sender = await resolveTenantEmailSender({
       tenant,
       businessName: communication.businessName,
       supportEmail: communication.supportEmail,
+    });
+    const senderOptions = tenantSenderSendEmailOptions(sender);
+    const portalEmail = buildPortalLoginEmail({
+      businessName: communication.businessName,
+      loginUrl: actionLink,
+      supportEmail: senderOptions.replyTo,
+      supportPhone: communication.supportPhone,
     });
 
     await sendEmail({
@@ -168,7 +168,7 @@ export async function sendPortalLoginLinkAction(formData: FormData) {
       subject: portalEmail.subject,
       text: portalEmail.text,
       html: portalEmail.html,
-      ...tenantSenderSendEmailOptions(sender),
+      ...senderOptions,
     });
   } catch (error) {
     devPortalLog("login_email_send_failed", {

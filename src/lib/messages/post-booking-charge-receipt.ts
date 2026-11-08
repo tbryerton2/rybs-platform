@@ -29,6 +29,13 @@ export type BuiltPostBookingChargePaidEmail = {
   body: string;
 };
 
+/** Refresh the generated footer at delivery, after resolving the current tenant Reply-To. */
+export function withPostBookingChargeReplyContact(body: string, replyToEmail: string) {
+  const contactLine = `Questions? Reply to this email or contact us at ${replyToEmail}.`;
+  const footer = /^Questions\? Contact [^\r\n]*[\r\n]*$/m;
+  return footer.test(body) ? body.replace(footer, () => contactLine) : `${body}\n\n${contactLine}`;
+}
+
 const CHARGE_TYPE_LABELS: Record<PostBookingChargeType, string> = {
   weight_overage: "Weight overage",
   damage: "Damage fee",

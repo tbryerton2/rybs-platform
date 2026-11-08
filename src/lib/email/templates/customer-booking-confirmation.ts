@@ -1,4 +1,5 @@
 import { formatEmailUsdFromCents } from "../currency.ts";
+import { isSuitableTenantReplyToEmail } from "../reply-to.ts";
 
 type CustomerBookingConfirmationEmailInput = {
   businessName: string;
@@ -26,11 +27,13 @@ export function buildCustomerBookingConfirmationEmail({
   totalPriceCents,
 }: CustomerBookingConfirmationEmailInput) {
   const subject = `Your ${businessName} booking is confirmed`;
-  const supportLine = supportEmail
-    ? `If you have any questions, reply to this email or contact us at ${supportEmail}.`
+  const contactEmail = isSuitableTenantReplyToEmail(supportEmail);
+  const supportLine = contactEmail
+    ? `If you have any questions, reply to this email or contact us at ${contactEmail}.`
     : supportPhone
       ? `If you have any questions, call or text us at ${supportPhone}.`
-      : "If you have any questions, reply to this email and we’ll help.";
+      : "For help with your booking, please use the customer portal.";
+  const supportHtml = supportLine.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
   const text = `
 Hi ${customerName},
@@ -85,7 +88,7 @@ ${businessName}
         </tr>
       </table>
 
-      <p style="margin-top: 20px;">${supportLine}</p>
+      <p style="margin-top: 20px;">${supportHtml}</p>
 
       <p>Thank you,<br />${businessName}</p>
     </div>

@@ -177,8 +177,8 @@ test("processQueuedBookingMessages sends SES receipt and updates message and cha
   assert.deepEqual(sentInputs[0], {
     to: "customer@example.com",
     subject: "Additional charge for your dumpster rental",
-    text: "Your saved card was charged.",
-    html: '<div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827; white-space: pre-wrap;">Your saved card was charged.</div>',
+    text: "Your saved card was charged.\n\nQuestions? Reply to this email or contact us at support@tancanman.com.",
+    html: '<div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827; white-space: pre-wrap;">Your saved card was charged.\n\nQuestions? Reply to this email or contact us at support@tancanman.com.</div>',
     fromEmail: "bookings@tancanman.com",
     fromDisplayName: "Tan Can Man",
     replyTo: "support@tancanman.com",
@@ -303,4 +303,64 @@ test("processQueuedBookingMessages fails clearly when tenant sender is not verif
   assert.equal(sentInputs.length, 0);
   assert.equal(supabase.tables.booking_messages[0].status, "failed");
   assert.equal(supabase.tables.booking_messages[0].error, "Tenant email sender is not verified.");
+});
+
+test("missing reply contact marks delivery failed without sending or changing a paid charge", async () => {
+  const supabase = createMockSupabase({ booking_messages: [queuedMessage()], booking_charges: [bookingCharge()] });
+  process.env.SES_REPLY_TO_EMAIL = "unrelated@gmail.com";
+  let sendCount = 0;
+  const result = await processQueuedBookingMessages({
+    supabase: supabase.client as never,
+    sendSesEmail: async () => { sendCount++; return {}; },
+    resolveTenantEmailSender: async () => ({
+      senderDisplayName: "Tan Can Man", senderEmail: "bookings@tancanman.com",
+      replyToEmail: null, sesRegion: "us-east-1",
+    }),
+  });
+  assert.equal(result.processed, 0);
+  assert.equal(sendCount, 0);
+  assert.equal(supabase.tables.booking_messages[0].status, "failed");
+  assert.match(String(supabase.tables.booking_messages[0].error), /configure a valid tenant Reply-To or support email/);
+  assert.equal(supabase.tables.booking_charges[0].status, "paid");
+  assert.equal(supabase.tables.booking_charges[0].customer_receipt_email_status, "failed");
+});
+
+test("queued receipt refreshes stale contact information from the tenant's current Reply-To", async () => {
+  const supabase = createMockSupabase({ booking_messages: [queuedMessage({
+    body: "Your saved card was charged.\n\nQuestions? Contact Demo at 315-555-0123 or old@gmail.com.",
+  })], booking_charges: [bookingCharge()] });
+  const sent: Array<{ text: string; html: string; replyTo?: string | null }> = [];
+  await processQueuedBookingMessages({
+    supabase: supabase.client as never,
+    sendSesEmail: async input => { sent.push(input); return {}; },
+    resolveTenantEmailSender: async () => ({
+      senderDisplayName: "Demo", senderEmail: "bookings@demo-mail.rybsoftware.com",
+      replyToEmail: "demodumpstercompany@gmail.com", sesRegion: "us-east-1",
+    }),
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].replyTo, "demodumpstercompany@gmail.com");
+  for (const body of [sent[0].text, sent[0].html]) {
+    assert.match(body, /demodumpstercompany@gmail.com/);
+    assert.doesNotMatch(body, /old@gmail.com/);
+  }
+});
+
+test("queued messages resolve each tenant independently", async () => {
+  const otherBusinessId = "66666666-6666-4666-8666-666666666666";
+  const supabase = createMockSupabase({ booking_messages: [
+    queuedMessage({ template: "status_confirmed", booking_charge_id: null }),
+    queuedMessage({ id: "message-2", business_id: otherBusinessId, template: "status_cancelled", booking_charge_id: null }),
+  ] });
+  const replies: Array<string | null | undefined> = [];
+  await processQueuedBookingMessages({
+    supabase: supabase.client as never,
+    sendSesEmail: async input => { replies.push(input.replyTo); return {}; },
+    resolveTenantEmailSender: async businessId => ({
+      senderDisplayName: "Company", senderEmail: "notifications@rybsoftware.com",
+      replyToEmail: businessId === BUSINESS_ID ? "company-one@gmail.com" : "company-two@gmail.com",
+      sesRegion: "us-east-1",
+    }),
+  });
+  assert.deepEqual(replies, ["company-one@gmail.com", "company-two@gmail.com"]);
 });

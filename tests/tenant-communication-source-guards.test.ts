@@ -13,7 +13,8 @@ test("booking emails use tenant branding and tenant-scoped notification recipien
   const source = readRepoFile("src/lib/email/booking-emails.ts");
 
   assert.match(source, /tenant: TenantRecord/);
-  assert.match(source, /getTenantCommunicationSettings\(input\.tenant, input\.requestContext\)/);
+  assert.match(source, /getCommunicationSettings\(input\.tenant, input\.requestContext\)/);
+  assert.match(source, /deps\.getCommunicationSettings \?\? getTenantCommunicationSettings/);
   assert.match(source, /businessName: communication\.businessName/);
   assert.match(source, /to: communication\.bookingNotificationRecipients/);
   assert.doesNotMatch(source, /process\.env\.ADMIN_BOOKING_EMAIL/);

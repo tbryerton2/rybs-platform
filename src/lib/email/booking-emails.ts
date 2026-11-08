@@ -1,6 +1,6 @@
 import { buildAdminNewBookingEmail } from "@/lib/email/templates/admin-new-booking";
 import { buildCustomerBookingConfirmationEmail } from "@/lib/email/templates/customer-booking-confirmation";
-import { sendEmail } from "@/lib/email/ses";
+import { sendEmail as defaultSendEmail } from "@/lib/email/ses";
 import { resolveTenantEmailSender, tenantSenderSendEmailOptions } from "@/lib/email/tenant-sender";
 import { getTenantCommunicationSettings } from "@/lib/tenant/communications";
 import type { TenantRecord } from "@/lib/tenant/server";
@@ -23,9 +23,18 @@ type BookingEmailInput = {
   adminBookingUrl?: string | null;
 };
 
-export async function sendBookingEmails(input: BookingEmailInput) {
-  const communication = await getTenantCommunicationSettings(input.tenant, input.requestContext);
-  const sender = await resolveTenantEmailSender({
+type BookingEmailDependencies = {
+  getCommunicationSettings?: typeof getTenantCommunicationSettings;
+  resolveSender?: typeof resolveTenantEmailSender;
+  sendEmail?: typeof defaultSendEmail;
+};
+
+export async function sendBookingEmails(input: BookingEmailInput, deps: BookingEmailDependencies = {}) {
+  const getCommunicationSettings = deps.getCommunicationSettings ?? getTenantCommunicationSettings;
+  const resolveSender = deps.resolveSender ?? resolveTenantEmailSender;
+  const sendEmail = deps.sendEmail ?? defaultSendEmail;
+  const communication = await getCommunicationSettings(input.tenant, input.requestContext);
+  const sender = await resolveSender({
     tenant: input.tenant,
     businessName: communication.businessName,
     supportEmail: communication.supportEmail,
@@ -39,7 +48,7 @@ export async function sendBookingEmails(input: BookingEmailInput) {
   const templateInput = {
     ...input,
     businessName: communication.businessName,
-    supportEmail: communication.supportEmail,
+    supportEmail: senderOptions.replyTo,
     supportPhone: communication.supportPhone,
     adminBookingUrl,
   };

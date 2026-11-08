@@ -1768,7 +1768,7 @@ function EmailSendingSection({
             </div>
             <div>
               <label htmlFor="replyToEmail" className="text-sm font-semibold text-slate-700">
-                Reply-To on sender domain
+                Customer Reply-To inbox
               </label>
               <input
                 id="replyToEmail"
@@ -1778,6 +1778,7 @@ function EmailSendingSection({
                 autoComplete="email"
                 className="mt-2 block h-11 w-full rounded-[8px] border border-slate-300 px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
               />
+              <p className="mt-2 text-sm text-slate-600">Use an inbox monitored by this business. External addresses such as Gmail are supported.</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3">

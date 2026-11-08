@@ -94,3 +94,27 @@ test("portal issue report email is tenant branded", () => {
   assert.match(email.text, /Demo Dumpster Company portal/);
   assert.doesNotMatch(email.text, /Tan Can Man/);
 });
+
+test("booking confirmation only invites replies with a usable reply contact", () => {
+  for (const supportEmail of [undefined, null, "", "test@test.com", "no-reply@gmail.com"]) {
+    const email = buildCustomerBookingConfirmationEmail({ ...BASE_BOOKING_EMAIL_INPUT, supportEmail });
+    assert.doesNotMatch(email.text, /reply to this email/i);
+    assert.doesNotMatch(email.html, /reply to this email/i);
+    assert.match(email.text, /customer portal/);
+  }
+  const phoneOnly = buildCustomerBookingConfirmationEmail({ ...BASE_BOOKING_EMAIL_INPUT, supportPhone: "315-555-0123" });
+  assert.match(phoneOnly.text, /call or text us at 315-555-0123/);
+  assert.doesNotMatch(phoneOnly.html, /reply to this email/i);
+});
+
+test("confirmation and portal contact text preserves email characters in HTML and text", () => {
+  const supportEmail = "dispatch&support@gmail.com";
+  const emails = [
+    buildCustomerBookingConfirmationEmail({ ...BASE_BOOKING_EMAIL_INPUT, supportEmail }),
+    buildPortalLoginEmail({ businessName: "Demo", loginUrl: "https://demo.test/login", supportEmail }),
+  ];
+  for (const email of emails) {
+    assert.match(email.text, /dispatch&support@gmail.com/);
+    assert.match(email.html, /dispatch&amp;support@gmail.com/);
+  }
+});

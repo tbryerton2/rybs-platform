@@ -17,6 +17,7 @@ export function buildPortalLoginEmail({
     : supportPhone
       ? `If you did not request this link, you can ignore this email or contact us at ${supportPhone}.`
       : "If you did not request this link, you can ignore this email.";
+  const supportHtml = supportLine.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
   const text = `
 Use this secure link to sign in to your ${businessName} customer portal:
@@ -38,7 +39,7 @@ ${supportLine}
         </a>
       </p>
       <p>This link expires soon and can only be used once.</p>
-      <p>${supportLine}</p>
+      <p>${supportHtml}</p>
     </div>
   `.trim();
 

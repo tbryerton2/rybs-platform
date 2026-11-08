@@ -32,8 +32,8 @@ test("platform email identity mutations protect tenant/domain ownership assumpti
   assert.match(source, /existing\.providerStatus === "failed"/);
   assert.match(source, /Remove the existing SES email identity before changing the sender domain/);
   assert.match(source, /isSuitableTenantReplyToEmail\(value\)/);
-  assert.match(source, /replyToDomain !== senderDomain/);
-  assert.match(source, /non-placeholder Reply-To address on the verified sender domain/);
+  assert.doesNotMatch(source, /replyToDomain !== senderDomain/);
+  assert.match(source, /external address such as Gmail/);
 });
 
 test("platform email identity provider removal is provider-aware and database deletion waits", () => {

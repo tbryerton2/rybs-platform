@@ -22,3 +22,21 @@ Add the exact production callback paths to the Supabase Auth redirect allowlist:
 - `https://app.rybsoftware.com/admin/accept-invite`
 - `https://app.rybsoftware.com/admin/update-password`
 - `https://app.rybsoftware.com/platform-admin/auth/callback`
+
+## Retail email replies
+
+Retail emails keep their existing SES From address, display name, region, and
+authentication. Reply-To uses the tenant identity's configured `reply_to_email`
+first, then `tenant_settings` → `support.email`. External inboxes such as Gmail
+are supported independently of SES sending-domain verification. Configure an
+inbox monitored by the business; syntax validation does not prove inbox ownership.
+Website-header addresses and private booking-notification recipients are not
+reply fallbacks, and neither are global SES defaults or the From address.
+
+When neither reply destination is usable, tenant email delivery fails before
+calling SES. Confirmed bookings remain successful, with an email warning and a
+failed `booking_messages` record containing the configuration error. The queue
+worker also records a failed delivery without reversing a paid charge. These
+failures are not automatically retried: correct configuration, then deliberately
+retry the appropriate message. Portal login and staff invitation emails also
+require a reply contact. Do not process the historical queue to test this change.
