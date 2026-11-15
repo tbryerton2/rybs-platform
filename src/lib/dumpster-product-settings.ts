@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cleanProductDescription } from "@/lib/product-card-content";
+
 import { getOfferedDumpsterProducts, type OfferedDumpsterProduct } from "@/lib/admin/dumpster-inventory";
 import { getDumpsterSizeCapacity } from "@/lib/booking-product";
 import { getZipPricingOverridesBySize } from "@/lib/pricing";
@@ -15,6 +17,8 @@ export type DumpsterProductSettingsRow = {
   short_description: string | null;
   customer_bullet_points: string | null;
   dimensions: string | null;
+  truck_load_estimate: string | null;
+  size_guide_examples: string | null;
   included_weight_tons: number | string | null;
   included_rental_days: number | null;
   extra_day_price: number | string | null;
@@ -33,6 +37,8 @@ export type DumpsterProductSetting = {
   shortDescription: string;
   customerBulletPoints: string;
   dimensions: string;
+  truckLoadEstimate: string;
+  sizeGuideExamples: string;
   includedWeightTons: number | null;
   includedRentalDays: number | null;
   extraDayPrice: number | null;
@@ -52,6 +58,8 @@ export type PublicDumpsterProduct = {
   shortDescription: string;
   customerBulletPoints: string;
   dimensions: string;
+  truckLoadEstimate: string;
+  sizeGuideExamples: string;
   includedWeightTons: number;
   tonOveragePrice: number;
   includedRentalDays: number;
@@ -69,6 +77,8 @@ const DUMPSTER_PRODUCT_SETTINGS_SELECT = `
   short_description,
   customer_bullet_points,
   dimensions,
+  truck_load_estimate,
+  size_guide_examples,
   included_weight_tons,
   included_rental_days,
   extra_day_price,
@@ -138,9 +148,11 @@ function mapRow(row: DumpsterProductSettingsRow): DumpsterProductSetting {
     dumpsterSize: row.dumpster_size,
     dumpsterProductId: row.dumpster_product_id,
     displayName: row.display_name,
-    shortDescription: asString(row.short_description),
+    shortDescription: asString(cleanProductDescription(row.short_description)),
     customerBulletPoints: asString(row.customer_bullet_points),
     dimensions: asString(row.dimensions),
+    truckLoadEstimate: asString(row.truck_load_estimate),
+    sizeGuideExamples: asString(row.size_guide_examples),
     includedWeightTons: asNumber(row.included_weight_tons),
     includedRentalDays: row.included_rental_days ?? null,
     extraDayPrice: asNumber(row.extra_day_price),
@@ -206,9 +218,11 @@ export async function getEditableDumpsterProductSettings(businessId?: string): P
       dumpsterSize: offered.dumpsterSize,
       dumpsterProductId: fallbackProductId(offered.dumpsterSize),
       displayName: formatDefaultDisplayName(offered.dumpsterSize),
-      shortDescription: "Draft defaults based on the current global pricing fallback.",
+      shortDescription: "",
       customerBulletPoints: "",
       dimensions: "",
+      truckLoadEstimate: "",
+      sizeGuideExamples: "",
       includedWeightTons:
         pricingSettings.includedTons ?? DEFAULT_PRICING_SETTINGS.includedTons,
       tonOveragePrice:
@@ -272,6 +286,8 @@ export async function getPublicDumpsterProducts(
         shortDescription: setting?.shortDescription || "",
         customerBulletPoints: setting?.customerBulletPoints || "",
         dimensions: setting?.dimensions || "",
+        truckLoadEstimate: setting?.truckLoadEstimate || "",
+        sizeGuideExamples: setting?.sizeGuideExamples || "",
         includedWeightTons:
           setting?.includedWeightTons ?? pricingSettings.includedTons ?? DEFAULT_PRICING_SETTINGS.includedTons,
         tonOveragePrice:

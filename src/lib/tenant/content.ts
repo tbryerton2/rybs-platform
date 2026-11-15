@@ -132,22 +132,6 @@ type HomeFaqContent = {
   }>;
 };
 
-type PricingIntroContent = {
-  headline: string;
-  defaultBody: string;
-};
-
-type PricingPromisesContent = {
-  productBody: string;
-  dimensionLabel: string;
-  featureList: string[];
-  includedHeading: string;
-  includedPricePrefix: string;
-  includedPriceSuffix: string;
-  includedItems: string[];
-  footnote: string;
-};
-
 export type PricingSizeGuideRowContent = {
   id: string;
   sizeLabel: string;
@@ -161,7 +145,6 @@ export type PricingSizeGuideContent = {
   enabled: boolean;
   buttonText: string;
   title: string;
-  rows: PricingSizeGuideRowContent[];
 };
 
 type SupportMarketingContent = {
@@ -482,67 +465,6 @@ const HOME_FAQ_FALLBACK: HomeFaqContent = {
       question: "How fast can you deliver?",
       answer:
         "Delivery timing depends on local availability and schedule capacity. Enter your ZIP code to check available options.",
-    },
-  ],
-};
-
-const PRICING_INTRO_FALLBACK: PricingIntroContent = {
-  headline: "Dumpster Pricing",
-  defaultBody: "Review available dumpster sizes and rental details.",
-};
-
-const PRICING_PROMISES_FALLBACK: PricingPromisesContent = {
-  productBody:
-    "Base pricing and included services are shown with each available dumpster size.",
-  dimensionLabel: "Dimensions vary by size",
-  featureList: ["Included weight shown by dumpster size"],
-  includedHeading: "What’s included in your rental",
-  includedPricePrefix: "All included in the",
-  includedPriceSuffix: "flat rate",
-  includedItems: [
-    "Delivery and pickup details",
-    "Included weight shown by dumpster size",
-    "Rental period shown at booking",
-  ],
-  footnote: "Additional charges may apply according to configured pricing.",
-};
-
-const PRICING_SIZE_GUIDE_FALLBACK: PricingSizeGuideContent = {
-  enabled: true,
-  buttonText: "Not sure which size? →",
-  title: "Which size is right for me?",
-  rows: [
-    {
-      id: "14-yard",
-      sizeLabel: "14-yard",
-      truckLoadEstimate: "~3-4 truck loads",
-      description: "Bathroom remodel, small cleanout, garage declutter, or a single room renovation.",
-      sortOrder: 10,
-      active: true,
-    },
-    {
-      id: "20-yard",
-      sizeLabel: "20-yard",
-      truckLoadEstimate: "~6-8 truck loads",
-      description: "Roofing job, kitchen remodel, basement or attic cleanout, multi-room renovation.",
-      sortOrder: 20,
-      active: true,
-    },
-    {
-      id: "30-yard",
-      sizeLabel: "30-yard",
-      truckLoadEstimate: "~9-12 truck loads",
-      description: "Large home renovation, new construction debris, full property cleanout.",
-      sortOrder: 30,
-      active: true,
-    },
-    {
-      id: "50-yard",
-      sizeLabel: "50-yard",
-      truckLoadEstimate: "~16-18 truck loads",
-      description: "Commercial jobs, major demolition, large construction sites, industrial cleanouts.",
-      sortOrder: 40,
-      active: true,
     },
   ],
 };
@@ -1092,78 +1014,6 @@ export async function getHomeFaqContent(
             };
           })
         : HOME_FAQ_FALLBACK.items,
-  };
-}
-
-export async function getPricingIntroContent(
-  options?: TenantContentReadOptions,
-): Promise<PricingIntroContent> {
-  const raw = asObject(await getTenantContent("content.pricing.intro", options));
-
-  return {
-    headline: asString(raw.headline, PRICING_INTRO_FALLBACK.headline),
-    defaultBody: asString(raw.defaultBody, PRICING_INTRO_FALLBACK.defaultBody),
-  };
-}
-
-export async function getPricingPromisesContent(
-  options?: TenantContentReadOptions,
-): Promise<PricingPromisesContent> {
-  const raw = asObject(
-    (await getTenantContent("content.pricing.product_content", options)) ??
-      (await getTenantContent("content.pricing.promises", options)),
-  );
-
-  return {
-    productBody: asString(raw.productBody ?? raw.description, PRICING_PROMISES_FALLBACK.productBody),
-    dimensionLabel: asString(raw.dimensionLabel, PRICING_PROMISES_FALLBACK.dimensionLabel),
-    featureList: asStringArray(raw.featureList ?? raw.featureBullets, PRICING_PROMISES_FALLBACK.featureList),
-    includedHeading: asString(raw.includedHeading, PRICING_PROMISES_FALLBACK.includedHeading),
-    includedPricePrefix: asString(
-      raw.includedPricePrefix,
-      PRICING_PROMISES_FALLBACK.includedPricePrefix,
-    ),
-    includedPriceSuffix: asString(
-      raw.includedPriceSuffix,
-      PRICING_PROMISES_FALLBACK.includedPriceSuffix,
-    ),
-    includedItems: asStringArray(raw.includedItems, PRICING_PROMISES_FALLBACK.includedItems),
-    footnote: asString(raw.footnote ?? raw.bottomNote, PRICING_PROMISES_FALLBACK.footnote),
-  };
-}
-
-export async function getPricingSizeGuideContent(
-  options?: TenantContentReadOptions,
-): Promise<PricingSizeGuideContent> {
-  const raw = asObject(await getTenantContent("content.pricing.product_content", options));
-  const rawSizeGuide = asObject(raw.sizeGuide);
-  const sourceRows = asRecordArray(rawSizeGuide.rows);
-  const fallbackRows = PRICING_SIZE_GUIDE_FALLBACK.rows;
-  const rows = (sourceRows.length ? sourceRows : fallbackRows)
-    .map((item, index) => {
-      const row = asObject(item);
-      const fallback = fallbackRows[index] ?? fallbackRows[0];
-
-      return {
-        id: asString(row.id, `size-guide-row-${index + 1}`),
-        sizeLabel: asString(row.sizeLabel, fallback.sizeLabel),
-        truckLoadEstimate: asString(row.truckLoadEstimate, fallback.truckLoadEstimate),
-        description: asString(row.description, fallback.description),
-        sortOrder: asNumber(row.sortOrder ?? row.sort_order, fallback.sortOrder),
-        active: asBoolean(row.active, fallback.active),
-      };
-    })
-    .filter((row) => row.active && row.sizeLabel && row.description)
-    .sort((left, right) => {
-      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
-      return left.sizeLabel.localeCompare(right.sizeLabel);
-    });
-
-  return {
-    enabled: asBoolean(rawSizeGuide.enabled, PRICING_SIZE_GUIDE_FALLBACK.enabled),
-    buttonText: asString(rawSizeGuide.buttonText, PRICING_SIZE_GUIDE_FALLBACK.buttonText),
-    title: asString(rawSizeGuide.title, PRICING_SIZE_GUIDE_FALLBACK.title),
-    rows,
   };
 }
 

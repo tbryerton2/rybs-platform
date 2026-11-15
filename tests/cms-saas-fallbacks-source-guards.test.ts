@@ -44,7 +44,7 @@ test("claim-based defaults are opt-in or neutral instead of factual assertions",
   assert.match(adminCms, /text: ""/);
   assert.match(publicContent, /text: ""/);
   assert.match(publicContent, /Delivery timing depends on local availability/);
-  assert.match(publicContent, /Additional charges may apply according to configured pricing/);
+
 });
 
 test("opening the admin CMS page does not create tenant content rows", () => {
@@ -108,7 +108,7 @@ test("CMS preview hands off from admin app to the selected business public domai
   assert.match(publicPreviewRoute, /resolvePublicTenantFromRequest\(req\)/);
   assert.match(publicPreviewRoute, /tenant\.id !== payload\.tenantId/);
   assert.match(home, /href="\/cms-preview\?mode=exit&redirect=\/"/);
-  assert.match(pricing, /href=\{`\/cms-preview\?mode=exit&redirect=/);
+  assert.doesNotMatch(pricing, /cms-preview/);
   assert.doesNotMatch(home, /admin\/cms\/preview\?mode=exit/);
   assert.doesNotMatch(pricing, /admin\/cms\/preview\?mode=exit/);
 });

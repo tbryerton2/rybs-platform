@@ -1,3 +1,5 @@
+import { getPricingPageSettings } from "@/lib/pricing-page-settings";
+import { PricingPageContentForm } from "./pricing-page-content-form";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
@@ -16,7 +18,6 @@ import { getHighestActiveIncludedRentalDays } from "@/lib/admin/pricing-settings
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import {
   DEFAULT_PRICING_SETTINGS,
-  isMissingPricingSettingsIncludedServicesBlurbColumnError,
   isMissingPricingSettingsRentalPeriodColumnsError,
 } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -29,7 +30,6 @@ type PricingSettingsRow = {
   daily_overage_price: number;
   max_rental_days: number | null;
   allow_extended_rental_at_booking: boolean;
-  included_services_blurb: string | null;
   included_tons: number;
   ton_overage_price: number;
   updated_at: string | null;
@@ -103,7 +103,6 @@ function getDefaultPricingSettings(): PricingSettingsRow {
     daily_overage_price: DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
     max_rental_days: DEFAULT_PRICING_SETTINGS.maxRentalDays,
     allow_extended_rental_at_booking: DEFAULT_PRICING_SETTINGS.allowExtendedRentalAtBooking,
-    included_services_blurb: DEFAULT_PRICING_SETTINGS.includedServicesBlurb,
     included_tons: DEFAULT_PRICING_SETTINGS.includedTons,
     ton_overage_price: DEFAULT_PRICING_SETTINGS.tonOveragePrice,
     updated_at: null,
@@ -119,7 +118,6 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
     daily_overage_price,
     max_rental_days,
     allow_extended_rental_at_booking,
-    included_services_blurb,
     included_tons,
     ton_overage_price,
     updated_at
@@ -133,8 +131,7 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
 
   if (
     error &&
-    !isMissingPricingSettingsRentalPeriodColumnsError(error) &&
-    !isMissingPricingSettingsIncludedServicesBlurbColumnError(error)
+    !isMissingPricingSettingsRentalPeriodColumnsError(error)
   ) {
     throw new Error(error.message);
   }
@@ -176,7 +173,6 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
         max_rental_days: legacyResult.data.max_rental_days ?? null,
         allow_extended_rental_at_booking:
           legacyResult.data.allow_extended_rental_at_booking ?? false,
-        included_services_blurb: null,
         isPersisted: true,
       };
     }
@@ -194,9 +190,10 @@ async function getPricingSettings(businessId: string): Promise<PricingSettingsRo
 
 export default async function AdminPricingSettingsPage() {
   const adminSession = await requireAdminOwner();
-  const [pricing, productSettings] = await Promise.all([
+  const [pricing, productSettings, pageContent] = await Promise.all([
     getPricingSettings(adminSession.business.id),
     getEditableDumpsterProductSettings(adminSession.business.id),
+    getPricingPageSettings(adminSession.business.id),
   ]);
   const maxRentalSummary =
     pricing.max_rental_days == null ? "No hard cap" : `${pricing.max_rental_days} days`;
@@ -225,6 +222,11 @@ export default async function AdminPricingSettingsPage() {
         }
       />
 
+      <nav aria-label="Pricing sections" className="mb-6 flex flex-wrap gap-2">
+        <a href="#booking-rules" className="admin-btn admin-btn-secondary">Booking rules</a>
+        <a href="#dumpsters" className="admin-btn admin-btn-secondary">Dumpsters</a>
+        <a href="#pricing-page-content" className="admin-btn admin-btn-secondary">Pricing page content</a>
+      </nav>
       <section className="mb-8">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <SummaryMetricCard
@@ -248,23 +250,24 @@ export default async function AdminPricingSettingsPage() {
         </div>
       </section>
 
+      <section id="booking-rules" className="scroll-mt-24">
       <PricingSettingsForm
         pricing={{
           id: pricing.id,
           maxRentalDays: pricing.max_rental_days,
           allowExtendedRentalAtBooking: pricing.allow_extended_rental_at_booking,
-          includedServicesBlurb: pricing.included_services_blurb,
           tonOveragePrice: pricing.ton_overage_price,
           isPersisted: pricing.isPersisted,
         }}
         highestActiveIncludedRentalDays={highestActiveIncludedRentalDays}
       />
 
-      <section className="mt-8">
+      </section>
+      <section id="dumpsters" className="mt-8 scroll-mt-24">
         <div className="mb-4">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-              Dumpster product settings
+              Dumpsters
             </h2>
             <button
               type="button"
@@ -285,6 +288,7 @@ export default async function AdminPricingSettingsPage() {
         </div>
         <DumpsterProductSettingsForm settings={productSettings} />
       </section>
+      <PricingPageContentForm settings={pageContent} />
     </AdminPage>
   );
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { cleanProductDescription } from "@/lib/product-card-content";
 import { revalidatePath } from "next/cache";
 import { requireAdminOwner } from "@/lib/admin/auth";
 import {
@@ -11,7 +12,6 @@ import {
 import { getEditableDumpsterProductSettings } from "@/lib/dumpster-product-settings";
 import {
   DEFAULT_PRICING_SETTINGS,
-  isMissingPricingSettingsIncludedServicesBlurbColumnError,
   isMissingPricingSettingsRentalPeriodColumnsError,
 } from "@/lib/pricing-settings";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -19,7 +19,6 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export type PricingSettingsFormValues = {
   maxRentalDays: string;
   allowExtendedRentalAtBooking: boolean;
-  includedServicesBlurb: string;
   tonOveragePrice: string;
 };
 
@@ -30,7 +29,6 @@ export type PricingSettingsFieldErrors = Partial<
     | "dailyOveragePrice"
     | "maxRentalDays"
     | "allowExtendedRentalAtBooking"
-    | "includedServicesBlurb"
     | "includedTons"
     | "tonOveragePrice",
     string
@@ -53,6 +51,8 @@ export type DumpsterProductSettingsFormValues = {
   shortDescription: string;
   customerBulletPoints: string;
   dimensions: string;
+  truckLoadEstimate: string;
+  sizeGuideExamples: string;
   includedWeightTons: string;
   includedRentalDays: string;
   extraDayPrice: string;
@@ -67,6 +67,8 @@ export type DumpsterProductSettingsFieldErrors = Partial<
     | "shortDescription"
     | "customerBulletPoints"
     | "dimensions"
+    | "truckLoadEstimate"
+    | "sizeGuideExamples"
     | "includedWeightTons"
     | "includedRentalDays"
     | "extraDayPrice"
@@ -102,7 +104,6 @@ function buildValues(formData: FormData): PricingSettingsFormValues {
   return {
     maxRentalDays: asString(formData.get("maxRentalDays")).trim(),
     allowExtendedRentalAtBooking: asBoolean(formData.get("allowExtendedRentalAtBooking")),
-    includedServicesBlurb: asString(formData.get("includedServicesBlurb")).trim(),
     tonOveragePrice: normalizeCurrency(asString(formData.get("tonOveragePrice"))),
   };
 }
@@ -112,9 +113,11 @@ function buildDumpsterProductValues(formData: FormData): DumpsterProductSettings
     dumpsterSize: asString(formData.get("dumpsterSize")).trim(),
     dumpsterProductId: asString(formData.get("dumpsterProductId")).trim(),
     displayName: asString(formData.get("displayName")).trim(),
-    shortDescription: asString(formData.get("shortDescription")).trim(),
+    shortDescription: cleanProductDescription(asString(formData.get("shortDescription"))).trim(),
     customerBulletPoints: asString(formData.get("customerBulletPoints")).trim(),
     dimensions: asString(formData.get("dimensions")).trim(),
+    truckLoadEstimate: asString(formData.get("truckLoadEstimate")).trim(),
+    sizeGuideExamples: asString(formData.get("sizeGuideExamples")).trim(),
     includedWeightTons: asString(formData.get("includedWeightTons")).trim(),
     includedRentalDays: asString(formData.get("includedRentalDays")).trim(),
     extraDayPrice: normalizeCurrency(asString(formData.get("extraDayPrice"))),
@@ -296,10 +299,6 @@ export async function updatePricingSettingsAction(
     fieldErrors.maxRentalDays = "Max rental length must be at least 1 day.";
   }
 
-  if (values.includedServicesBlurb.length > 300) {
-    fieldErrors.includedServicesBlurb = "What’s included must be 300 characters or fewer.";
-  }
-
   if (Object.keys(fieldErrors).length > 0) {
     return invalidState(values, fieldErrors);
   }
@@ -320,7 +319,6 @@ export async function updatePricingSettingsAction(
   const payload = {
     max_rental_days: maxRentalDays,
     allow_extended_rental_at_booking: values.allowExtendedRentalAtBooking,
-    included_services_blurb: values.includedServicesBlurb || null,
     ton_overage_price: tonOveragePrice,
     business_id: adminSession.business.id,
   };
@@ -357,18 +355,6 @@ export async function updatePricingSettingsAction(
       message: "",
       error:
         "Your database needs the latest pricing settings update before these changes can be saved. Apply migration 202604150101_pricing_settings_rental_period_model and try again.",
-      fieldErrors: {},
-      values,
-      messageKey: Date.now(),
-    };
-  }
-
-  if (error && isMissingPricingSettingsIncludedServicesBlurbColumnError(error)) {
-    return {
-      success: false,
-      message: "",
-      error:
-        "Your database needs the latest pricing settings update before this field can be saved. Apply migration 202605150101_pricing_settings_included_services_blurb and try again.",
       fieldErrors: {},
       values,
       messageKey: Date.now(),
@@ -475,6 +461,8 @@ export async function updateDumpsterProductSettingAction(
       short_description: values.shortDescription || null,
       customer_bullet_points: values.customerBulletPoints || null,
       dimensions: values.dimensions || null,
+      truck_load_estimate: values.truckLoadEstimate || null,
+      size_guide_examples: values.sizeGuideExamples || null,
       included_weight_tons: includedWeightTons,
       included_rental_days: includedRentalDays,
       extra_day_price: extraDayPrice,
@@ -516,4 +504,27 @@ export async function updateDumpsterProductSettingAction(
     values,
     messageKey: Date.now(),
   };
+}
+
+export async function updatePricingPageContentAction(
+  _previous: { success: boolean; message: string },
+  formData: FormData,
+): Promise<{ success: boolean; message: string }> {
+  const session = await requireAdminOwner();
+  const text = (name: string) => asString(formData.get(name)).trim();
+  const { error } = await supabaseAdmin.from("pricing_page_settings").upsert({
+    business_id: session.business.id,
+    headline: text("headline"),
+    introduction: text("introduction"),
+    included_heading: text("includedHeading"),
+    included_items: formData.getAll("includedItems").map(asString).map((item) => item.trim()).filter(Boolean),
+    bottom_note: text("bottomNote"),
+    show_size_guide: asBoolean(formData.get("showSizeGuide")),
+    size_guide_button_text: text("sizeGuideButtonText"),
+    size_guide_title: text("sizeGuideTitle"),
+  }, { onConflict: "business_id" });
+  if (error) return { success: false, message: "Unable to save pricing page content. Please try again." };
+  revalidatePath("/admin/settings/pricing");
+  revalidatePath("/pricing");
+  return { success: true, message: "Pricing page content saved." };
 }

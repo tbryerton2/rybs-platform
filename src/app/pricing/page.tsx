@@ -1,7 +1,7 @@
 import { sanitizeZip } from "@/lib/pricing";
 import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
-import { getPricingSettingsSnapshot } from "@/lib/pricing-settings";
-import { getPricingIntroContent, getPricingSizeGuideContent } from "@/lib/tenant/content";
+import { getProductSizeGuideRows } from "@/lib/pricing-size-guide";
+import { getPricingPageSettings } from "@/lib/pricing-page-settings";
 import { getCurrentTenant } from "@/lib/tenant/server";
 import BookOnlineButton from "@/components/BookOnlineButton";
 import { parseCustomerBulletPoints } from "@/lib/product-card-content";
@@ -28,23 +28,19 @@ function formatShortDescription(description?: string | null) {
 export default async function PricingPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ zip?: string; preview?: string }>;
+  searchParams?: Promise<{ zip?: string }>;
 }) {
   const sp = await searchParams;
   const zip = sanitizeZip(sp?.zip);
   const zipValid = zip.length === 5;
-  const preview = sp?.preview === "1";
   const tenant = await getCurrentTenant();
-  const contentOptions = { preview, tenantId: tenant.id };
-
-  const [pricingIntro, inventoryProducts, pricingSettings, sizeGuideContent] = await Promise.all([
-    getPricingIntroContent(contentOptions),
+  const [pageContent, inventoryProducts] = await Promise.all([
+    getPricingPageSettings(tenant.id),
     getPublicDumpsterProducts(zip, tenant.id),
-    getPricingSettingsSnapshot(tenant.id),
-    getPricingSizeGuideContent(contentOptions),
   ]);
-  const includedServicesBlurb = pricingSettings.includedServicesBlurb?.trim() || "";
-  const showSizeGuide = sizeGuideContent.enabled && sizeGuideContent.rows.length > 0;
+  const sizeGuideContent = pageContent.sizeGuide;
+  const sizeGuideRows = getProductSizeGuideRows(inventoryProducts);
+  const showSizeGuide = sizeGuideContent.enabled && sizeGuideRows.length > 0;
   const pricingProducts = inventoryProducts;
 
   const money = new Intl.NumberFormat("en-US", {
@@ -55,24 +51,11 @@ export default async function PricingPage({
 
   return (
     <main className="min-h-screen bg-[#f5f4f0] text-[#0F172A]">
-      {preview ? (
-        <section className="border-b border-amber-200 bg-amber-50">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3 text-sm text-amber-900">
-            <span>Preview mode is on. You are viewing draft retail-site content.</span>
-            <a
-              href={`/cms-preview?mode=exit&redirect=${encodeURIComponent(zipValid ? `/pricing?zip=${zip}` : "/pricing")}`}
-              className="font-semibold underline decoration-amber-400 underline-offset-4"
-            >
-              Exit Preview
-            </a>
-          </div>
-        </section>
-      ) : null}
       <div className="mx-auto max-w-6xl px-6 py-16 space-y-16">
         {/* Header */}
         <section>
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-            {pricingIntro.headline}
+            {pageContent.headline}
           </h1>
 
           <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-2 text-lg text-slate-600">
@@ -81,25 +64,20 @@ export default async function PricingPage({
                 <span>
                   Delivering to <span className="font-semibold text-slate-900">{zip}</span>
                 </span>
-                <PricingZipSwitcher currentZip={zip} preview={preview} />
+                <PricingZipSwitcher currentZip={zip} />
               </>
             ) : (
-              <span>{pricingIntro.defaultBody}</span>
+              <span>{pageContent.introduction}</span>
             )}
           </div>
 
-          {includedServicesBlurb ? (
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              {includedServicesBlurb}
-            </p>
-          ) : null}
         </section>
 
         {/* Pricing Card */}
         <section>
           {showSizeGuide ? (
             <div className="mb-5">
-              <PricingSizeGuide content={sizeGuideContent} />
+              <PricingSizeGuide content={sizeGuideContent} rows={sizeGuideRows} />
             </div>
           ) : null}
           {pricingProducts.length ? (
@@ -190,6 +168,17 @@ export default async function PricingPage({
             </div>
           )}
         </section>
+        {pageContent.includedHeading || pageContent.includedItems.length || pageContent.bottomNote ? (
+          <section className="space-y-4">
+            {pageContent.includedHeading ? <h2 className="text-2xl font-semibold tracking-tight">{pageContent.includedHeading}</h2> : null}
+            {pageContent.includedItems.length ? (
+              <ul className="space-y-3 text-sm text-slate-600">
+                {pageContent.includedItems.map((item, index) => <li key={index}>• {item}</li>)}
+              </ul>
+            ) : null}
+            {pageContent.bottomNote ? <p className="whitespace-pre-line text-sm leading-6 text-slate-600">{pageContent.bottomNote}</p> : null}
+          </section>
+        ) : null}
       </div>
     </main>
   );

@@ -1,21 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import type { PricingSizeGuideContent } from "@/lib/tenant/content";
+import type { PricingSizeGuideContent, PricingSizeGuideRowContent } from "@/lib/tenant/content";
 
-export default function PricingSizeGuide({ content }: { content: PricingSizeGuideContent }) {
+export default function PricingSizeGuide({ content, rows }: {
+  content: PricingSizeGuideContent;
+  rows: PricingSizeGuideRowContent[];
+}) {
   const [open, setOpen] = useState(false);
-  const rows = useMemo(
-    () =>
-      content.rows
-        .filter((row) => row.active && row.sizeLabel.trim() && row.description.trim())
-        .sort((left, right) => {
-          if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
-          return left.sizeLabel.localeCompare(right.sizeLabel);
-        }),
-    [content.rows],
-  );
 
   useEffect(() => {
     if (!open) return;

@@ -126,7 +126,7 @@ test("admin pricing page returns unsaved suggested defaults when no row exists",
   assert.match(pageSource, /DEFAULT_PRICING_SETTINGS\.tonOveragePrice/);
   assert.match(pageSource, /DEFAULT_PRICING_SETTINGS\.maxRentalDays/);
   assert.match(pageSource, /DEFAULT_PRICING_SETTINGS\.allowExtendedRentalAtBooking/);
-  assert.match(pageSource, /DEFAULT_PRICING_SETTINGS\.includedServicesBlurb/);
+  assert.doesNotMatch(pageSource, /includedServicesBlurb/);
   assert.match(formSource, /These are suggested defaults\. Save to configure pricing for this business\./);
   assert.match(formSource, /value=\{pricing\.id \?\? ""\}/);
 });
@@ -150,7 +150,7 @@ test("first pricing save creates a tenant-scoped row from validated submitted va
   assert.match(source, /ton_overage_price: tonOveragePrice/);
   assert.match(source, /max_rental_days: maxRentalDays/);
   assert.match(source, /allow_extended_rental_at_booking: values\.allowExtendedRentalAtBooking/);
-  assert.match(source, /included_services_blurb: values\.includedServicesBlurb \|\| null/);
+  assert.doesNotMatch(source, /included_services_blurb/);
   assert.match(source, /standard_rental_price: DEFAULT_PRICING_SETTINGS\.standardRentalPrice/);
   assert.match(source, /scheduled_pickup_price: DEFAULT_PRICING_SETTINGS\.scheduledPickupPrice/);
   assert.match(source, /\.upsert\([\s\S]*\{ onConflict: "business_id" \}/);

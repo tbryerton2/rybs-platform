@@ -20,6 +20,8 @@ function toFormValues(setting: DumpsterProductSetting): DumpsterProductSettingsF
     shortDescription: setting.shortDescription,
     customerBulletPoints: setting.customerBulletPoints,
     dimensions: setting.dimensions,
+    truckLoadEstimate: setting.truckLoadEstimate,
+    sizeGuideExamples: setting.sizeGuideExamples,
     includedWeightTons:
       setting.includedWeightTons == null ? "" : String(setting.includedWeightTons),
     includedRentalDays:
@@ -95,13 +97,15 @@ function TextareaField({
   onChange,
   error,
   helpText,
+  placeholder,
 }: {
   label: string;
-  name: "shortDescription" | "customerBulletPoints" | "dimensions";
+  name: "shortDescription" | "customerBulletPoints" | "dimensions" | "sizeGuideExamples";
   value: string;
-  onChange: (name: "shortDescription" | "customerBulletPoints" | "dimensions", value: string) => void;
+  onChange: (name: "shortDescription" | "customerBulletPoints" | "dimensions" | "sizeGuideExamples", value: string) => void;
   error?: string;
   helpText?: string;
+  placeholder?: string;
 }) {
   const fixedTallTextarea = name === "shortDescription" || name === "customerBulletPoints";
 
@@ -110,6 +114,7 @@ function TextareaField({
       <div className="text-sm font-medium text-slate-900">{label}</div>
       {helpText ? <div className="mt-1 text-xs leading-5 text-slate-500">{helpText}</div> : null}
       <textarea
+        placeholder={placeholder}
         name={name}
         value={value}
         onChange={(event) => onChange(name, event.target.value)}
@@ -202,7 +207,9 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         </label>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+      <fieldset className="mt-5">
+        <legend className="text-sm font-semibold text-slate-900">Customer-facing content</legend>
+        <div className="mt-3 grid gap-5 lg:grid-cols-2">
         <Field
           label="Display name"
           caption="Shown as the product name on the booking site."
@@ -222,6 +229,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         />
         <TextareaField
           label="Short description"
+          placeholder="Describe this dumpster for customers."
           name="shortDescription"
           value={values.shortDescription}
           onChange={updateTextValue}
@@ -244,6 +252,27 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
           error={errors.dimensions}
           helpText="Shown under the product name to help customers judge size."
         />
+        <Field
+          label="Truck-load estimate"
+          caption="Shown in the 'Which size is right for me?' guide on the booking site."
+          name="truckLoadEstimate"
+          value={values.truckLoadEstimate}
+          onChange={updateTextValue}
+          error={errors.truckLoadEstimate}
+        />
+        <TextareaField
+          label="Good for (examples)"
+          helpText="Shown in the size guide. Example: small garbage dumpster."
+          name="sizeGuideExamples"
+          value={values.sizeGuideExamples}
+          onChange={updateTextValue}
+          error={errors.sizeGuideExamples}
+        />
+        </div>
+      </fieldset>
+      <fieldset className="mt-6 border-t border-slate-200 pt-5">
+        <legend className="text-sm font-semibold text-slate-900">Pricing &amp; allowances</legend>
+        <div className="mt-3 grid gap-5 lg:grid-cols-2">
         <Field
           label="Base price"
           caption="Shown as the price to customers on the booking site."
@@ -281,7 +310,8 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
           suffix="days"
           type="number"
         />
-      </div>
+        </div>
+      </fieldset>
 
       {!state.success && state.error ? (
         <div className="mt-4 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -289,6 +319,7 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         </div>
       ) : null}
 
+      <p className="mt-5 text-sm text-slate-500">Changes go live on the booking site when saved.</p>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
         <div className="flex-1 text-sm leading-6 text-slate-500">
           Need different pricing in some areas?{" "}

@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const CMS_PREVIEW_COOKIE = "cms_preview";
 export const CMS_PREVIEW_TOKEN_TTL_SECONDS = 60;
 
-const ALLOWED_PREVIEW_PATHS = new Set(["/", "/pricing", "/confirm"]);
+const ALLOWED_PREVIEW_PATHS = new Set(["/", "/confirm"]);
 
 type CmsPreviewTokenPayload = {
   tenantId: string;

@@ -8,7 +8,7 @@ import {
 import { normalizeHomeStatsIconKey, type HomeStatsIconKey } from "@/lib/home-stats-icons";
 import { RENTAL_TERMS_CONSENT_TEXT } from "@/lib/booking-terms";
 
-export type CmsPageId = "home" | "pricing" | "terms";
+export type CmsPageId = "home" | "terms";
 export type HomeSectionType = "card_grid" | "steps";
 
 export type CmsEntryStatus = {
@@ -127,31 +127,6 @@ export type HomeFaqValue = {
   }>;
 };
 
-export type PricingProductContentValue = {
-  description: string;
-  featureBullets: string[];
-  includedHeading: string;
-  includedItems: string[];
-  bottomNote: string;
-  sizeGuide: PricingSizeGuideValue;
-};
-
-export type PricingSizeGuideRow = {
-  id: string;
-  sizeLabel: string;
-  truckLoadEstimate: string;
-  description: string;
-  sortOrder: number;
-  active: boolean;
-};
-
-export type PricingSizeGuideValue = {
-  enabled: boolean;
-  buttonText: string;
-  title: string;
-  rows: PricingSizeGuideRow[];
-};
-
 export type TermsAndConditionsContentValue = {
   body: string;
 };
@@ -166,9 +141,6 @@ export type RetailSiteCmsState = {
     serviceAreaPopup: CmsEntry<HomeServiceAreaPopupValue>;
     faq: CmsEntry<HomeFaqValue>;
   };
-  pricing: {
-    productContent: CmsEntry<PricingProductContentValue>;
-  };
   terms: {
     rentalTerms: CmsEntry<TermsAndConditionsContentValue>;
   };
@@ -176,7 +148,6 @@ export type RetailSiteCmsState = {
 
 export const CMS_PAGE_TABS: Array<{ id: CmsPageId; label: string }> = [
   { id: "home", label: "Home" },
-  { id: "pricing", label: "Pricing" },
   { id: "terms", label: "Terms & Conditions" },
 ];
 
@@ -188,7 +159,6 @@ export const RETAIL_SITE_CMS_CONTENT_KEYS = [
   "content.home.service_area_lookup",
   "content.home.service_area_popup",
   "content.faq.home",
-  "content.pricing.product_content",
   "content.terms.rental_terms",
 ] as const;
 
@@ -262,46 +232,6 @@ const HOME_SERVICE_AREA_LOOKUP_DEFAULT: HomeServiceAreaLookupValue = {
   areasEyebrow: "SERVICE AREAS",
   areaPills: [],
   helperText: "",
-};
-
-const PRICING_SIZE_GUIDE_DEFAULT: PricingSizeGuideValue = {
-  enabled: true,
-  buttonText: "Not sure which size? →",
-  title: "Which size is right for me?",
-  rows: [
-    {
-      id: "14-yard",
-      sizeLabel: "14-yard",
-      truckLoadEstimate: "~3-4 truck loads",
-      description: "Bathroom remodel, small cleanout, garage declutter, or a single room renovation.",
-      sortOrder: 10,
-      active: true,
-    },
-    {
-      id: "20-yard",
-      sizeLabel: "20-yard",
-      truckLoadEstimate: "~6-8 truck loads",
-      description: "Roofing job, kitchen remodel, basement or attic cleanout, multi-room renovation.",
-      sortOrder: 20,
-      active: true,
-    },
-    {
-      id: "30-yard",
-      sizeLabel: "30-yard",
-      truckLoadEstimate: "~9-12 truck loads",
-      description: "Large home renovation, new construction debris, full property cleanout.",
-      sortOrder: 30,
-      active: true,
-    },
-    {
-      id: "50-yard",
-      sizeLabel: "50-yard",
-      truckLoadEstimate: "~16-18 truck loads",
-      description: "Commercial jobs, major demolition, large construction sites, industrial cleanouts.",
-      sortOrder: 40,
-      active: true,
-    },
-  ],
 };
 
 const DEFAULT_CARD_GRID_ICON_KEYS = ["tag", "truck", "home"] satisfies HomeStatsIconKey[];
@@ -598,62 +528,6 @@ function normalizeFaq(rawValue: unknown): HomeFaqValue {
   };
 }
 
-function normalizePricingProductContent(rawValue: unknown): PricingProductContentValue {
-  const raw = asObject(rawValue);
-  const featureBullets = asStringArray(raw.featureBullets ?? raw.featureList, 1);
-  const includedItems = asStringArray(raw.includedItems, 1);
-
-  return {
-    description: asString(raw.description ?? raw.productBody),
-    featureBullets: featureBullets.length ? featureBullets : [""],
-    includedHeading: asString(raw.includedHeading),
-    includedItems: includedItems.length ? includedItems : [""],
-    bottomNote: asString(raw.bottomNote ?? raw.footnote),
-    sizeGuide: normalizePricingSizeGuide(raw.sizeGuide),
-  };
-}
-
-function clonePricingSizeGuideDefault(): PricingSizeGuideValue {
-  return {
-    ...PRICING_SIZE_GUIDE_DEFAULT,
-    rows: PRICING_SIZE_GUIDE_DEFAULT.rows.map((row) => ({ ...row })),
-  };
-}
-
-function normalizePricingSizeGuide(rawValue: unknown): PricingSizeGuideValue {
-  if (rawValue === undefined) {
-    return clonePricingSizeGuideDefault();
-  }
-
-  const raw = asObject(rawValue);
-  const sourceRows = asRecordArray(raw.rows);
-  const fallback = clonePricingSizeGuideDefault();
-  const rows = (sourceRows.length ? sourceRows : fallback.rows)
-    .map((item, index) => {
-      const row = asObject(item);
-
-      return {
-        id: asString(row.id, `size-guide-row-${index + 1}`),
-        sizeLabel: asString(row.sizeLabel, fallback.rows[index]?.sizeLabel ?? ""),
-        truckLoadEstimate: asString(row.truckLoadEstimate, fallback.rows[index]?.truckLoadEstimate ?? ""),
-        description: asString(row.description, fallback.rows[index]?.description ?? ""),
-        sortOrder: asNumber(row.sortOrder ?? row.sort_order, fallback.rows[index]?.sortOrder ?? index + 1),
-        active: asBoolean(row.active, fallback.rows[index]?.active ?? true),
-      };
-    })
-    .sort((left, right) => {
-      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
-      return left.sizeLabel.localeCompare(right.sizeLabel);
-    });
-
-  return {
-    enabled: asBoolean(raw.enabled, fallback.enabled),
-    buttonText: asString(raw.buttonText, fallback.buttonText),
-    title: asString(raw.title, fallback.title),
-    rows,
-  };
-}
-
 function normalizeTermsAndConditions(rawValue: unknown): TermsAndConditionsContentValue {
   const raw = asObject(rawValue);
 
@@ -829,28 +703,6 @@ async function getHomeFaqEntry(tenantId: string): Promise<CmsEntry<HomeFaqValue>
   };
 }
 
-async function getPricingProductContentEntry(tenantId: string): Promise<CmsEntry<PricingProductContentValue>> {
-  const [draftRow, publishedRow, value, legacyDraftRow, legacyPublishedRow, legacyValue] = await Promise.all([
-    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.product_content", "draft"),
-    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.product_content", "published"),
-    getTenantContentDraftFirstForTenant(tenantId, "content.pricing.product_content"),
-    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.promises", "draft"),
-    getTenantContentRowByStatusForTenant(tenantId, "content.pricing.promises", "published"),
-    getTenantContentDraftFirstForTenant(tenantId, "content.pricing.promises"),
-  ]);
-
-  return {
-    contentKey: "content.pricing.product_content",
-    source: getEntrySource(draftRow || legacyDraftRow, publishedRow || legacyPublishedRow),
-    hasDraft: Boolean(draftRow || legacyDraftRow),
-    draftUpdatedAt: draftRow?.updated_at ?? legacyDraftRow?.updated_at ?? null,
-    publishedUpdatedAt: publishedRow?.updated_at ?? legacyPublishedRow?.updated_at ?? null,
-    value: normalizePricingProductContent(
-      value ?? legacyValue,
-    ),
-  };
-}
-
 async function getTermsAndConditionsEntry(tenantId: string): Promise<CmsEntry<TermsAndConditionsContentValue>> {
   const [draftRow, publishedRow, value] = await Promise.all([
     getTenantContentRowByStatusForTenant(tenantId, "content.terms.rental_terms", "draft"),
@@ -879,7 +731,6 @@ export async function getRetailSiteCmsInitialStateForTenant(
     serviceAreaLookup,
     serviceAreaPopup,
     faq,
-    productContent,
     rentalTerms,
   ] = await Promise.all([
     getHomeHeroEntry(tenantId),
@@ -889,7 +740,6 @@ export async function getRetailSiteCmsInitialStateForTenant(
     getServiceAreaLookupEntry(tenantId),
     getServiceAreaPopupEntry(tenantId),
     getHomeFaqEntry(tenantId),
-    getPricingProductContentEntry(tenantId),
     getTermsAndConditionsEntry(tenantId),
   ]);
 
@@ -902,9 +752,6 @@ export async function getRetailSiteCmsInitialStateForTenant(
       serviceAreaLookup,
       serviceAreaPopup,
       faq,
-    },
-    pricing: {
-      productContent,
     },
     terms: {
       rentalTerms,

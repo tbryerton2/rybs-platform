@@ -7,7 +7,6 @@ export type PricingSettingsSnapshot = {
   dailyOveragePrice: number;
   maxRentalDays: number | null;
   allowExtendedRentalAtBooking: boolean;
-  includedServicesBlurb: string | null;
   includedTons: number;
   tonOveragePrice: number;
   standardRentalPrice: number;
@@ -21,7 +20,6 @@ export const DEFAULT_PRICING_SETTINGS: PricingSettingsSnapshot = {
   dailyOveragePrice: 30,
   maxRentalDays: null,
   allowExtendedRentalAtBooking: false,
-  includedServicesBlurb: null,
   includedTons: 1,
   tonOveragePrice: 100,
   standardRentalPrice: 475,
@@ -49,23 +47,10 @@ export function isMissingPricingSettingsRentalPeriodColumnsError(error: { messag
   );
 }
 
-export function isMissingPricingSettingsIncludedServicesBlurbColumnError(
-  error: { message?: string } | null | undefined,
-) {
-  const message = String(error?.message ?? "");
-  return (
-    message.includes("column pricing_settings.included_services_blurb does not exist") ||
-    message.includes(
-      "Could not find the 'included_services_blurb' column of 'pricing_settings' in the schema cache",
-    )
-  );
-}
-
 function normalizePricingSettingsSnapshot(
   data: Partial<LegacyPricingSettingsRow> & {
     max_rental_days?: number | null;
     allow_extended_rental_at_booking?: boolean | null;
-    included_services_blurb?: string | null;
   },
 ): PricingSettingsSnapshot {
   const basePrice = Number(data.standard_rental_price);
@@ -94,10 +79,6 @@ function normalizePricingSettingsSnapshot(
       typeof data.allow_extended_rental_at_booking === "boolean"
         ? data.allow_extended_rental_at_booking
         : DEFAULT_PRICING_SETTINGS.allowExtendedRentalAtBooking,
-    includedServicesBlurb:
-      typeof data.included_services_blurb === "string" && data.included_services_blurb.trim()
-        ? data.included_services_blurb.trim()
-        : null,
     includedTons: Number(data.included_tons) || DEFAULT_PRICING_SETTINGS.includedTons,
     tonOveragePrice: Number(data.ton_overage_price) || DEFAULT_PRICING_SETTINGS.tonOveragePrice,
     standardRentalPrice: Number.isFinite(basePrice) ? basePrice : DEFAULT_PRICING_SETTINGS.basePrice,
@@ -115,15 +96,14 @@ export async function getPricingSettingsSnapshot(businessId?: string): Promise<P
   const { data, error } = await supabaseAdmin
     .from("pricing_settings")
     .select(
-      "standard_rental_price, included_rental_days, daily_overage_price, max_rental_days, allow_extended_rental_at_booking, included_services_blurb, included_tons, ton_overage_price",
+      "standard_rental_price, included_rental_days, daily_overage_price, max_rental_days, allow_extended_rental_at_booking, included_tons, ton_overage_price",
     )
     .eq("business_id", resolvedBusinessId)
     .maybeSingle();
 
   if (
     error &&
-    !isMissingPricingSettingsRentalPeriodColumnsError(error) &&
-    !isMissingPricingSettingsIncludedServicesBlurbColumnError(error)
+    !isMissingPricingSettingsRentalPeriodColumnsError(error)
   ) {
     throw new Error(error.message);
   }

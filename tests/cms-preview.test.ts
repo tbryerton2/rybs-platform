@@ -10,7 +10,7 @@ import {
 
 test("CMS preview redirect paths stay on supported public pages", () => {
   assert.equal(normalizeCmsPreviewRedirectPath("/"), "/");
-  assert.equal(normalizeCmsPreviewRedirectPath("/pricing?zip=12345"), "/pricing?zip=12345");
+  assert.equal(normalizeCmsPreviewRedirectPath("/pricing?zip=12345"), "/");
   assert.equal(normalizeCmsPreviewRedirectPath("/confirm"), "/confirm");
   assert.equal(normalizeCmsPreviewRedirectPath("https://app.rybsoftware.com/admin/cms"), "/");
   assert.equal(normalizeCmsPreviewRedirectPath("//app.rybsoftware.com/pricing"), "/");
@@ -21,13 +21,13 @@ test("CMS preview tokens are signed, short-lived, and normalize redirect payload
   const now = 1_800_000_000_000;
   const token = createCmsPreviewToken({
     tenantId: "tenant-123",
-    redirectPath: "/pricing?zip=12345",
+    redirectPath: "/confirm",
     now,
   });
 
   assert.deepEqual(verifyCmsPreviewToken(token, now), {
     tenantId: "tenant-123",
-    redirectPath: "/pricing?zip=12345",
+    redirectPath: "/confirm",
   });
   assert.equal(verifyCmsPreviewToken(`${token.slice(0, -1)}x`, now), null);
   assert.equal(verifyCmsPreviewToken(token, now + (CMS_PREVIEW_TOKEN_TTL_SECONDS + 1) * 1000), null);

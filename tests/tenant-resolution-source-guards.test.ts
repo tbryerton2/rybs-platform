@@ -74,8 +74,8 @@ test("public page loaders pass the resolved tenant id to tenant-sensitive helper
 
   assert.match(pricing, /const tenant = await getCurrentTenant\(\)/);
   assert.match(pricing, /getPublicDumpsterProducts\(zip, tenant\.id\)/);
-  assert.match(pricing, /getPricingSettingsSnapshot\(tenant\.id\)/);
-  assert.match(pricing, /tenantId: tenant\.id/);
+  assert.match(pricing, /getPricingPageSettings\(tenant\.id\)/);
+
 
   assert.match(book, /const tenant = await getCurrentTenant\(\)/);
   assert.match(book, /getBookingEntryContent\(\{ tenantId: tenant\.id \}\)/);

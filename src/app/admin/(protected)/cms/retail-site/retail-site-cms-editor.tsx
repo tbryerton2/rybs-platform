@@ -12,8 +12,6 @@ import type {
   HomeServiceAreaLookupValue,
   HomeServiceAreaPopupValue,
   HomeStatsBarValue,
-  PricingProductContentValue,
-  PricingSizeGuideRow,
   RetailSiteCmsState,
   TermsAndConditionsContentValue,
 } from "@/lib/admin/cms";
@@ -32,7 +30,6 @@ const HOME_DUMPSTER_SIZES_KEY = "content.home.dumpster_sizes";
 const HOME_SERVICE_AREA_LOOKUP_KEY = "content.home.service_area_lookup";
 const HOME_SERVICE_AREA_KEY = "content.home.service_area_popup";
 const HOME_FAQ_KEY = "content.faq.home";
-const PRICING_PRODUCT_KEY = "content.pricing.product_content";
 const TERMS_AND_CONDITIONS_KEY = "content.terms.rental_terms";
 const HERO_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const HERO_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -46,7 +43,6 @@ const HOME_PAGE_KEYS = [
   HOME_SERVICE_AREA_KEY,
   HOME_FAQ_KEY,
 ];
-const PRICING_PAGE_KEYS = [PRICING_PRODUCT_KEY];
 const TERMS_PAGE_KEYS = [TERMS_AND_CONDITIONS_KEY];
 const HOME_SECTION_CONTENT_KEYS: Record<string, string> = {
   hero: HOME_HERO_KEY,
@@ -57,7 +53,7 @@ const HOME_SECTION_CONTENT_KEYS: Record<string, string> = {
   faq: HOME_FAQ_KEY,
 };
 
-type CmsPageId = "home" | "pricing" | "terms";
+type CmsPageId = "home" | "terms";
 type CmsSourceLabel = "Using default" | "Draft" | "Published";
 
 type RetailSiteCmsEditorProps = {
@@ -94,21 +90,6 @@ function createDefaultDumpsterSizeItem(): HomeDumpsterSizeItem {
     rentalWindowDays: null,
     badgeLabel: "",
     isFeatured: false,
-  };
-}
-
-function createSizeGuideRowId() {
-  return `size_guide_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function createDefaultSizeGuideRow(sortOrder: number): PricingSizeGuideRow {
-  return {
-    id: createSizeGuideRowId(),
-    sizeLabel: "",
-    truckLoadEstimate: "",
-    description: "",
-    sortOrder,
-    active: true,
   };
 }
 
@@ -236,7 +217,6 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
       [HOME_SERVICE_AREA_LOOKUP_KEY]: clone(cms.home.serviceAreaLookup.value),
       [HOME_SERVICE_AREA_KEY]: clone(cms.home.serviceAreaPopup.value),
       [HOME_FAQ_KEY]: clone(cms.home.faq.value),
-      [PRICING_PRODUCT_KEY]: clone(cms.pricing.productContent.value),
       [TERMS_AND_CONDITIONS_KEY]: clone(cms.terms.rentalTerms.value),
     }),
     [cms],
@@ -286,12 +266,6 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
         draftUpdatedAt: cms.home.faq.draftUpdatedAt,
         publishedUpdatedAt: cms.home.faq.publishedUpdatedAt,
       },
-      [PRICING_PRODUCT_KEY]: {
-        source: cms.pricing.productContent.source,
-        hasDraft: cms.pricing.productContent.hasDraft,
-        draftUpdatedAt: cms.pricing.productContent.draftUpdatedAt,
-        publishedUpdatedAt: cms.pricing.productContent.publishedUpdatedAt,
-      },
       [TERMS_AND_CONDITIONS_KEY]: {
         source: cms.terms.rentalTerms.source,
         hasDraft: cms.terms.rentalTerms.hasDraft,
@@ -337,9 +311,6 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
     (valuesByKey[HOME_SERVICE_AREA_KEY] as HomeServiceAreaPopupValue | undefined) ??
     cms.home.serviceAreaPopup.value;
   const faqValue = (valuesByKey[HOME_FAQ_KEY] as HomeFaqValue | undefined) ?? cms.home.faq.value;
-  const pricingValue =
-    (valuesByKey[PRICING_PRODUCT_KEY] as PricingProductContentValue | undefined) ??
-    cms.pricing.productContent.value;
   const termsValue =
     (valuesByKey[TERMS_AND_CONDITIONS_KEY] as TermsAndConditionsContentValue | undefined) ??
     cms.terms.rentalTerms.value;
@@ -359,11 +330,11 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
       : homeSectionOptions[0]?.id ?? "hero";
 
   const currentPageKeys =
-    activePage === "home" ? HOME_PAGE_KEYS : activePage === "pricing" ? PRICING_PAGE_KEYS : TERMS_PAGE_KEYS;
+    activePage === "home" ? HOME_PAGE_KEYS : TERMS_PAGE_KEYS;
   const pageDirty = currentPageKeys.some(
     (key) => JSON.stringify(valuesByKey[key]) !== JSON.stringify(savedByKey[key]),
   );
-  const anyDirty = [...HOME_PAGE_KEYS, ...PRICING_PAGE_KEYS, ...TERMS_PAGE_KEYS].some(
+  const anyDirty = [...HOME_PAGE_KEYS, ...TERMS_PAGE_KEYS].some(
     (key) => JSON.stringify(valuesByKey[key]) !== JSON.stringify(savedByKey[key]),
   );
 
@@ -531,19 +502,6 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
     updateValue(HOME_FAQ_KEY, { ...faqValue, ...patch });
   }
 
-  function updatePricing(patch: Partial<PricingProductContentValue>) {
-    updateValue(PRICING_PRODUCT_KEY, { ...pricingValue, ...patch });
-  }
-
-  function updatePricingSizeGuide(patch: Partial<PricingProductContentValue["sizeGuide"]>) {
-    updatePricing({
-      sizeGuide: {
-        ...pricingValue.sizeGuide,
-        ...patch,
-      },
-    });
-  }
-
   function updateTerms(patch: Partial<TermsAndConditionsContentValue>) {
     updateValue(TERMS_AND_CONDITIONS_KEY, { ...termsValue, ...patch });
   }
@@ -709,7 +667,7 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
     const ok = await persistPage("save_draft");
     if (!ok) return;
 
-    const redirect = activePage === "pricing" ? "/pricing" : activePage === "terms" ? "/confirm" : "/";
+    const redirect = activePage === "terms" ? "/confirm" : "/";
     window.open(`/admin/cms/preview?redirect=${encodeURIComponent(redirect)}`, "_blank", "noopener,noreferrer");
   }
 
@@ -1264,118 +1222,6 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
     return null;
   }
 
-  function renderPricingPage() {
-    return (
-      <div className="space-y-8">
-        <div className="space-y-5">
-          <Field
-            label="Section"
-            value="Product Content"
-            onChange={() => undefined}
-            readOnly
-          />
-          <TextAreaField
-            label="Product description"
-            value={pricingValue.description}
-            onChange={(value) => updatePricing({ description: value })}
-          />
-          <ArrayField
-            label="Feature bullets"
-            items={pricingValue.featureBullets}
-            onChange={(items) => updatePricing({ featureBullets: items })}
-          />
-          <Field
-            label="Included heading"
-            value={pricingValue.includedHeading}
-            onChange={(value) => updatePricing({ includedHeading: value })}
-          />
-          <ArrayField
-            label="Included items"
-            items={pricingValue.includedItems}
-            onChange={(items) => updatePricing({ includedItems: items })}
-          />
-          <TextAreaField
-            label="Bottom note"
-            value={pricingValue.bottomNote}
-            onChange={(value) => updatePricing({ bottomNote: value })}
-          />
-        </div>
-
-        <div className="overflow-hidden rounded-[14px] border border-slate-300 bg-slate-100 shadow-[0_10px_24px_rgba(15,23,42,0.06)]">
-          <div className="border-b border-slate-300/70 bg-slate-100 px-5 py-4">
-            <div className="text-sm font-semibold text-slate-900">Pricing size guide</div>
-            <div className="mt-1 text-sm text-slate-500">
-              Edit the helper shown above the dumpster pricing cards.
-            </div>
-          </div>
-          <div className="space-y-5 bg-slate-50/50 px-5 py-5">
-            <CheckboxField
-              label="Show size guide on pricing page"
-              checked={pricingValue.sizeGuide.enabled}
-              onChange={(enabled) => updatePricingSizeGuide({ enabled })}
-            />
-            <Field
-              label="Size guide button text"
-              value={pricingValue.sizeGuide.buttonText}
-              onChange={(buttonText) => updatePricingSizeGuide({ buttonText })}
-            />
-            <Field
-              label="Size guide title"
-              value={pricingValue.sizeGuide.title}
-              onChange={(title) => updatePricingSizeGuide({ title })}
-            />
-
-            <RepeatableItems<PricingSizeGuideRow>
-              label="Size guide rows"
-              items={pricingValue.sizeGuide.rows}
-              createItem={() => createDefaultSizeGuideRow(pricingValue.sizeGuide.rows.length + 1)}
-              onChange={(rows) => updatePricingSizeGuide({ rows })}
-              itemsClassName="space-y-6"
-              itemClassName="space-y-4 rounded-[14px] border border-slate-300/80 bg-white p-4 shadow-[0_8px_18px_rgba(15,23,42,0.05)]"
-              renderItem={(item, onItemChange) => (
-                <div className="grid gap-4">
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_160px_120px]">
-                    <Field
-                      label="Size label"
-                      value={item.sizeLabel}
-                      onChange={(sizeLabel) => onItemChange({ ...item, sizeLabel })}
-                    />
-                    <Field
-                      label="Truck-load estimate"
-                      value={item.truckLoadEstimate}
-                      onChange={(truckLoadEstimate) => onItemChange({ ...item, truckLoadEstimate })}
-                    />
-                    <Field
-                      label="Sort order"
-                      value={String(item.sortOrder)}
-                      onChange={(value) => {
-                        const parsed = Number(value);
-                        onItemChange({
-                          ...item,
-                          sortOrder: Number.isFinite(parsed) ? parsed : item.sortOrder,
-                        });
-                      }}
-                    />
-                  </div>
-                  <TextAreaField
-                    label="Description / examples"
-                    value={item.description}
-                    onChange={(description) => onItemChange({ ...item, description })}
-                  />
-                  <CheckboxField
-                    label="Active"
-                    checked={item.active}
-                    onChange={(active) => onItemChange({ ...item, active })}
-                  />
-                </div>
-              )}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   function renderTermsPage() {
     return (
       <div className="space-y-5">
@@ -1405,9 +1251,6 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => switchPage("home")} className={pageTabClass(activePage === "home")}>
           Home
-        </button>
-        <button type="button" onClick={() => switchPage("pricing")} className={pageTabClass(activePage === "pricing")}>
-          Pricing
         </button>
         <button type="button" onClick={() => switchPage("terms")} className={pageTabClass(activePage === "terms")}>
           Terms & Conditions
@@ -1553,7 +1396,7 @@ export default function RetailSiteCmsEditor({ cms, publicBaseUrl }: RetailSiteCm
             </div>
           </div>
 
-          <div className="pt-6">{activePage === "pricing" ? renderPricingPage() : renderTermsPage()}</div>
+          <div className="pt-6">{renderTermsPage()}</div>
         </section>
       )}
     </div>
