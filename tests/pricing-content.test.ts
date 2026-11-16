@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { supabaseAdmin } from "../src/lib/supabaseAdmin.ts";
 
 const product = (id: string, order: number, estimate = "1-2 truck loads", examples = "Small cleanouts") => ({
-  dumpsterProductId: id, dumpsterSize: `${id} yard`, displayName: `${id}-yard dumpster`,
+  id, dumpsterProductId: id, dumpsterSize: `${id} yard`, displayName: `${id}-yard dumpster`,
   isPublic: true, position: order, truckLoadEstimate: estimate, sizeGuideExamples: examples,
 });
 
@@ -72,7 +72,7 @@ test("size guide component renders a toggle only for enabled product-backed rows
     import Guide from './src/app/pricing/pricing-size-guide.tsx';
     import { getProductSizeGuideRows } from './src/lib/pricing-size-guide.ts';
     import { normalizePricingPageSettings } from './src/lib/pricing-page-content.ts';
-    const product = { dumpsterProductId:'ten', dumpsterSize:'10 yard', displayName:'Ten', isPublic:true,
+    const product = { id:'ten', dumpsterProductId:'ten', dumpsterSize:'10 yard', displayName:'Ten', isPublic:true,
       position:1, truckLoadEstimate:'1-2 loads', sizeGuideExamples:'Cleanouts' };
     const content = { enabled:true, buttonText:'Choose a size', title:'Size guide' };
     const render = (products, settings=content) => renderToStaticMarkup(React.createElement(Guide,

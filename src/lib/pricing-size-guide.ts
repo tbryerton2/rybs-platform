@@ -1,8 +1,9 @@
+import { compareProductPosition } from "./product-position";
 import type { PublicDumpsterProduct } from "./dumpster-product-settings";
 import type { PricingSizeGuideRowContent } from "./tenant/content";
 
 type GuideProduct = Pick<PublicDumpsterProduct,
-  "dumpsterProductId" | "dumpsterSize" | "displayName" | "isPublic" | "position" |
+  "id" | "dumpsterProductId" | "dumpsterSize" | "displayName" | "isPublic" | "position" |
   "truckLoadEstimate" | "sizeGuideExamples"
 >;
 
@@ -11,7 +12,7 @@ export function getProductSizeGuideRows(products: GuideProduct[]): PricingSizeGu
     .filter((product) => product.isPublic &&
       (product.truckLoadEstimate.trim() || product.sizeGuideExamples.trim()))
     .slice()
-    .sort((left, right) => left.position - right.position)
+    .sort(compareProductPosition)
     .map((product) => ({
       id: product.dumpsterProductId,
       sizeLabel: product.dumpsterSize,

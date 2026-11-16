@@ -1,5 +1,6 @@
 "use server";
 
+import { reorderDumpsterProducts } from "@/lib/admin/reorder-dumpster-products";
 import { cleanProductDescription } from "@/lib/product-card-content";
 import { revalidatePath } from "next/cache";
 import { requireAdminOwner } from "@/lib/admin/auth";
@@ -509,13 +510,5 @@ export async function updatePricingPageContentAction(
 
 export async function reorderDumpsterProductsAction(ids: string[]) {
   const session = await requireAdminOwner();
-  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id))) {
-    return { success: false, message: "Invalid product order. Refresh and try again." };
-  }
-  const { error } = await supabaseAdmin.rpc("reorder_dumpster_products", {
-    p_business_id: session.business.id, p_ids: ids,
-  });
-  if (error) return { success: false, message: "Couldn't update order. Refresh and try again." };
-  // Retail reads are dynamic. Avoid refreshing mounted admin forms and discarding unsaved edits.
-  return { success: true, message: "Order updated" };
+  return reorderDumpsterProducts(session.business.id, ids);
 }

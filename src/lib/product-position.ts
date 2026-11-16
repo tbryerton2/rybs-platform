@@ -16,3 +16,23 @@ export function defaultProductIdentity(size: string) {
     display_name: `${size.trim().replace(/\s+/g, '-')} dumpster`,
   };
 }
+
+export function compareProductPosition(
+  left: { position: number; displayName: string; id: string },
+  right: { position: number; displayName: string; id: string },
+) {
+  return left.position - right.position || left.displayName.localeCompare(right.displayName) || left.id.localeCompare(right.id);
+}
+
+// Home cards retain CMS copy, but product position owns their display order.
+export function orderHomeSizeCards<T extends { sizeYards: number }>(
+  items: T[],
+  products: Array<{ dumpsterSize: string; position: number; displayName: string; id: string }>,
+): T[] {
+  const matched = items.map((item) => ({ item, product: findProductForSize(products, `${item.sizeYards} yard`) }));
+  return matched.sort((a, b) => {
+    if (a.product && b.product) return compareProductPosition(a.product, b.product);
+    // Unmatched marketing cards have no product position; retain their relative order at the end.
+    return a.product ? -1 : b.product ? 1 : 0;
+  }).map(({ item }) => item);
+}

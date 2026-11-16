@@ -1,3 +1,5 @@
+import { getPublicDumpsterProducts } from "@/lib/dumpster-product-settings";
+import { orderHomeSizeCards } from "@/lib/product-position";
 import HomePageClient from "@/app/home-page-client";
 import { getActiveServiceAreaZipCodes } from "@/lib/service-area";
 import { getRetailSiteSettingsForTenant } from "@/lib/tenant/retail-site-settings";
@@ -35,6 +37,7 @@ export default async function HomePage({
     supportMarketingContent,
     retailSiteSettings,
     servedZipCodes,
+    products,
   ] = await Promise.all([
     getHomeHeroContent(contentOptions),
     getHomeServiceAreaContent(contentOptions),
@@ -46,6 +49,7 @@ export default async function HomePage({
     getSupportMarketingContent(contentOptions),
     getRetailSiteSettingsForTenant(tenant),
     getActiveServiceAreaZipCodes(tenant.id),
+    getPublicDumpsterProducts(undefined, tenant.id),
   ]);
 
   return (
@@ -55,7 +59,7 @@ export default async function HomePage({
       serviceAreaContent={serviceAreaContent}
       statsBarContent={statsBarContent}
       homeSectionsContent={homeSectionsContent}
-      dumpsterSizesContent={dumpsterSizesContent}
+      dumpsterSizesContent={{ ...dumpsterSizesContent, items: orderHomeSizeCards(dumpsterSizesContent.items, products) }}
       serviceAreaLookupContent={serviceAreaLookupContent}
       faqContent={faqContent}
       supportMarketingContent={supportMarketingContent}

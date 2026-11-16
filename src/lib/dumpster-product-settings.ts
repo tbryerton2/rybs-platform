@@ -1,6 +1,6 @@
 import "server-only";
 
-import { defaultProductIdentity, findProductForSize } from "@/lib/product-position";
+import { compareProductPosition, defaultProductIdentity, findProductForSize } from "@/lib/product-position";
 import { cleanProductDescription } from "@/lib/product-card-content";
 
 import { getOfferedDumpsterProducts } from "@/lib/admin/dumpster-inventory";
@@ -53,6 +53,7 @@ export type DumpsterProductSetting = {
 };
 
 export type PublicDumpsterProduct = {
+  id: string;
   dumpsterSize: string;
   dumpsterProductId: string;
   displayName: string;
@@ -162,13 +163,14 @@ export async function getDumpsterProductSettings(businessId?: string): Promise<D
     .select(DUMPSTER_PRODUCT_SETTINGS_SELECT)
     .eq("business_id", resolvedBusinessId)
     .order("position", { ascending: true })
+    .order("display_name", { ascending: true })
     .order("id", { ascending: true });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as DumpsterProductSettingsRow[]).map(mapRow);
+  return ((data ?? []) as DumpsterProductSettingsRow[]).map(mapRow).sort(compareProductPosition);
 }
 
 async function ensureOfferedProductSettings(businessId: string) {
@@ -201,7 +203,7 @@ export async function getEditableDumpsterProductSettings(businessId?: string): P
   const { offered, settings } = await ensureOfferedProductSettings(resolvedBusinessId);
   const activeIds = new Set(offered.map((product) => findProductForSize(settings, product.dumpsterSize)?.id));
   return settings.map((setting) => ({ ...setting, isActiveSize: activeIds.has(setting.id) }))
-    .sort((left, right) => left.position - right.position);
+    .sort(compareProductPosition);
 }
 
 export async function getPublicDumpsterProducts(
@@ -224,6 +226,7 @@ export async function getPublicDumpsterProducts(
         DEFAULT_PRICING_SETTINGS.basePrice;
 
       return {
+        id: setting!.id,
         dumpsterSize: offered.dumpsterSize,
         dumpsterProductId: setting?.dumpsterProductId || fallbackProductId(offered.dumpsterSize),
         displayName: setting?.displayName || formatDefaultDisplayName(offered.dumpsterSize),
@@ -250,5 +253,5 @@ export async function getPublicDumpsterProducts(
       };
     })
     .filter((product) => product.isPublic)
-    .sort((left, right) => left.position - right.position);
+    .sort(compareProductPosition);
 }
