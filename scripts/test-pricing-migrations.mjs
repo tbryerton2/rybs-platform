@@ -49,6 +49,9 @@ try {
   const replay = migrations.map((name) => `\n-- ${name}\n${readFileSync(`supabase/migrations/${name}`, "utf8")}`).join("\n");
   sql(replay);
   console.log(`Replayed ${migrations.length} migrations without automatic grants.`);
+  sql(readFileSync("tests/product-positions.sql", "utf8"));
+  console.log("Product positions: atomic full-list validation, tenant isolation, visibility, append and idempotency passed.");
+
   const pricingMigration = migrations.find((name) => name.endsWith("_consolidate_pricing_content.sql"));
   if (!pricingMigration) throw new Error("Missing pricing content migration");
   const pricingSql = readFileSync(`supabase/migrations/${pricingMigration}`, "utf8");

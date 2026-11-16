@@ -590,7 +590,7 @@ export const docs: DocEntry[] = [
           "Extra day charges apply when the dumpster remains on-site beyond the included rental period.",
         ],
         bullets: [
-          "Use the configured pricing settings as the source of truth",
+          "Use Website → Sizes & Pricing as the source of truth",
           "Do not guess or manually invent charges unless management approves",
           "Document exceptions in notes",
         ],
@@ -615,7 +615,7 @@ export const docs: DocEntry[] = [
       {
         heading: "Operational rule",
         paragraphs: [
-          "Pricing settings should be maintained centrally. Staff should avoid one-off pricing changes unless explicitly approved.",
+          "Maintain sizes and pricing centrally under Website → Sizes & Pricing. Staff should avoid one-off pricing changes unless explicitly approved.",
         ],
       },
     ],
@@ -775,7 +775,7 @@ export const docs: DocEntry[] = [
       {
         heading: "Customer says pricing is different than expected",
         bullets: [
-          "Review pricing settings",
+          "Review Website → Sizes & Pricing",
           "Check for ZIP overrides",
           "Check whether extra days or overages apply",
           "Review notes for custom approval or exception handling",

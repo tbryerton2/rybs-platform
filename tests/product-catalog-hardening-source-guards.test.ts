@@ -38,9 +38,9 @@ test("public catalog and booking validation use compatible size matching", () =>
   const catalog = readRepoFile("src/lib/dumpster-product-settings.ts");
   const validator = readRepoFile("src/lib/public-dumpster-product.ts");
 
-  assert.match(catalog, /function findSettingForSize/);
-  assert.match(catalog, /getDumpsterSizeCapacity\(setting\.dumpsterSize\) === capacity/);
-  assert.match(catalog, /findSettingForSize\(productSettings, offered\.dumpsterSize\)/);
+  assert.match(readRepoFile("src/lib/product-position.ts"), /function findProductForSize/);
+  assert.match(readRepoFile("src/lib/product-position.ts"), /getDumpsterSizeCapacity\(product\.dumpsterSize\) === capacity/);
+  assert.match(catalog, /findProductForSize\(productSettings, offered\.dumpsterSize\)/);
 
   assert.match(validator, /function dumpsterSizesAreCompatible/);
   assert.match(validator, /leftCapacity === rightCapacity/);

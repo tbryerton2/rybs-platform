@@ -137,7 +137,7 @@ export type PricingSizeGuideRowContent = {
   sizeLabel: string;
   truckLoadEstimate: string;
   description: string;
-  sortOrder: number;
+  position: number;
   active: boolean;
 };
 

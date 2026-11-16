@@ -202,12 +202,13 @@ export default async function AdminPricingSettingsPage() {
   return (
     <AdminPage>
       <AdminPageHeader
+        description="Each dumpster size you offer, with its price and what customers see on the booking website."
         title={
           <span className="flex items-center gap-2">
-            <span>Pricing</span>
+            <span>Sizes &amp; Pricing</span>
             <button
               type="button"
-              aria-label="Pricing page details"
+              aria-label="Sizes & Pricing page details"
               className="group relative rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
             >
               <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
@@ -215,14 +216,14 @@ export default async function AdminPricingSettingsPage() {
                 role="tooltip"
                 className="pointer-events-none absolute left-0 top-7 z-50 w-72 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
               >
-                Control global booking rules here. Size-specific price, included days, and included weight now live in the dumpster product settings below.
+                Each dumpster size you offer, with its price and what customers see on the booking website.
               </span>
             </button>
           </span>
         }
       />
 
-      <nav aria-label="Pricing sections" className="mb-6 flex flex-wrap gap-2">
+      <nav aria-label="Sizes & Pricing sections" className="mb-6 flex flex-wrap gap-2">
         <a href="#booking-rules" className="admin-btn admin-btn-secondary">Booking rules</a>
         <a href="#dumpsters" className="admin-btn admin-btn-secondary">Dumpsters</a>
         <a href="#pricing-page-content" className="admin-btn admin-btn-secondary">Pricing page content</a>
@@ -280,8 +281,7 @@ export default async function AdminPricingSettingsPage() {
                 className="pointer-events-none absolute left-0 top-7 z-50 w-80 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
               >
                 Edit the customer-facing display, pricing, and rental details for each offered
-                dumpster size. Active sizes from the dumpsters table appear here automatically,
-                even before a settings row exists.
+                dumpster size. Active sizes from the dumpsters table appear here automatically.
               </span>
             </button>
           </div>

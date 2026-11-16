@@ -8,7 +8,7 @@ import { supabaseAdmin } from "../src/lib/supabaseAdmin.ts";
 
 const product = (id: string, order: number, estimate = "1-2 truck loads", examples = "Small cleanouts") => ({
   dumpsterProductId: id, dumpsterSize: `${id} yard`, displayName: `${id}-yard dumpster`,
-  isPublic: true, sortOrder: order, truckLoadEstimate: estimate, sizeGuideExamples: examples,
+  isPublic: true, position: order, truckLoadEstimate: estimate, sizeGuideExamples: examples,
 });
 
 test("retail guide uses public product details and display order without mutating input", () => {
@@ -73,7 +73,7 @@ test("size guide component renders a toggle only for enabled product-backed rows
     import { getProductSizeGuideRows } from './src/lib/pricing-size-guide.ts';
     import { normalizePricingPageSettings } from './src/lib/pricing-page-content.ts';
     const product = { dumpsterProductId:'ten', dumpsterSize:'10 yard', displayName:'Ten', isPublic:true,
-      sortOrder:1, truckLoadEstimate:'1-2 loads', sizeGuideExamples:'Cleanouts' };
+      position:1, truckLoadEstimate:'1-2 loads', sizeGuideExamples:'Cleanouts' };
     const content = { enabled:true, buttonText:'Choose a size', title:'Size guide' };
     const render = (products, settings=content) => renderToStaticMarkup(React.createElement(Guide,
       {content:settings, rows:getProductSizeGuideRows(products)}));

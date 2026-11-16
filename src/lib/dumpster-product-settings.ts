@@ -1,8 +1,9 @@
 import "server-only";
 
+import { defaultProductIdentity, findProductForSize } from "@/lib/product-position";
 import { cleanProductDescription } from "@/lib/product-card-content";
 
-import { getOfferedDumpsterProducts, type OfferedDumpsterProduct } from "@/lib/admin/dumpster-inventory";
+import { getOfferedDumpsterProducts } from "@/lib/admin/dumpster-inventory";
 import { getDumpsterSizeCapacity } from "@/lib/booking-product";
 import { getZipPricingOverridesBySize } from "@/lib/pricing";
 import { DEFAULT_PRICING_SETTINGS, getPricingSettingsSnapshot } from "@/lib/pricing-settings";
@@ -24,7 +25,7 @@ export type DumpsterProductSettingsRow = {
   extra_day_price: number | string | null;
   base_price: number | string | null;
   is_public: boolean;
-  sort_order: number;
+  position: number;
   created_at: string;
   updated_at: string;
 };
@@ -44,7 +45,7 @@ export type DumpsterProductSetting = {
   extraDayPrice: number | null;
   basePrice: number | null;
   isPublic: boolean;
-  sortOrder: number;
+  position: number;
   createdAt: string;
   updatedAt: string;
   isDraft: boolean;
@@ -66,7 +67,7 @@ export type PublicDumpsterProduct = {
   extraDayPrice: number;
   basePrice: number;
   isPublic: boolean;
-  sortOrder: number;
+  position: number;
 };
 
 const DUMPSTER_PRODUCT_SETTINGS_SELECT = `
@@ -84,7 +85,7 @@ const DUMPSTER_PRODUCT_SETTINGS_SELECT = `
   extra_day_price,
   base_price,
   is_public,
-  sort_order,
+  position,
   created_at,
   updated_at
 `;
@@ -111,18 +112,6 @@ function fallbackProductId(size: string) {
 
 function normalizeSizeText(value: string | null | undefined) {
   return value?.trim().toLowerCase().replace(/\s+/g, " ") || "";
-}
-
-function findSettingForSize(settings: DumpsterProductSetting[], size: string) {
-  const normalizedSize = normalizeSizeText(size);
-  const exact = settings.find((setting) => normalizeSizeText(setting.dumpsterSize) === normalizedSize);
-
-  if (exact) return exact;
-
-  const capacity = getDumpsterSizeCapacity(size);
-  if (capacity === null) return undefined;
-
-  return settings.find((setting) => getDumpsterSizeCapacity(setting.dumpsterSize) === capacity);
 }
 
 function findOverridePrice(overridesBySize: Map<string, number>, size: string) {
@@ -158,18 +147,12 @@ function mapRow(row: DumpsterProductSettingsRow): DumpsterProductSetting {
     extraDayPrice: asNumber(row.extra_day_price),
     basePrice: asNumber(row.base_price),
     isPublic: Boolean(row.is_public),
-    sortOrder: row.sort_order,
+    position: row.position,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isDraft: false,
     isActiveSize: false,
   };
-}
-
-function compareOfferedProducts(left: OfferedDumpsterProduct, right: OfferedDumpsterProduct) {
-  return left.activeCount === right.activeCount
-    ? left.displayLabel.localeCompare(right.displayLabel)
-    : left.activeCount - right.activeCount;
 }
 
 export async function getDumpsterProductSettings(businessId?: string): Promise<DumpsterProductSetting[]> {
@@ -178,8 +161,8 @@ export async function getDumpsterProductSettings(businessId?: string): Promise<D
     .from("dumpster_product_settings")
     .select(DUMPSTER_PRODUCT_SETTINGS_SELECT)
     .eq("business_id", resolvedBusinessId)
-    .order("sort_order", { ascending: true })
-    .order("display_name", { ascending: true });
+    .order("position", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error) {
     throw new Error(error.message);
@@ -188,72 +171,37 @@ export async function getDumpsterProductSettings(businessId?: string): Promise<D
   return ((data ?? []) as DumpsterProductSettingsRow[]).map(mapRow);
 }
 
+async function ensureOfferedProductSettings(businessId: string) {
+  const [offered, settings, pricing] = await Promise.all([
+    getOfferedDumpsterProducts(businessId), getDumpsterProductSettings(businessId), getPricingSettingsSnapshot(businessId),
+  ]);
+  const missing = offered.filter((product) => !findProductForSize(settings, product.dumpsterSize));
+  if (missing.length) {
+    const { error } = await supabaseAdmin.rpc("ensure_dumpster_product_positions", {
+      p_business_id: businessId,
+      p_products: missing.map((product) => ({
+        ...defaultProductIdentity(product.dumpsterSize),
+        base_price: pricing.basePrice ?? DEFAULT_PRICING_SETTINGS.basePrice,
+        extra_day_price: pricing.dailyOveragePrice ?? DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
+        included_weight_tons: pricing.includedTons ?? DEFAULT_PRICING_SETTINGS.includedTons,
+        included_rental_days: pricing.standardRentalDays ?? DEFAULT_PRICING_SETTINGS.standardRentalDays,
+      })),
+    });
+    if (error) throw new Error(error.message);
+  }
+  const persisted = missing.length ? await getDumpsterProductSettings(businessId) : settings;
+  if (persisted.some((product) => product.position == null)) {
+    throw new Error("Product position backfill must complete before using Sizes & Pricing.");
+  }
+  return { offered, settings: persisted, pricing };
+}
+
 export async function getEditableDumpsterProductSettings(businessId?: string): Promise<DumpsterProductSetting[]> {
   const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
-  const [offeredProducts, productSettings, pricingSettings] = await Promise.all([
-    getOfferedDumpsterProducts(resolvedBusinessId),
-    getDumpsterProductSettings(resolvedBusinessId),
-    getPricingSettingsSnapshot(resolvedBusinessId),
-  ]);
-
-  const settingsBySize = new Map(
-    productSettings.map((setting) => [setting.dumpsterSize.trim().toLowerCase(), setting]),
-  );
-  const activeSizes = new Set(offeredProducts.map((product) => product.dumpsterSize.trim().toLowerCase()));
-
-  const merged = offeredProducts.map((offered) => {
-    const key = offered.dumpsterSize.trim().toLowerCase();
-    const existing = settingsBySize.get(key);
-
-    if (existing) {
-      return {
-        ...existing,
-        isDraft: false,
-        isActiveSize: true,
-      };
-    }
-
-    return {
-      id: "",
-      dumpsterSize: offered.dumpsterSize,
-      dumpsterProductId: fallbackProductId(offered.dumpsterSize),
-      displayName: formatDefaultDisplayName(offered.dumpsterSize),
-      shortDescription: "",
-      customerBulletPoints: "",
-      dimensions: "",
-      truckLoadEstimate: "",
-      sizeGuideExamples: "",
-      includedWeightTons:
-        pricingSettings.includedTons ?? DEFAULT_PRICING_SETTINGS.includedTons,
-      tonOveragePrice:
-        pricingSettings.tonOveragePrice ?? DEFAULT_PRICING_SETTINGS.tonOveragePrice,
-      includedRentalDays:
-        pricingSettings.standardRentalDays ?? DEFAULT_PRICING_SETTINGS.standardRentalDays,
-      extraDayPrice:
-        pricingSettings.dailyOveragePrice ?? DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
-      basePrice:
-        pricingSettings.basePrice ?? DEFAULT_PRICING_SETTINGS.basePrice,
-      isPublic: true,
-      sortOrder: offered.activeCount,
-      createdAt: "",
-      updatedAt: "",
-      isDraft: true,
-      isActiveSize: true,
-    };
-  });
-
-  const inactiveExisting = productSettings
-    .filter((setting) => !activeSizes.has(setting.dumpsterSize.trim().toLowerCase()))
-    .map((setting) => ({
-      ...setting,
-      isDraft: false,
-      isActiveSize: false,
-    }));
-
-  return [...merged, ...inactiveExisting].sort((left, right) => {
-    if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
-    return left.displayName.localeCompare(right.displayName);
-  });
+  const { offered, settings } = await ensureOfferedProductSettings(resolvedBusinessId);
+  const activeIds = new Set(offered.map((product) => findProductForSize(settings, product.dumpsterSize)?.id));
+  return settings.map((setting) => ({ ...setting, isActiveSize: activeIds.has(setting.id) }))
+    .sort((left, right) => left.position - right.position);
 }
 
 export async function getPublicDumpsterProducts(
@@ -261,18 +209,14 @@ export async function getPublicDumpsterProducts(
   businessId?: string,
 ): Promise<PublicDumpsterProduct[]> {
   const resolvedBusinessId = businessId ?? (await getCurrentTenant()).id;
-  const [offeredProducts, productSettings, pricingSettings, zipPricingOverrides] = await Promise.all([
-    getOfferedDumpsterProducts(resolvedBusinessId),
-    getDumpsterProductSettings(resolvedBusinessId),
-    getPricingSettingsSnapshot(resolvedBusinessId),
-    getZipPricingOverridesBySize(zip, resolvedBusinessId),
+  const [{ offered: offeredProducts, settings: productSettings, pricing: pricingSettings }, zipPricingOverrides] = await Promise.all([
+    ensureOfferedProductSettings(resolvedBusinessId), getZipPricingOverridesBySize(zip, resolvedBusinessId),
   ]);
 
   return offeredProducts
     .slice()
-    .sort(compareOfferedProducts)
     .map((offered) => {
-      const setting = findSettingForSize(productSettings, offered.dumpsterSize);
+      const setting = findProductForSize(productSettings, offered.dumpsterSize);
       const basePrice =
         findOverridePrice(zipPricingOverrides.overridesBySize, offered.dumpsterSize) ??
         setting?.basePrice ??
@@ -302,12 +246,9 @@ export async function getPublicDumpsterProducts(
           DEFAULT_PRICING_SETTINGS.dailyOveragePrice,
         basePrice,
         isPublic: setting?.isPublic ?? true,
-        sortOrder: setting?.sortOrder ?? offered.activeCount,
+        position: setting!.position,
       };
     })
     .filter((product) => product.isPublic)
-    .sort((left, right) => {
-      if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
-      return left.displayName.localeCompare(right.displayName);
-    });
+    .sort((left, right) => left.position - right.position);
 }

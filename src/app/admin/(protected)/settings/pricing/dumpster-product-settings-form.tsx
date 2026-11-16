@@ -1,7 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, useSortable, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { ArrowUpIcon, ArrowDownIcon } from "@heroicons/react/24/outline";
+import { reorderDumpsterProductsAction } from "./actions";
 import { adminToast } from "@/app/admin/_components/admin/admin-toast";
 import { FormSubmitButton } from "@/app/admin/_components/admin/form-submit-button";
 import type { DumpsterProductSetting } from "@/lib/dumpster-product-settings";
@@ -29,7 +34,6 @@ function toFormValues(setting: DumpsterProductSetting): DumpsterProductSettingsF
     extraDayPrice: setting.extraDayPrice == null ? "" : String(setting.extraDayPrice),
     basePrice: setting.basePrice == null ? "" : String(setting.basePrice),
     isPublic: setting.isPublic,
-    sortOrder: String(setting.sortOrder),
   };
 }
 
@@ -131,7 +135,13 @@ function TextareaField({
   );
 }
 
-function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetting }) {
+function DumpsterProductSettingCard({ setting, index, count, saving, indicator, onMove }: {
+  setting: DumpsterProductSetting; index: number; count: number; saving: boolean;
+  indicator: "before" | "after" | null; onMove: (from: number, to: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: setting.id, disabled: saving });
   const initialValues = useMemo(() => toFormValues(setting), [setting]);
   const initialState: DumpsterProductSettingsFormState = useMemo(
     () => ({
@@ -143,16 +153,12 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
     }),
     [initialValues],
   );
-  const [state, formAction] = useActionState(updateDumpsterProductSettingAction, initialState);
   const [values, setValues] = useState(initialValues);
-
-  useEffect(() => {
-    setValues(initialValues);
-  }, [initialValues]);
-
-  useEffect(() => {
-    setValues(state.values);
-  }, [state.values]);
+  const [state, formAction] = useActionState(async (previous: DumpsterProductSettingsFormState, formData: FormData) => {
+    const next = await updateDumpsterProductSettingAction(previous, formData);
+    setValues(next.values);
+    return next;
+  }, initialState);
 
   useEffect(() => {
     if (state.success && state.message) {
@@ -174,7 +180,32 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
   const errors: DumpsterProductSettingsFieldErrors = state.fieldErrors;
 
   return (
-    <form action={formAction} className="rounded-[14px] border border-slate-200 bg-white p-6 shadow-sm">
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`relative rounded-lg border border-slate-200 bg-white ${isDragging ? "z-10 shadow-lg" : "shadow-sm"}`}>
+      {indicator ? <div aria-hidden="true" className={`pointer-events-none absolute inset-x-0 h-0.5 bg-[#F97316] ${indicator === "before" ? "-top-2" : "-bottom-2"}`} /> : null}
+      <div className="flex flex-wrap items-center gap-3 p-4">
+        <button ref={setActivatorNodeRef} type="button" {...attributes} {...listeners}
+          aria-label={`Reorder ${values.displayName}`} aria-disabled={saving}
+          className="admin-btn admin-btn-secondary cursor-grab touch-none active:cursor-grabbing">
+          <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
+            {[4, 10, 16].map((y) => <g key={y}><circle cx="5" cy={y} r="1.5" /><circle cx="11" cy={y} r="1.5" /></g>)}
+          </svg>
+        </button>
+        <button type="button" className="admin-btn admin-btn-secondary" disabled={saving || index === 0}
+          aria-label={`Move ${values.displayName} up`} onClick={() => onMove(index, index - 1)}><ArrowUpIcon className="h-4 w-4" /></button>
+        <button type="button" className="admin-btn admin-btn-secondary" disabled={saving || index === count - 1}
+          aria-label={`Move ${values.displayName} down`} onClick={() => onMove(index, index + 1)}><ArrowDownIcon className="h-4 w-4" /></button>
+        <span className="min-w-0 flex-1 text-sm font-semibold text-slate-950">{values.displayName}</span>
+        <span className="text-sm font-medium text-slate-700">{values.basePrice.trim() && Number.isFinite(Number(values.basePrice))
+          ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(values.basePrice)) : "—"}</span>
+        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">
+          {values.isPublic ? "Public" : "Hidden from booking site"}
+        </span>
+        <button type="button" className="admin-btn admin-btn-secondary" aria-expanded={expanded}
+          aria-controls={`product-edit-${setting.id}`} onClick={() => setExpanded((open) => !open)}>{expanded ? "Close" : "Edit"}</button>
+      </div>
+      <div id={`product-edit-${setting.id}`} hidden={!expanded}>
+    <form action={formAction} className="border-t border-slate-200 p-6">
       <input type="hidden" name="id" value={setting.id} />
       <input type="hidden" name="dumpsterSize" value={setting.dumpsterSize} />
       <input type="hidden" name="dumpsterProductId" value={setting.dumpsterProductId} />
@@ -217,15 +248,6 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
           value={values.displayName}
           onChange={updateTextValue}
           error={errors.displayName}
-        />
-        <Field
-          label="Display order"
-          caption="Controls the order this dumpster appears to customers. Lower numbers show first."
-          name="sortOrder"
-          value={values.sortOrder}
-          onChange={updateTextValue}
-          error={errors.sortOrder}
-          type="number"
         />
         <TextareaField
           label="Short description"
@@ -337,58 +359,68 @@ function DumpsterProductSettingCard({ setting }: { setting: DumpsterProductSetti
         </div>
       </div>
     </form>
+      </div>
+    </div>
   );
 }
 
-function getDumpsterProductSettingKey(setting: DumpsterProductSetting) {
-  if (setting.id.trim()) return setting.id;
-
-  const productId = setting.dumpsterProductId.trim();
-  const size = setting.dumpsterSize.trim();
-
-  if (productId && size) return `draft:${productId}:${size}`;
-  if (productId) return `draft:${productId}`;
-  if (size) return `draft-size:${size}`;
-
-  return `draft-display:${setting.sortOrder}:${setting.displayName.length}`;
-}
-
-function parseDumpsterSize(value: string) {
-  const match = value.trim().match(/^(\d+(?:\.\d+)?)/);
-  if (!match) return null;
-
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-export function DumpsterProductSettingsForm({
-  settings,
-}: {
-  settings: DumpsterProductSetting[];
-}) {
-  const sortedSettings = [...settings].sort((left, right) => {
-    const leftSize = parseDumpsterSize(left.dumpsterSize) ?? parseDumpsterSize(left.displayName);
-    const rightSize = parseDumpsterSize(right.dumpsterSize) ?? parseDumpsterSize(right.displayName);
-
-    if (leftSize !== null && rightSize !== null && leftSize !== rightSize) {
-      return leftSize - rightSize;
+export function DumpsterProductSettingsForm({ settings }: { settings: DumpsterProductSetting[] }) {
+  const [order, setOrder] = useState(() => [...settings].sort((a, b) => a.position - b.position).map((item) => item.id));
+  const [saving, setSaving] = useState(false);
+  const pending = useRef(false);
+  const [announcement, setAnnouncement] = useState("");
+  const [drag, setDrag] = useState<{ active: string; over: string } | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const byId = new Map(settings.map((item) => [item.id, item]));
+  // Keep local order and mounted form state across other products' saves; append new IDs only.
+  const ids = [...order.filter((id) => byId.has(id)), ...settings.filter((item) => !order.includes(item.id)).map((item) => item.id)];
+  const label = (id: string | number) => byId.get(String(id))?.displayName ?? "Dumpster";
+  async function move(from: number, to: number) {
+    if (pending.current || from === to || from < 0 || to < 0 || to >= ids.length) return;
+    const previous = ids;
+    const next = arrayMove(ids, from, to);
+    pending.current = true;
+    setSaving(true);
+    setOrder(next);
+    try {
+      const result = await reorderDumpsterProductsAction(next);
+      if (!result.success) throw new Error(result.message);
+      adminToast.success("Order updated");
+      setAnnouncement(`${label(ids[from])} moved to position ${to + 1} of ${ids.length}.`);
+    } catch {
+      setOrder(previous);
+      adminToast.error("Couldn't update order. Previous order restored. Refresh and try again.");
+      setAnnouncement("Couldn't update order. Previous order restored.");
+    } finally {
+      pending.current = false;
+      setSaving(false);
     }
-
-    if (leftSize !== null && rightSize === null) return -1;
-    if (leftSize === null && rightSize !== null) return 1;
-
-    if (left.sortOrder !== right.sortOrder) {
-      return left.sortOrder - right.sortOrder;
-    }
-
-    return left.displayName.localeCompare(right.displayName);
-  });
-
+  }
   return (
-    <div className="space-y-4">
-      {sortedSettings.map((setting) => (
-        <DumpsterProductSettingCard key={getDumpsterProductSettingKey(setting)} setting={setting} />
-      ))}
+    <div>
+      <p className="mb-3 text-xs leading-5 text-slate-500">Drag to set the order dumpsters appear on your booking site.</p>
+      <div role="status" aria-live="polite" className="sr-only">{announcement}</div>
+      <DndContext id="dumpster-products" sensors={sensors} collisionDetection={closestCenter}
+        accessibility={{ screenReaderInstructions: { draggable: "Press Space or Enter to lift. Use arrow keys to move. Press Space or Enter to drop, or Escape to cancel." },
+          announcements: {
+            onDragStart: ({ active }) => `${label(active.id)} lifted. Position ${ids.indexOf(String(active.id)) + 1} of ${ids.length}.`,
+            onDragOver: ({ active, over }) => over ? `${label(active.id)} moved to position ${ids.indexOf(String(over.id)) + 1} of ${ids.length}.` : undefined,
+            onDragEnd: ({ active }) => `${label(active.id)} dropped.`,
+            onDragCancel: ({ active }) => `${label(active.id)} reorder cancelled.`,
+          } }}
+        onDragStart={({ active }) => setDrag({ active: String(active.id), over: String(active.id) })}
+        onDragOver={({ active, over }) => setDrag(over ? { active: String(active.id), over: String(over.id) } : null)}
+        onDragCancel={() => setDrag(null)}
+        onDragEnd={({ active, over }) => { setDrag(null); if (over) void move(ids.indexOf(String(active.id)), ids.indexOf(String(over.id))); }}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <div className="space-y-4">
+            {ids.map((id, index) => <DumpsterProductSettingCard key={id} setting={byId.get(id)!} index={index}
+              count={ids.length} saving={saving} onMove={(from, to) => void move(from, to)}
+              indicator={drag && drag.active !== id && drag.over === id ? (ids.indexOf(drag.active) < index ? "after" : "before") : null} />)}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }

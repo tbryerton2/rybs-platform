@@ -58,7 +58,6 @@ export type DumpsterProductSettingsFormValues = {
   extraDayPrice: string;
   basePrice: string;
   isPublic: boolean;
-  sortOrder: string;
 };
 
 export type DumpsterProductSettingsFieldErrors = Partial<
@@ -73,8 +72,7 @@ export type DumpsterProductSettingsFieldErrors = Partial<
     | "includedRentalDays"
     | "extraDayPrice"
     | "basePrice"
-    | "isPublic"
-    | "sortOrder",
+    | "isPublic",
     string
   >
 >;
@@ -123,7 +121,6 @@ function buildDumpsterProductValues(formData: FormData): DumpsterProductSettings
     extraDayPrice: normalizeCurrency(asString(formData.get("extraDayPrice"))),
     basePrice: normalizeCurrency(asString(formData.get("basePrice"))),
     isPublic: asBoolean(formData.get("isPublic")),
-    sortOrder: asString(formData.get("sortOrder")).trim(),
   };
 }
 
@@ -222,23 +219,6 @@ function parseOptionalInteger(
   fieldName: keyof PricingSettingsFieldErrors,
   fieldLabel: string,
   fieldErrors: PricingSettingsFieldErrors,
-) {
-  if (!rawValue) return null;
-
-  const parsed = Number(rawValue);
-  if (!Number.isInteger(parsed)) {
-    fieldErrors[fieldName] = `${fieldLabel} must be a whole number.`;
-    return null;
-  }
-
-  return parsed;
-}
-
-function parseProductOptionalInteger(
-  rawValue: string,
-  fieldName: keyof DumpsterProductSettingsFieldErrors,
-  fieldLabel: string,
-  fieldErrors: DumpsterProductSettingsFieldErrors,
 ) {
   if (!rawValue) return null;
 
@@ -354,7 +334,7 @@ export async function updatePricingSettingsAction(
       success: false,
       message: "",
       error:
-        "Your database needs the latest pricing settings update before these changes can be saved. Apply migration 202604150101_pricing_settings_rental_period_model and try again.",
+        "Your database needs the latest Sizes & Pricing update before these changes can be saved. Apply migration 202604150101_pricing_settings_rental_period_model and try again.",
       fieldErrors: {},
       values,
       messageKey: Date.now(),
@@ -377,7 +357,7 @@ export async function updatePricingSettingsAction(
     return {
       success: false,
       message: "",
-      error: "We couldn't find pricing settings for this business. Refresh and try again.",
+      error: "We couldn't find Sizes & Pricing settings for this business. Refresh and try again.",
       fieldErrors: {},
       values,
       messageKey: Date.now(),
@@ -388,7 +368,7 @@ export async function updatePricingSettingsAction(
 
   return {
     success: true,
-    message: id ? "Pricing settings updated." : "Pricing settings configured.",
+    message: id ? "Sizes & Pricing settings updated." : "Sizes & Pricing settings configured.",
     fieldErrors: {},
     values,
     messageKey: Date.now(),
@@ -447,7 +427,6 @@ export async function updateDumpsterProductSettingAction(
     fieldErrors,
   );
   const basePrice = parseProductCurrency(values.basePrice, "basePrice", "Base price", fieldErrors);
-  const sortOrder = parseProductOptionalInteger(values.sortOrder, "sortOrder", "Sort order", fieldErrors);
 
   if (Object.keys(fieldErrors).length > 0) {
     return invalidDumpsterProductState(values, fieldErrors);
@@ -468,7 +447,6 @@ export async function updateDumpsterProductSettingAction(
       extra_day_price: extraDayPrice,
       base_price: basePrice,
       is_public: values.isPublic,
-      sort_order: sortOrder ?? 0,
     };
 
   const query = id
@@ -527,4 +505,17 @@ export async function updatePricingPageContentAction(
   revalidatePath("/admin/settings/pricing");
   revalidatePath("/pricing");
   return { success: true, message: "Pricing page content saved." };
+}
+
+export async function reorderDumpsterProductsAction(ids: string[]) {
+  const session = await requireAdminOwner();
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id))) {
+    return { success: false, message: "Invalid product order. Refresh and try again." };
+  }
+  const { error } = await supabaseAdmin.rpc("reorder_dumpster_products", {
+    p_business_id: session.business.id, p_ids: ids,
+  });
+  if (error) return { success: false, message: "Couldn't update order. Refresh and try again." };
+  // Retail reads are dynamic. Avoid refreshing mounted admin forms and discarding unsaved edits.
+  return { success: true, message: "Order updated" };
 }

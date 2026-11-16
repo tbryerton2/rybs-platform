@@ -19,10 +19,10 @@ export default async function AdminCmsPage() {
       <AdminPageHeader
         title={
           <span className="inline-flex items-center gap-2">
-            <span>Content Management</span>
+            <span>Pages</span>
             <InteractiveInfoPopover
-              label="About Content Management"
-              body="Manage retail-site content by page, save drafts safely, preview changes, and publish when ready."
+              label="About Pages"
+              body="Edit the text on each page of your booking website."
             />
           </span>
         }

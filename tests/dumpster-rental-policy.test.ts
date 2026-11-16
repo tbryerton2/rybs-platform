@@ -21,7 +21,7 @@ function mockPricing(t: TestContext, extraDayPrice: number | string | null | und
     extra_day_price: extraDayPrice,
     base_price: 395,
     is_public: true,
-    sort_order: 0,
+    position: 1,
   }];
   const rows: Record<string, unknown[]> = {
     dumpster_product_settings: products,
@@ -35,6 +35,14 @@ function mockPricing(t: TestContext, extraDayPrice: number | string | null | und
     dumpsters: [{ size: "55 yard", active: true, service_status: "Ready" }],
     service_area_zips: [{ active: true, price_14_yard_override: null }],
   };
+  t.mock.method(supabaseAdmin, "rpc", async (name: string, args: { p_business_id: string; p_products: Array<Record<string, unknown>> }) => {
+    assert.equal(name, "ensure_dumpster_product_positions");
+    assert.equal(args.p_business_id, businessId);
+    for (const item of args.p_products) if (!rows.dumpster_product_settings.length) {
+      rows.dumpster_product_settings.push({ ...item, id: "product-55", is_public: true, position: 1 });
+    }
+    return { data: null, error: null };
+  });
   t.mock.method(supabaseAdmin, "from", (table: string) => {
     assert.ok(table in rows, `Unexpected table: ${table}`);
     const result = { data: rows[table], error: null };
@@ -65,7 +73,8 @@ test("new inventory size uses the same default rate in admin, catalog, and booki
       pickupMode: "date",
     }),
   ]);
-  assert.equal(editable[0].isDraft, true);
+  assert.equal(editable[0].isDraft, false);
+  assert.equal(editable[0].isPublic, true);
   assert.equal(editable[0].extraDayPrice, 25);
   assert.equal(catalog[0].extraDayPrice, 25);
   assert.equal(pricing.priceQuote.dailyOveragePrice, 25);

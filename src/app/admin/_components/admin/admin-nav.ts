@@ -62,7 +62,6 @@ const allAdminNavGroups: AdminNavGroup[] = [
   {
     label: "Financials",
     items: [
-      { label: "Pricing", href: "/admin/settings/pricing", icon: "pricing", matchers: ["/admin/settings/pricing"] },
       { label: "Payments", href: "/admin/settings/payments", icon: "payments", matchers: ["/admin/settings/payments"] },
       { label: "Revenue", href: "/admin/financials", icon: "financials", matchers: ["/admin/financials"] },
       { label: "Expenses", href: "/admin/expenses", icon: "expenses", matchers: ["/admin/expenses"] },
@@ -112,6 +111,7 @@ const allAdminNavGroups: AdminNavGroup[] = [
         icon: "serviceArea",
         matchers: ["/admin/settings/zips"],
       },
+      { label: "Sizes & Pricing", href: "/admin/settings/pricing", icon: "pricing", matchers: ["/admin/settings/pricing"] },
       {
         label: "Settings",
         href: "/admin/settings/retail-site",
@@ -119,7 +119,7 @@ const allAdminNavGroups: AdminNavGroup[] = [
         matchers: ["/admin/settings/retail-site"],
       },
       {
-        label: "Content",
+        label: "Pages",
         href: "/admin/cms",
         icon: "retailSiteContent",
         matchers: ["/admin/cms"],

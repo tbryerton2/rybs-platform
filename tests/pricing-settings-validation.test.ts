@@ -44,6 +44,6 @@ test("other pricing settings database errors do not expose raw database text", (
 
   assert.equal(
     getPricingSettingsSaveErrorMessage(rawError, 14),
-    "We couldn't save pricing settings. Please review the fields and try again.",
+    "We couldn't save Sizes & Pricing settings. Please review the fields and try again.",
   );
 });

@@ -678,8 +678,8 @@ export default async function AdminSystemPage() {
                   href="/admin/customers"
                 />
                 <QuickActionCard
-                  title="Manage pricing"
-                  description="Review pricing rules and business settings."
+                  title="Sizes & Pricing"
+                  description="Review dumpster sizes, pricing, and booking website details."
                   href="/admin/settings/pricing"
                 />
                 <QuickActionCard

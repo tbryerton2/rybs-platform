@@ -43,5 +43,5 @@ export function getPricingSettingsSaveErrorMessage(
     return buildMaxRentalDaysIncludedPeriodMessage(highestIncludedRentalDays);
   }
 
-  return "We couldn't save pricing settings. Please review the fields and try again.";
+  return "We couldn't save Sizes & Pricing settings. Please review the fields and try again.";
 }
