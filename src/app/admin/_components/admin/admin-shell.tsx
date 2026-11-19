@@ -1,76 +1,15 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowsRightLeftIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
-import { adminNavGroups, getActiveAdminNavItem, isAdminNavItemActive } from "./admin-nav";
+import { getActiveAdminNavItem } from "./admin-nav";
+import { AdminMobileNav } from "./admin-mobile-nav";
 import {
   AdminSidebar,
   persistSidebarState,
   readStoredSidebarState,
   subscribeToSidebarState,
 } from "./admin-sidebar";
-
-function MobileNav({
-  pathname,
-  businessName,
-  canSwitchBusiness,
-}: {
-  pathname: string;
-  businessName: string;
-  canSwitchBusiness: boolean;
-}) {
-  return (
-    <div className="border-b border-slate-200 bg-white lg:hidden">
-      <div className="px-4 pb-3 pt-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-slate-900 p-2 text-white">
-            <Bars3Icon className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              {businessName}
-            </p>
-            <p className="text-base font-semibold text-slate-900">Admin</p>
-          </div>
-          {canSwitchBusiness ? (
-            <Link
-              href="/admin/select-business"
-              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
-              aria-label="Switch business"
-            >
-              <ArrowsRightLeftIcon className="h-4 w-4" />
-            </Link>
-          ) : null}
-        </div>
-      </div>
-
-      <nav
-        aria-label="Admin navigation"
-        className="flex gap-2 overflow-x-auto px-4 pb-4 sm:px-6"
-      >
-        {adminNavGroups.flatMap((group) => group.items).map((item) => {
-          const isActive = isAdminNavItemActive(pathname, item);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={[
-                "whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
-              ].join(" ")}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
 
 export function AdminShell({
   children,
@@ -116,13 +55,13 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <MobileNav
+      <AdminMobileNav
         pathname={pathname}
         businessName={businessName}
         canSwitchBusiness={canSwitchBusiness}
       />
 
-      <div className="w-full lg:px-5 lg:pb-6 lg:pt-6 xl:px-6 2xl:px-8">
+      <div className="w-full xl:pb-6 xl:pt-6 xl:px-6 2xl:px-8">
         <AdminSidebar
           pathname={pathname}
           businessName={businessName}
@@ -134,7 +73,7 @@ export function AdminShell({
         <div
           className={[
             "min-w-0 transition-[padding-left] duration-300",
-            sidebarCollapsed ? "lg:pl-[108px] xl:pl-[116px]" : "lg:pl-[272px] xl:pl-[296px] 2xl:pl-[312px]",
+            sidebarCollapsed ? "xl:pl-[116px]" : "xl:pl-[296px] 2xl:pl-[312px]",
           ].join(" ")}
         >
           <div className="min-w-0 px-4 sm:px-6 lg:px-7 xl:px-8 2xl:px-10">

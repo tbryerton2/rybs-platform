@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { ArrowsRightLeftIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
-import { adminNavGroups, isAdminNavItemActive } from "./admin-nav";
-import { AdminNavItem } from "./admin-nav-item";
+import { AdminNavigation } from "./admin-navigation";
 
 const STORAGE_KEY = "admin_sidebar_collapsed";
 const SIDEBAR_EVENT = "admin-sidebar-collapsed-change";
@@ -48,9 +47,10 @@ export function AdminSidebar({
 }) {
   return (
     <aside
+      id="admin-sidebar"
       className={[
-        "fixed left-5 top-24 hidden h-[calc(100vh-8rem)] rounded-[20px] border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/70 shadow-[0_16px_34px_rgba(15,23,42,0.065)] transition-[width,left] duration-300 lg:flex lg:flex-col xl:left-6 2xl:left-8",
-        collapsed ? "lg:w-[84px] xl:w-[88px]" : "lg:w-[232px] xl:w-[256px] 2xl:w-[272px]",
+        "fixed left-5 top-24 hidden h-[calc(100vh-8rem)] rounded-[20px] border border-slate-200/80 bg-gradient-to-b from-white via-white to-slate-50/70 shadow-[0_16px_34px_rgba(15,23,42,0.065)] transition-[width,left] duration-300 xl:flex xl:flex-col xl:left-6 2xl:left-8",
+        collapsed ? "xl:w-[88px]" : "xl:w-[256px] 2xl:w-[272px]",
       ].join(" ")}
     >
       <div className={["border-b border-slate-200/80", collapsed ? "px-3 pb-3 pt-4" : "px-5 pb-[14px] pt-[18px]"].join(" ")}>
@@ -89,34 +89,7 @@ export function AdminSidebar({
         </div>
       </div>
 
-      <nav
-        aria-label="Admin sidebar"
-        className={["flex-1 overflow-y-auto", collapsed ? "space-y-2.5 px-3 py-3.5" : "space-y-3.5 px-4 py-4"].join(" ")}
-      >
-        {adminNavGroups.map((group) => (
-          <div key={group.label} className="rounded-[14px]">
-            <p
-              className={[
-                "font-semibold uppercase tracking-[0.16em] text-slate-400 transition-opacity duration-200",
-                collapsed ? "px-0 text-center text-[10px] opacity-0" : "px-3 pb-0.5 text-[10px] opacity-100",
-              ].join(" ")}
-              aria-hidden={collapsed}
-            >
-              {group.label}
-            </p>
-            <div className={collapsed ? "mt-0 space-y-1" : "mt-0.5 space-y-0.5"}>
-              {group.items.map((item) => (
-                <AdminNavItem
-                  key={item.href}
-                  item={item}
-                  isActive={isAdminNavItemActive(pathname, item)}
-                  collapsed={collapsed}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </nav>
+      <AdminNavigation pathname={pathname} collapsed={collapsed} />
     </aside>
   );
 }

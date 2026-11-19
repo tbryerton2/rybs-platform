@@ -53,16 +53,20 @@ export function AdminNavItem({
   item,
   isActive,
   collapsed,
+  onNavigate,
 }: {
   item: AdminNavItemType;
   isActive: boolean;
   collapsed: boolean;
+  onNavigate?: () => void;
 }) {
   const Icon = iconMap[item.icon];
 
   return (
     <Link
       href={item.href}
+      onNavigate={onNavigate}
+      aria-current={isActive ? "page" : undefined}
       aria-label={collapsed ? item.label : undefined}
       title={collapsed ? item.label : undefined}
       className={[
