@@ -4,7 +4,6 @@ import {
   ArrowUturnLeftIcon,
   ChevronRightIcon,
   ExclamationTriangleIcon,
-  InformationCircleIcon,
   MapPinIcon,
   ChartBarIcon,
   ClockIcon,
@@ -15,6 +14,7 @@ import {
 import { AdminPage, AdminPageHeader } from "../_components/admin/admin-page";
 import { NeedsAttentionList, type NeedsAttentionRow } from "../_components/NeedsAttentionList";
 import { SnapshotCard } from "../_components/SnapshotCard";
+import { InfoTooltip } from "../_components/InfoTooltip";
 import { RevenueSnapshotChart } from "../_components/RevenueSnapshotChart";
 import { getDumpsters } from "./equipment/dumpsters/data";
 import {
@@ -271,19 +271,7 @@ function SectionCard({
             ) : null}
             <h2 className="text-[15px] font-medium uppercase tracking-[0.08em] text-[var(--text-secondary)]">{title}</h2>
             {tooltip ? (
-              <button
-                type="button"
-                aria-label={`${title} definition`}
-                className="group relative rounded-full p-0.5 text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
-              >
-                <InformationCircleIcon className="h-4.5 w-4.5" aria-hidden="true" />
-                <span
-                  role="tooltip"
-                  className="pointer-events-none absolute left-0 top-7 z-50 w-64 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-                >
-                  {tooltip}
-                </span>
-              </button>
+              <InfoTooltip label={`${title} definition`} body={tooltip} />
             ) : null}
           </div>
           {subtitle ? <p className="mt-1 text-sm leading-6 text-slate-600">{subtitle}</p> : null}

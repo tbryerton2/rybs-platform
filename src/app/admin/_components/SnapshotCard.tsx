@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
-import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { adminSummaryCardShell } from "./AdminSummaryCard";
+import { InfoTooltip } from "./InfoTooltip";
 
 function joinClasses(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -73,13 +73,20 @@ export function SnapshotCard({
                   info: "text-indigo-500 hover:text-indigo-700 focus-visible:text-indigo-700",
                 };
 
-  const content = (
+  return (
     <div
       className={joinClasses(
         "flex h-full overflow-visible",
         colorClasses.card,
       )}
     >
+      {href ? (
+        <Link
+          href={href}
+          aria-label={label}
+          className="absolute inset-0 z-10 rounded-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2"
+        />
+      ) : null}
       <div className="flex w-full items-start justify-between gap-4">
         <div className="flex min-w-0 gap-4">
           <span
@@ -101,32 +108,21 @@ export function SnapshotCard({
         </div>
 
         {tooltip ? (
-          <div className="relative z-20 shrink-0 overflow-visible">
+          <div className="pointer-events-none relative z-20 shrink-0 overflow-visible">
             <span
               className="flex h-12 items-center"
             >
-              <button
-                type="button"
-                aria-label={`${label} definition`}
-                className={joinClasses(
-                  "group relative rounded-full p-0.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/80 focus-visible:ring-offset-2",
-                  colorClasses.info,
-                )}
-              >
-                <InformationCircleIcon className="h-5 w-5" aria-hidden="true" />
-                <span
-                  role="tooltip"
-                  className="pointer-events-none absolute right-0 top-8 z-50 w-64 translate-y-1 rounded-[14px] border border-slate-200/90 bg-white px-3.5 py-2.5 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-[0_16px_36px_rgba(15,23,42,0.14)] transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:translate-y-0 group-focus-visible:opacity-100"
-                >
-                  {tooltip}
-                </span>
-              </button>
+              <InfoTooltip
+                label={`${label} definition`}
+                body={tooltip}
+                align="right"
+                iconClassName="h-5 w-5"
+                className={joinClasses("pointer-events-auto", colorClasses.info)}
+              />
             </span>
           </div>
         ) : null}
       </div>
     </div>
   );
-
-  return href ? <Link href={href}>{content}</Link> : content;
 }
