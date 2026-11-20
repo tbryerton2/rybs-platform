@@ -46,14 +46,19 @@ test("platform dashboard uses tenant summaries instead of navigation cards", () 
 test("platform admin shell exposes dashboard businesses and users navigation", () => {
   const layout = readRepoFile("src/app/platform-admin/layout.tsx");
   const shell = readRepoFile("src/app/platform-admin/_components/platform-admin-shell.tsx");
+  const nav = readRepoFile("src/app/platform-admin/_components/platform-admin-nav.tsx");
 
   assert.match(layout, /className="rybs-admin"/);
   assert.doesNotMatch(layout, /tcm-admin/);
-  assert.match(shell, /href="\/platform-admin"/);
-  assert.match(shell, /href="\/platform-admin\/businesses"/);
-  assert.match(shell, /href="\/platform-admin\/users"/);
-  assert.match(shell, /UsersIcon/);
-  assert.match(shell, /usersActive/);
+  assert.match(shell, /<PlatformAdminNav currentPath=\{currentPath\} variant="mobile"/);
+  assert.match(shell, /<PlatformAdminNav currentPath=\{currentPath\} variant="desktop"/);
+  assert.match(nav, /label: "Dashboard", href: "\/platform-admin", icon: Squares2X2Icon, exact: true/);
+  assert.match(nav, /label: "Businesses", href: "\/platform-admin\/businesses", icon: BuildingOffice2Icon/);
+  assert.match(nav, /label: "Users", href: "\/platform-admin\/users", icon: UsersIcon/);
+  assert.match(nav, /const pathname = usePathname\(\) \|\| currentPath/);
+  assert.match(nav, /const isActive = isActivePath\(pathname, item\)/);
+  assert.match(nav, /href=\{item\.href\}/);
+  assert.match(nav, /aria-current=\{isActive \? "page" : undefined\}/);
 });
 
 test("platform user management remains owner-only and separate from business memberships", () => {

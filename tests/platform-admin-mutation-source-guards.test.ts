@@ -71,7 +71,8 @@ test("business pages expose create and edit without a misleading tenant-specific
 
   assert.match(indexPage, /Create business/);
   assert.match(indexPage, /\/platform-admin\/businesses\/new/);
-  assert.match(indexPage, /\/platform-admin\/businesses\/\$\{tenant\.id\}\/edit/);
+  assert.match(indexPage, /href=\{`\/platform-admin\/businesses\/\$\{tenant\.id\}`\}/);
+  assert.match(detailPage, /href=\{`\/platform-admin\/businesses\/\$\{tenant\.id\}\/edit`\}/);
   assert.match(detailPage, /Edit business/);
   assert.match(editPage, /getPlatformTenantDetail\(tenantId\)/);
   assert.match(createPage, /Create business/);
@@ -158,16 +159,17 @@ test("brand readiness follows bootstrap settings and keeps header contact settin
   assert.match(tenantMutationMigration, /\(created_tenant_id, 'runtime', 'storageNamespace'/);
 });
 
-test("launch readiness success messaging matches lifecycle and incomplete states stay warnings", () => {
+test("launch readiness completion badge matches lifecycle and incomplete states stay warnings", () => {
   const detailPage = readRepoFile("src/app/platform-admin/(protected)/businesses/[tenantId]/page.tsx");
 
-  assert.match(detailPage, /function launchReadinessSuccessMessage/);
-  assert.match(detailPage, /case "ready_to_launch":[\s\S]*This business is ready to launch/);
-  assert.match(detailPage, /case "active":[\s\S]*this business is active/);
-  assert.match(detailPage, /case "active_setup_incomplete":[\s\S]*return null/);
-  assert.match(detailPage, /case "in_progress":[\s\S]*return null/);
-  assert.match(detailPage, /const successMessage = launchReadinessSuccessMessage\(tenant\.setup\.readinessStatus\)/);
-  assert.match(detailPage, /\) : successMessage \? \(/);
-  assert.match(detailPage, /Missing required setup/);
+  assert.match(detailPage, /function launchReadinessIsComplete\([^\n]+\) \{\s*return status === "ready_to_launch" \|\| status === "active";\s*\}/);
+  assert.match(detailPage, /const readinessComplete = launchReadinessIsComplete\(tenant\.setup\.readinessStatus\)/);
+  assert.match(detailPage, /\{readinessComplete \? \([\s\S]*?Completed[\s\S]*?\) : null\}/);
+  assert.match(detailPage, /\{readinessLabel\(tenant\.setup\.readinessStatus\)\}/);
+  assert.match(detailPage, /case "active_setup_incomplete":\s*return "Active - setup incomplete"/);
+  assert.match(detailPage, /case "in_progress":\s*return "In progress"/);
+  assert.match(detailPage, /const hasReadinessWarnings = !tenant\.setup\.implementationTypeConfigured \|\| missingAreas\.length > 0/);
+  assert.match(detailPage, /\{hasReadinessWarnings \? \([\s\S]*?<Alert tone="warning">/);
+  assert.match(detailPage, /\{missingAreas\.length \? \([\s\S]*?border-amber-200[\s\S]*?Missing required setup/);
   assert.doesNotMatch(detailPage, /Keep the business inactive until you explicitly launch it/);
 });
